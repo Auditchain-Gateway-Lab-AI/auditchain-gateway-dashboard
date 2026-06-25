@@ -155,7 +155,6 @@ function VerificationDetail({ result, onClose }) {
       id: 1,
       label: 'Lapis 1',
       sub: 'Eksistensi DB',
-      // Lapis 1 selalu pass jika log ditemukan
       active: true,
       pass: true,
     },
@@ -163,21 +162,14 @@ function VerificationDetail({ result, onClose }) {
       id: 2,
       label: 'Lapis 2',
       sub: 'Re-Hash Lokal',
-      active: result.status !== 'failed_local' ? true : true,
+      active: true,
       pass: result.status !== 'failed_local',
     },
     {
       id: 3,
       label: 'Lapis 3',
-      sub: 'Verifikasi Agent',
-      active: data.agent_used === true,
-      pass: data.agent_used === true && result.status !== 'failed_source',
-    },
-    {
-      id: 4,
-      label: 'Lapis 4',
       sub: 'Konsensus Blockchain',
-      active: !isPending && result.status !== 'failed_local' && result.status !== 'failed_source',
+      active: !isPending && result.status !== 'failed_local',
       pass: isSuccess,
     },
   ];
@@ -254,14 +246,6 @@ function VerificationDetail({ result, onClose }) {
 
       {/* Detail info */}
       <div style={{ padding: '12px 16px', fontSize: '12px', color: '#495057', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-        <div>
-          <span style={{ color: '#6c757d' }}>Agent digunakan: </span>
-          {data.agent_used
-            ? <span style={{ color: '#0f5132' }}>✅ Ya ({data.source_found ? 'data ditemukan' : 'data tidak ditemukan'})</span>
-            : <span style={{ color: '#6c757d' }}>✗ Tidak (log bukan dari Agent)</span>
-          }
-        </div>
-
         {data.log_id && (
           <div><span style={{ color: '#6c757d' }}>Log ID: </span>
             <code style={{ fontSize: '11px' }}>{data.log_id}</code>
@@ -280,28 +264,27 @@ function VerificationDetail({ result, onClose }) {
           </div>
         )}
 
-        {/* Discrepancies jika ada */}
-        {data.source_discrepancies && data.source_discrepancies.length > 0 && (
-          <div style={{ marginTop: '8px' }}>
-            <div style={{ fontWeight: 'bold', color: '#842029', marginBottom: '4px' }}>Perbedaan yang ditemukan:</div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#f8d7da' }}>
-                  <th style={{ padding: '3px 6px', textAlign: 'left' }}>Field</th>
-                  <th style={{ padding: '3px 6px', textAlign: 'left' }}>Di Log</th>
-                  <th style={{ padding: '3px 6px', textAlign: 'left' }}>Di Sumber</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.source_discrepancies.map((d, i) => (
-                  <tr key={i} style={{ borderTop: '1px solid #f1aeb5' }}>
-                    <td style={{ padding: '3px 6px', fontWeight: 'bold' }}>{d.field}</td>
-                    <td style={{ padding: '3px 6px' }}>{d.in_log}</td>
-                    <td style={{ padding: '3px 6px' }}>{d.in_agent}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {data.db_root && (
+          <div><span style={{ color: '#6c757d' }}>Merkle Root: </span>
+            <code style={{ fontSize: '11px' }}>{data.db_root}</code>
+          </div>
+        )}
+
+        {/* Tampilkan hash mismatch jika Lapis 2 gagal */}
+        {result.status === 'failed_local' && (
+          <div style={{ marginTop: '8px', padding: '8px', backgroundColor: '#f8d7da', borderRadius: '4px' }}>
+            <div style={{ fontWeight: 'bold', color: '#842029', marginBottom: '4px' }}>Detail Manipulasi:</div>
+            <div><span style={{ color: '#842029' }}>Hash tersimpan: </span><code style={{ fontSize: '11px' }}>{data.expected_hash}</code></div>
+            <div><span style={{ color: '#842029' }}>Hash aktual: </span><code style={{ fontSize: '11px' }}>{data.actual_hash}</code></div>
+          </div>
+        )}
+
+        {/* Tampilkan mismatch Blockchain jika Lapis 3 gagal */}
+        {result.status === 'failed_onchain' && (
+          <div style={{ marginTop: '8px', padding: '8px', backgroundColor: '#f8d7da', borderRadius: '4px' }}>
+            <div style={{ fontWeight: 'bold', color: '#842029', marginBottom: '4px' }}>Detail Mismatch Blockchain:</div>
+            <div><span style={{ color: '#842029' }}>Merkle Root di DB: </span><code style={{ fontSize: '11px' }}>{data.db_root}</code></div>
+            <div><span style={{ color: '#842029' }}>Merkle Root di Chain: </span><code style={{ fontSize: '11px' }}>{data.chain_root}</code></div>
           </div>
         )}
       </div>
