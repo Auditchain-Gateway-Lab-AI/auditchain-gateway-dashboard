@@ -418,11 +418,16 @@ function ResourceDetailModal({ resource, logs, verifyStatus, onClose }) {
 function Login({ onLogin }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    setError('');
+    setIsLoading(true);
     try {
       const response = await api.post('/auth/login', { username, password });
       localStorage.setItem('token', response.data.token);
@@ -430,22 +435,618 @@ function Login({ onLogin }) {
       navigate('/dashboard');
     } catch (err) {
       setError(err.response?.data?.error || 'Gagal login. Periksa kembali kredensial Anda.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
+  const styles = {
+    page: {
+      display: 'flex',
+      minHeight: '100vh',
+      width: '100%',
+      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+      backgroundColor: '#f0f4f8',
+      overflow: 'hidden',
+    },
+    // ---- HERO (LEFT) ----
+    hero: {
+      flex: '0 0 58%',
+      background: 'linear-gradient(135deg, #0d47a1 0%, #1565c0 40%, #1e88e5 75%, #42a5f5 100%)',
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'space-between',
+      padding: '48px 56px',
+      position: 'relative',
+      overflow: 'hidden',
+    },
+    heroBg: {
+      position: 'absolute',
+      inset: 0,
+      overflow: 'hidden',
+      pointerEvents: 'none',
+    },
+    heroBrand: {
+      position: 'relative',
+      zIndex: 2,
+      display: 'flex',
+      alignItems: 'center',
+      gap: '14px',
+    },
+    heroIconBox: {
+      width: '52px',
+      height: '52px',
+      background: 'rgba(255,255,255,0.2)',
+      backdropFilter: 'blur(8px)',
+      borderRadius: '14px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      border: '1px solid rgba(255,255,255,0.35)',
+    },
+    heroBrandText: {
+      display: 'flex',
+      flexDirection: 'column',
+    },
+    heroBrandName: {
+      fontSize: '22px',
+      fontWeight: '800',
+      color: '#ffffff',
+      letterSpacing: '0.04em',
+      lineHeight: 1.1,
+    },
+    heroBrandSub: {
+      fontSize: '11px',
+      fontWeight: '600',
+      color: 'rgba(255,255,255,0.65)',
+      letterSpacing: '0.12em',
+      textTransform: 'uppercase',
+    },
+    heroContent: {
+      position: 'relative',
+      zIndex: 2,
+    },
+    heroHeadline: {
+      fontSize: '38px',
+      fontWeight: '700',
+      color: '#ffffff',
+      lineHeight: '1.2',
+      marginBottom: '18px',
+      letterSpacing: '-0.02em',
+    },
+    heroDesc: {
+      fontSize: '15px',
+      color: 'rgba(255,255,255,0.78)',
+      lineHeight: '1.7',
+      maxWidth: '420px',
+    },
+    heroInfoBox: {
+      position: 'relative',
+      zIndex: 2,
+      background: 'rgba(255,255,255,0.12)',
+      backdropFilter: 'blur(12px)',
+      borderRadius: '16px',
+      border: '1px solid rgba(255,255,255,0.25)',
+      padding: '20px 24px',
+      display: 'flex',
+      gap: '16px',
+      alignItems: 'flex-start',
+    },
+    heroInfoIconBox: {
+      width: '40px',
+      height: '40px',
+      background: 'rgba(255,255,255,0.2)',
+      borderRadius: '10px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+    },
+    heroInfoTitle: {
+      fontSize: '14px',
+      fontWeight: '700',
+      color: '#ffffff',
+      marginBottom: '4px',
+    },
+    heroInfoText: {
+      fontSize: '12px',
+      color: 'rgba(255,255,255,0.70)',
+      lineHeight: '1.5',
+    },
+    // ---- FORM (RIGHT) ----
+    formPanel: {
+      flex: 1,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '40px 32px',
+      backgroundColor: '#f7f9fc',
+    },
+    formCard: {
+      width: '100%',
+      maxWidth: '420px',
+      backgroundColor: '#ffffff',
+      borderRadius: '20px',
+      boxShadow: '0 8px 40px rgba(13, 71, 161, 0.10), 0 2px 8px rgba(0,0,0,0.04)',
+      border: '1px solid rgba(203,213,225,0.6)',
+      padding: '40px 40px 32px',
+    },
+    formTitle: {
+      fontSize: '26px',
+      fontWeight: '700',
+      color: '#0d1b2e',
+      marginBottom: '4px',
+      letterSpacing: '-0.02em',
+    },
+    formSubtitle: {
+      fontSize: '14px',
+      color: '#64748b',
+      marginBottom: '32px',
+    },
+    fieldGroup: {
+      marginBottom: '20px',
+    },
+    fieldLabel: {
+      display: 'block',
+      fontSize: '11px',
+      fontWeight: '700',
+      color: '#334155',
+      letterSpacing: '0.08em',
+      textTransform: 'uppercase',
+      marginBottom: '8px',
+    },
+    fieldWrapper: {
+      position: 'relative',
+    },
+    fieldIcon: {
+      position: 'absolute',
+      left: '14px',
+      top: '50%',
+      transform: 'translateY(-50%)',
+      color: '#94a3b8',
+      display: 'flex',
+      alignItems: 'center',
+      pointerEvents: 'none',
+    },
+    fieldInput: {
+      width: '100%',
+      boxSizing: 'border-box',
+      paddingLeft: '44px',
+      paddingRight: '14px',
+      paddingTop: '12px',
+      paddingBottom: '12px',
+      fontSize: '14px',
+      color: '#0d1b2e',
+      backgroundColor: '#f8fafc',
+      border: '1.5px solid #e2e8f0',
+      borderRadius: '10px',
+      outline: 'none',
+      transition: 'border-color 0.2s, box-shadow 0.2s, background 0.2s',
+      fontFamily: 'inherit',
+    },
+    fieldInputError: {
+      borderColor: '#ef4444',
+      backgroundColor: '#fff5f5',
+    },
+    fieldInputPrRight: {
+      paddingRight: '44px',
+    },
+    toggleBtn: {
+      position: 'absolute',
+      right: '12px',
+      top: '50%',
+      transform: 'translateY(-50%)',
+      background: 'none',
+      border: 'none',
+      cursor: 'pointer',
+      color: '#94a3b8',
+      display: 'flex',
+      alignItems: 'center',
+      padding: '4px',
+      borderRadius: '6px',
+      transition: 'color 0.2s',
+    },
+    rememberRow: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      marginBottom: '28px',
+    },
+    checkbox: {
+      width: '16px',
+      height: '16px',
+      borderRadius: '4px',
+      accentColor: '#1e88e5',
+      cursor: 'pointer',
+    },
+    rememberLabel: {
+      fontSize: '13px',
+      color: '#64748b',
+      cursor: 'pointer',
+    },
+    submitBtn: {
+      width: '100%',
+      padding: '13px',
+      fontSize: '15px',
+      fontWeight: '600',
+      color: '#ffffff',
+      background: 'linear-gradient(135deg, #1565c0 0%, #1e88e5 100%)',
+      border: 'none',
+      borderRadius: '10px',
+      cursor: 'pointer',
+      letterSpacing: '0.01em',
+      boxShadow: '0 4px 14px rgba(30, 136, 229, 0.35)',
+      transition: 'opacity 0.2s, transform 0.15s, box-shadow 0.2s',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: '8px',
+      fontFamily: 'inherit',
+    },
+    errorBox: {
+      display: 'flex',
+      alignItems: 'flex-start',
+      gap: '10px',
+      backgroundColor: '#fef2f2',
+      border: '1px solid #fecaca',
+      borderRadius: '10px',
+      padding: '12px 14px',
+      marginBottom: '20px',
+    },
+    errorText: {
+      fontSize: '13px',
+      color: '#b91c1c',
+      lineHeight: '1.5',
+    },
+    divider: {
+      borderTop: '1px solid #e2e8f0',
+      margin: '24px 0',
+    },
+    securityBox: {
+      display: 'flex',
+      gap: '10px',
+      alignItems: 'flex-start',
+      backgroundColor: '#fef9ec',
+      border: '1px solid #fde68a',
+      borderRadius: '10px',
+      padding: '12px 14px',
+    },
+    securityText: {
+      fontSize: '11.5px',
+      color: '#92400e',
+      lineHeight: '1.5',
+    },
+    footer: {
+      textAlign: 'center',
+      marginTop: '24px',
+      fontSize: '12px',
+      color: '#94a3b8',
+    },
+  };
+
   return (
-    <div style={{ padding: '50px', maxWidth: '400px', margin: 'auto' }}>
-      <h2>Login Auditor</h2>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-        <input type="text" placeholder="Username" value={username} onChange={e => setUsername(e.target.value)} required
-          style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }} />
-        <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} required
-          style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }} />
-        <button type="submit" style={{ padding: '10px', backgroundColor: '#007BFF', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-          Login
-        </button>
-      </form>
+    <div style={styles.page} className="lp-page">
+      {/* ===== HERO PANEL ===== */}
+      <div style={styles.hero} className="lp-hero">
+        {/* Decorative background SVG */}
+        <div style={styles.heroBg}>
+          <svg width="100%" height="100%" viewBox="0 0 700 900" preserveAspectRatio="xMidYMid slice" style={{ position: 'absolute', inset: 0 }}>
+            {/* Grid dots */}
+            {Array.from({ length: 12 }).map((_, r) =>
+              Array.from({ length: 8 }).map((_, c) => (
+                <circle key={`${r}-${c}`} cx={c * 100 + 30} cy={r * 80 + 30} r="1.5" fill="rgba(255,255,255,0.15)" />
+              ))
+            )}
+            {/* Blockchain network lines */}
+            <line x1="120" y1="180" x2="280" y2="300" stroke="rgba(255,255,255,0.12)" strokeWidth="1.5" />
+            <line x1="280" y1="300" x2="460" y2="220" stroke="rgba(255,255,255,0.12)" strokeWidth="1.5" />
+            <line x1="460" y1="220" x2="580" y2="380" stroke="rgba(255,255,255,0.12)" strokeWidth="1.5" />
+            <line x1="120" y1="180" x2="460" y2="220" stroke="rgba(255,255,255,0.08)" strokeWidth="1" />
+            <line x1="280" y1="300" x2="580" y2="380" stroke="rgba(255,255,255,0.08)" strokeWidth="1" />
+            <line x1="200" y1="500" x2="400" y2="560" stroke="rgba(255,255,255,0.10)" strokeWidth="1.5" />
+            <line x1="400" y1="560" x2="560" y2="480" stroke="rgba(255,255,255,0.10)" strokeWidth="1.5" />
+            {/* Blockchain nodes */}
+            <circle cx="120" cy="180" r="10" fill="rgba(255,255,255,0.25)" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" />
+            <circle cx="280" cy="300" r="14" fill="rgba(255,255,255,0.20)" stroke="rgba(255,255,255,0.45)" strokeWidth="1.5" />
+            <circle cx="460" cy="220" r="10" fill="rgba(255,255,255,0.25)" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" />
+            <circle cx="580" cy="380" r="8" fill="rgba(255,255,255,0.20)" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" />
+            <circle cx="200" cy="500" r="12" fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" />
+            <circle cx="400" cy="560" r="16" fill="rgba(255,255,255,0.20)" stroke="rgba(255,255,255,0.45)" strokeWidth="1.5" />
+            <circle cx="560" cy="480" r="9" fill="rgba(255,255,255,0.20)" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" />
+            {/* Hash symbols inside nodes */}
+            <text x="274" y="305" fontSize="8" textAnchor="middle" fill="rgba(255,255,255,0.7)" fontFamily="monospace">#</text>
+            <text x="395" y="565" fontSize="9" textAnchor="middle" fill="rgba(255,255,255,0.7)" fontFamily="monospace">#</text>
+            {/* Large decorative circle */}
+            <circle cx="620" cy="100" r="180" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="40" />
+            <circle cx="-30" cy="750" r="200" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="60" />
+          </svg>
+        </div>
+
+        {/* Brand */}
+        <div style={styles.heroBrand}>
+          <div style={styles.heroIconBox}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+              <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" fill="rgba(255,255,255,0.9)" />
+              <path d="M10 17l-3-3 1.4-1.4 1.6 1.6 4.6-4.6 1.4 1.4L10 17z" fill="#1565c0" />
+            </svg>
+          </div>
+          <div style={styles.heroBrandText}>
+            <span style={styles.heroBrandName}>AuditChain</span>
+            <span style={styles.heroBrandSub}>Powered by Morbis</span>
+          </div>
+        </div>
+
+        {/* Headline */}
+        <div style={styles.heroContent}>
+          <h1 style={styles.heroHeadline}>
+            Secure Audit<br />Portal
+          </h1>
+          <p style={styles.heroDesc}>
+            Blockchain-based Audit Log Monitoring System for Hospital Information Systems.
+            Ensuring absolute data integrity and regulatory compliance across clinical environments.
+          </p>
+        </div>
+
+        {/* Info box */}
+        <div style={styles.heroInfoBox}>
+          <div style={styles.heroInfoIconBox}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" fill="rgba(255,255,255,0.85)" />
+            </svg>
+          </div>
+          <div>
+            <div style={styles.heroInfoTitle}>Authorized Access Only</div>
+            <div style={styles.heroInfoText}>
+              Only authorized auditors and administrators can access this system.
+              Your IP address and session are being logged.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ===== FORM PANEL ===== */}
+      <div style={styles.formPanel} className="lp-form-panel">
+        <div style={styles.formCard} className="lp-form-card">
+
+          {/* Mobile brand header — hidden on desktop, shown on mobile via CSS */}
+          <div className="lp-mobile-brand">
+            <div style={{
+              width: '40px', height: '40px',
+              background: 'linear-gradient(135deg, #1565c0, #1e88e5)',
+              borderRadius: '11px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 4px 12px rgba(30,136,229,0.35)',
+              flexShrink: 0,
+            }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" fill="rgba(255,255,255,0.95)" />
+                <path d="M10 17l-3-3 1.4-1.4 1.6 1.6 4.6-4.6 1.4 1.4L10 17z" fill="#1565c0" />
+              </svg>
+            </div>
+            <div>
+              <div style={{ fontSize: '18px', fontWeight: '800', color: '#0d1b2e', letterSpacing: '0.02em' }}>AuditChain</div>
+              <div style={{ fontSize: '10px', fontWeight: '600', color: '#94a3b8', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Powered by Morbis</div>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '28px' }}>
+            <h2 style={styles.formTitle}>Sign In</h2>
+            <p style={styles.formSubtitle}>Please authenticate to access the portal.</p>
+          </div>
+
+          {/* Error */}
+          {error && (
+            <div style={styles.errorBox}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, marginTop: '1px' }}>
+                <circle cx="12" cy="12" r="10" fill="#ef4444" />
+                <path d="M12 7v5M12 16v1" stroke="white" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+              <span style={styles.errorText}>{error}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleLogin}>
+            {/* Username */}
+            <div style={styles.fieldGroup}>
+              <label style={styles.fieldLabel} htmlFor="login-username">Username</label>
+              <div style={styles.fieldWrapper}>
+                <span style={styles.fieldIcon}>
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="2" />
+                    <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                </span>
+                <input
+                  id="login-username"
+                  type="text"
+                  placeholder="Enter your username"
+                  value={username}
+                  onChange={e => setUsername(e.target.value)}
+                  required
+                  autoComplete="username"
+                  style={{
+                    ...styles.fieldInput,
+                    ...(error ? styles.fieldInputError : {}),
+                  }}
+                  onFocus={e => { e.target.style.borderColor = '#1e88e5'; e.target.style.boxShadow = '0 0 0 3px rgba(30,136,229,0.15)'; e.target.style.backgroundColor = '#fff'; }}
+                  onBlur={e => { e.target.style.borderColor = error ? '#ef4444' : '#e2e8f0'; e.target.style.boxShadow = 'none'; e.target.style.backgroundColor = '#f8fafc'; }}
+                />
+              </div>
+            </div>
+
+            {/* Password */}
+            <div style={styles.fieldGroup}>
+              <label style={styles.fieldLabel} htmlFor="login-password">Password</label>
+              <div style={styles.fieldWrapper}>
+                <span style={styles.fieldIcon}>
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
+                    <rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" strokeWidth="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    <circle cx="12" cy="16" r="1.5" fill="currentColor" />
+                  </svg>
+                </span>
+                <input
+                  id="login-password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                  style={{
+                    ...styles.fieldInput,
+                    ...styles.fieldInputPrRight,
+                    ...(error ? styles.fieldInputError : {}),
+                  }}
+                  onFocus={e => { e.target.style.borderColor = '#1e88e5'; e.target.style.boxShadow = '0 0 0 3px rgba(30,136,229,0.15)'; e.target.style.backgroundColor = '#fff'; }}
+                  onBlur={e => { e.target.style.borderColor = error ? '#ef4444' : '#e2e8f0'; e.target.style.boxShadow = 'none'; e.target.style.backgroundColor = '#f8fafc'; }}
+                />
+                <button
+                  type="button"
+                  style={styles.toggleBtn}
+                  onClick={() => setShowPassword(v => !v)}
+                  tabIndex={-1}
+                  onMouseEnter={e => e.currentTarget.style.color = '#1e88e5'}
+                  onMouseLeave={e => e.currentTarget.style.color = '#94a3b8'}
+                >
+                  {showPassword ? (
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                      <line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                  ) : (
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" strokeWidth="2" />
+                      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Remember me */}
+            <div style={styles.rememberRow}>
+              <input
+                id="remember-me"
+                type="checkbox"
+                style={styles.checkbox}
+                checked={rememberMe}
+                onChange={e => setRememberMe(e.target.checked)}
+              />
+              <label htmlFor="remember-me" style={styles.rememberLabel}>Remember me</label>
+            </div>
+
+            {/* Submit */}
+            <button
+              type="submit"
+              style={{
+                ...styles.submitBtn,
+                opacity: isLoading ? 0.75 : 1,
+                cursor: isLoading ? 'not-allowed' : 'pointer',
+              }}
+              disabled={isLoading}
+              onMouseEnter={e => { if (!isLoading) { e.currentTarget.style.opacity = '0.9'; e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(30,136,229,0.45)'; } }}
+              onMouseLeave={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(30,136,229,0.35)'; }}
+              onMouseDown={e => { e.currentTarget.style.transform = 'scale(0.98)'; }}
+              onMouseUp={e => { e.currentTarget.style.transform = 'none'; }}
+            >
+              {isLoading ? (
+                <>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ animation: 'spin 1s linear infinite' }}>
+                    <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.35)" strokeWidth="3" />
+                    <path d="M12 2a10 10 0 0 1 10 10" stroke="white" strokeWidth="3" strokeLinecap="round" />
+                  </svg>
+                  Signing in...
+                </>
+              ) : (
+                <>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" fill="rgba(255,255,255,0.85)" />
+                  </svg>
+                  Sign In
+                </>
+              )}
+            </button>
+          </form>
+
+          {/* Security notice */}
+          <div style={styles.divider} />
+          <div style={styles.securityBox}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, marginTop: '1px' }}>
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" fill="#f59e0b" stroke="#d97706" strokeWidth="0.5" />
+              <line x1="12" y1="9" x2="12" y2="13" stroke="white" strokeWidth="2" strokeLinecap="round" />
+              <line x1="12" y1="17" x2="12.01" y2="17" stroke="white" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+            <p style={styles.securityText}>
+              This portal is restricted to authorized personnel only. All activities are monitored and recorded for security and compliance purposes.
+            </p>
+          </div>
+
+          {/* Footer */}
+          <div style={styles.footer}>
+            © 2024 AuditChain by Morbis &nbsp;·&nbsp; Hospital Log Management v2.4.1
+          </div>
+        </div>
+      </div>
+
+      {/* Global styles + responsive */}
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+        /* ---- Desktop default: hide mobile brand ---- */
+        .lp-mobile-brand {
+          display: none;
+        }
+
+        /* ---- Tablet: collapse hero to narrower strip ---- */
+        @media (max-width: 1024px) {
+          .lp-hero {
+            flex: 0 0 45% !important;
+          }
+        }
+
+        /* ---- Mobile: hide hero, show top brand header ---- */
+        @media (max-width: 768px) {
+          .lp-page {
+            flex-direction: column !important;
+            background: linear-gradient(160deg, #1565c0 0%, #1e88e5 30%, #f7f9fc 30%) !important;
+            min-height: 100vh;
+          }
+          .lp-hero {
+            display: none !important;
+          }
+          .lp-form-panel {
+            flex: 1;
+            padding: 80px 16px 32px !important;
+            background: transparent !important;
+            align-items: flex-start !important;
+          }
+          .lp-form-card {
+            border-radius: 16px !important;
+            padding: 28px 24px 24px !important;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.14) !important;
+          }
+          .lp-mobile-brand {
+            display: flex !important;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 24px;
+          }
+        }
+
+        /* ---- Small phones ---- */
+        @media (max-width: 480px) {
+          .lp-form-panel {
+            padding: 70px 12px 24px !important;
+          }
+          .lp-form-card {
+            border-radius: 14px !important;
+            padding: 24px 18px 20px !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
