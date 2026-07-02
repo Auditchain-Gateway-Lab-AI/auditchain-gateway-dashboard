@@ -4,6 +4,25 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'r
 import api from './api';
 import './App.css';
 
+// JWT payload parser helper
+const parseJwt = (token) => {
+  try {
+    if (!token) return null;
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      window.atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    return null;
+  }
+};
+
+
 // ================================================================
 // ICON — tiny inline SVG helpers (no external icon dep needed)
 // ================================================================
@@ -286,114 +305,171 @@ function SnapshotViewer({ currentLog, previousLog }) {
 // ================================================================
 // KOMPONEN: Detail Verifikasi — 3-layer indicator
 // ================================================================
+// ================================================================
+// KOMPONEN: Detail Verifikasi — 3-layer indicator
+// ================================================================
 function VerificationDetail({ result, onClose }) {
+  const [scanStep, setScanStep] = useState(0);
+
+  useEffect(() => {
+    // Reset scan when result changes
+    setScanStep(0);
+    
+    // Trigger sequential scanning animation
+    const t1 = setTimeout(() => setScanStep(1), 100);
+    const t2 = setTimeout(() => setScanStep(2), 700);
+    const t3 = setTimeout(() => setScanStep(3), 1300);
+    const t4 = setTimeout(() => setScanStep(4), 1900);
+    
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      clearTimeout(t4);
+    };
+  }, [result]);
+
   if (!result) return null;
 
+  const isScanning = scanStep < 4;
   const isSuccess = result.status === 'success' || result.data?.is_valid;
   const isPending = result.status === 'pending';
   const data = result.data || result;
 
-  const layers = [
-    { id: 1, label: 'Lapis 1', sub: 'Eksistensi DB',      active: true,  pass: true },
-    { id: 2, label: 'Lapis 2', sub: 'Re-Hash Lokal',      active: true,  pass: result.status !== 'failed_local' },
-    { id: 3, label: 'Lapis 3', sub: 'Konsensus Blockchain', active: !isPending && result.status !== 'failed_local', pass: isSuccess },
-  ];
-
-  const headerClass = isSuccess ? 'ac-verify__header--success'
+  const headerClass = isScanning ? 'ac-verify__header--pending'
+                    : isSuccess ? 'ac-verify__header--success'
                     : isPending ? 'ac-verify__header--pending'
                     : 'ac-verify__header--failed';
 
-  const statusEmoji = isSuccess ? '✅' : isPending ? '⏳' : '🚨';
-  const statusLabel = isSuccess ? 'Verifikasi Berhasil' : isPending ? 'Menunggu Blockchain' : 'Verifikasi Gagal';
+  const statusEmoji = isScanning ? '🔍' : isSuccess ? '✅' : isPending ? '⏳' : '🚨';
+  const statusLabel = isScanning ? 'Menjalankan Kriptografi Audit Trail...' : isSuccess ? 'Verifikasi Berhasil' : isPending ? 'Menunggu Blockchain' : 'Verifikasi Gagal';
+  const statusMsg = isScanning 
+    ? 'Membaca record, menghitung ulang checksum hash, dan mencocokkan consensus root ledger...' 
+    : (data.message || result.message || '');
+
+  const getLayerStatus = (id) => {
+    if (id === 1) {
+      if (scanStep < 1) return { status: 'inactive', label: '○ Inactive', class: 'ac-verify__layer--inactive' };
+      if (scanStep === 1) return { status: 'scanning', label: '⏳ Memindai DB...', class: 'ac-verify__layer--scanning' };
+      return { status: 'pass', label: '✅ Terverifikasi', class: 'ac-verify__layer--pass' };
+    }
+    if (id === 2) {
+      if (scanStep < 2) return { status: 'inactive', label: '○ Inactive', class: 'ac-verify__layer--inactive' };
+      if (scanStep === 2) return { status: 'scanning', label: '⏳ Re-Hash Data...', class: 'ac-verify__layer--scanning' };
+      const passed = result.status !== 'failed_local';
+      return passed 
+        ? { status: 'pass', label: '✅ Sesuai', class: 'ac-verify__layer--pass' }
+        : { status: 'fail', label: '❌ Manipulasi!', class: 'ac-verify__layer--fail' };
+    }
+    if (id === 3) {
+      if (scanStep < 3) return { status: 'inactive', label: '○ Inactive', class: 'ac-verify__layer--inactive' };
+      if (scanStep === 3) return { status: 'scanning', label: '⏳ Konsensus...', class: 'ac-verify__layer--scanning' };
+      if (isSuccess) return { status: 'pass', label: '✅ Anchored', class: 'ac-verify__layer--pass' };
+      if (isPending) return { status: 'pending', label: '⏱️ Pending', class: 'ac-verify__layer--inactive' };
+      return { status: 'fail', label: '❌ Mismatch!', class: 'ac-verify__layer--fail' };
+    }
+  };
+
+  const l1 = getLayerStatus(1);
+  const l2 = getLayerStatus(2);
+  const l3 = getLayerStatus(3);
 
   return (
-    <div className="ac-verify">
+    <div className="ac-verify ac-verify__scanning-container">
+      {isScanning && <div className="ac-verify__scanning-laser" />}
       <div className={`ac-verify__header ${headerClass}`}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center' }}>
             <span className="ac-verify__header-icon">{statusEmoji}</span>
             <span className="ac-verify__header-title">{statusLabel}</span>
           </div>
-          <div className="ac-verify__header-msg">{data.message || result.message || ''}</div>
+          <div className="ac-verify__header-msg">{statusMsg}</div>
         </div>
         <button className="ac-verify__header-close" onClick={onClose}>×</button>
       </div>
 
       {/* Layer indicators */}
       <div className="ac-verify__layers">
-        <div className="ac-verify__layers-label">Lapisan Verifikasi</div>
+        <div className="ac-verify__layers-label">Lapisan Verifikasi Kriptografis</div>
         <div className="ac-verify__layers-row">
-          {layers.map((layer, idx) => (
-            <React.Fragment key={layer.id}>
-              <div className={`ac-verify__layer ${!layer.active ? 'ac-verify__layer--inactive' : layer.pass ? 'ac-verify__layer--pass' : 'ac-verify__layer--fail'}`}>
-                <div className="ac-verify__layer-name">
-                  {!layer.active ? '○' : layer.pass ? '✅' : '❌'} {layer.label}
-                </div>
-                <div className="ac-verify__layer-sub">{layer.sub}</div>
-              </div>
-              {idx < layers.length - 1 && <div className="ac-verify__arrow">→</div>}
-            </React.Fragment>
-          ))}
+          <div className={`ac-verify__layer ${l1.class}`}>
+            <div className="ac-verify__layer-name">{l1.label}</div>
+            <div className="ac-verify__layer-sub">Eksistensi DB</div>
+          </div>
+          <div className="ac-verify__arrow">→</div>
+
+          <div className={`ac-verify__layer ${l2.class}`}>
+            <div className="ac-verify__layer-name">{l2.label}</div>
+            <div className="ac-verify__layer-sub">Re-Hash Lokal</div>
+          </div>
+          <div className="ac-verify__arrow">→</div>
+
+          <div className={`ac-verify__layer ${l3.class}`}>
+            <div className="ac-verify__layer-name">{l3.label}</div>
+            <div className="ac-verify__layer-sub">Konsensus Blockchain</div>
+          </div>
         </div>
       </div>
 
       {/* Detail info */}
-      <div className="ac-verify__details">
-        {data.log_id && (
-          <div className="ac-verify__detail-row">
-            <span className="ac-verify__detail-label">Log ID: </span>
-            <code className="ac-verify__detail-code">{data.log_id}</code>
-          </div>
-        )}
-        {data.blockchain_tx_id && (
-          <div className="ac-verify__detail-row">
-            <span className="ac-verify__detail-label">Blockchain TxID: </span>
-            <code className="ac-verify__detail-code">{data.blockchain_tx_id}</code>
-          </div>
-        )}
-        {data.expected_hash && (
-          <div className="ac-verify__detail-row">
-            <span className="ac-verify__detail-label">Hash: </span>
-            <code className="ac-verify__detail-code">{data.expected_hash || data.hash_value}</code>
-          </div>
-        )}
-        {data.db_root && (
-          <div className="ac-verify__detail-row">
-            <span className="ac-verify__detail-label">Merkle Root: </span>
-            <code className="ac-verify__detail-code">{data.db_root}</code>
-          </div>
-        )}
-
-        {/* Hash mismatch — Lapis 2 failed */}
-        {result.status === 'failed_local' && (
-          <div className="ac-verify__mismatch">
-            <div className="ac-verify__mismatch-title">Detail Manipulasi:</div>
+      {!isScanning && (
+        <div className="ac-verify__details" style={{ animation: 'fadeIn 0.3s ease' }}>
+          {data.log_id && (
             <div className="ac-verify__detail-row">
-              <span style={{ color: 'var(--color-error)' }}>Hash tersimpan: </span>
-              <code className="ac-verify__detail-code">{data.expected_hash}</code>
+              <span className="ac-verify__detail-label">Log ID: </span>
+              <code className="ac-verify__detail-code">{data.log_id}</code>
             </div>
+          )}
+          {data.blockchain_tx_id && (
             <div className="ac-verify__detail-row">
-              <span style={{ color: 'var(--color-error)' }}>Hash aktual: </span>
-              <code className="ac-verify__detail-code">{data.actual_hash}</code>
+              <span className="ac-verify__detail-label">Blockchain TxID: </span>
+              <code className="ac-verify__detail-code">{data.blockchain_tx_id}</code>
             </div>
-          </div>
-        )}
-
-        {/* Blockchain mismatch — Lapis 3 failed */}
-        {result.status === 'failed_onchain' && (
-          <div className="ac-verify__mismatch">
-            <div className="ac-verify__mismatch-title">Detail Mismatch Blockchain:</div>
+          )}
+          {data.expected_hash && (
             <div className="ac-verify__detail-row">
-              <span style={{ color: 'var(--color-error)' }}>Merkle Root di DB: </span>
+              <span className="ac-verify__detail-label">Hash: </span>
+              <code className="ac-verify__detail-code">{data.expected_hash || data.hash_value}</code>
+            </div>
+          )}
+          {data.db_root && (
+            <div className="ac-verify__detail-row">
+              <span className="ac-verify__detail-label">Merkle Root: </span>
               <code className="ac-verify__detail-code">{data.db_root}</code>
             </div>
-            <div className="ac-verify__detail-row">
-              <span style={{ color: 'var(--color-error)' }}>Merkle Root di Chain: </span>
-              <code className="ac-verify__detail-code">{data.chain_root}</code>
+          )}
+
+          {/* Hash mismatch — Lapis 2 failed */}
+          {result.status === 'failed_local' && (
+            <div className="ac-verify__mismatch">
+              <div className="ac-verify__mismatch-title">Detail Manipulasi:</div>
+              <div className="ac-verify__detail-row">
+                <span style={{ color: 'var(--color-error)' }}>Hash tersimpan: </span>
+                <code className="ac-verify__detail-code">{data.expected_hash}</code>
+              </div>
+              <div className="ac-verify__detail-row">
+                <span style={{ color: 'var(--color-error)' }}>Hash aktual: </span>
+                <code className="ac-verify__detail-code">{data.actual_hash}</code>
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+
+          {/* Blockchain mismatch — Lapis 3 failed */}
+          {result.status === 'failed_onchain' && (
+            <div className="ac-verify__mismatch">
+              <div className="ac-verify__mismatch-title">Detail Mismatch Blockchain:</div>
+              <div className="ac-verify__detail-row">
+                <span style={{ color: 'var(--color-error)' }}>Merkle Root di DB: </span>
+                <code className="ac-verify__detail-code">{data.db_root}</code>
+              </div>
+              <div className="ac-verify__detail-row">
+                <span style={{ color: 'var(--color-error)' }}>Merkle Root di Chain: </span>
+                <code className="ac-verify__detail-code">{data.chain_root}</code>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -549,12 +625,12 @@ function Login({ onLogin }) {
           <div className="ac-login-hero__brand-icon">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
               <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" fill="rgba(255,255,255,0.9)"/>
-              <path d="M10 17l-3-3 1.4-1.4 1.6 1.6 4.6-4.6 1.4 1.4L10 17z" fill="#1565c0"/>
+              <path d="M10 17l-3-3 1.4-1.4 1.6 1.6 4.6-4.6 1.4 1.4L10 17z" fill="#4f46e5"/>
             </svg>
           </div>
           <div>
-            <div className="ac-login-hero__brand-name">AuditChain</div>
-            <div className="ac-login-hero__brand-sub">Powered by Morbis</div>
+            <div className="ac-login-hero__brand-name">Audit Trail</div>
+            <div className="ac-login-hero__brand-sub">Gateway Portal</div>
           </div>
         </div>
 
@@ -562,8 +638,8 @@ function Login({ onLogin }) {
         <div>
           <h1 className="ac-login-hero__title">Secure Audit<br/>Portal</h1>
           <p className="ac-login-hero__desc">
-            Blockchain-based Audit Log Monitoring System for Hospital Information Systems.
-            Ensuring absolute data integrity and regulatory compliance across clinical environments.
+            Blockchain-based Audit Log Monitoring System.
+            Ensuring absolute data integrity, immutability, and compliance across all connected environments.
           </p>
         </div>
 
@@ -588,15 +664,15 @@ function Login({ onLogin }) {
 
           {/* Mobile brand header */}
           <div className="ac-login-mobile-brand">
-            <div style={{ width: 40, height: 40, background: 'linear-gradient(135deg,#1565c0,#1e88e5)', borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(30,136,229,.35)', flexShrink: 0 }}>
+            <div style={{ width: 40, height: 40, background: 'linear-gradient(135deg,#4f46e5,#06b6d4)', borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(79,70,229,.35)', flexShrink: 0 }}>
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
                 <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" fill="rgba(255,255,255,.95)"/>
-                <path d="M10 17l-3-3 1.4-1.4 1.6 1.6 4.6-4.6 1.4 1.4L10 17z" fill="#1565c0"/>
+                <path d="M10 17l-3-3 1.4-1.4 1.6 1.6 4.6-4.6 1.4 1.4L10 17z" fill="#4f46e5"/>
               </svg>
             </div>
             <div>
-              <div style={{ fontSize: 18, fontWeight: 800, color: '#0d1b2e', letterSpacing: '.02em' }}>AuditChain</div>
-              <div style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8', letterSpacing: '.1em', textTransform: 'uppercase' }}>Powered by Morbis</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: '#0d1b2e', letterSpacing: '.02em' }}>Audit Trail</div>
+              <div style={{ fontSize: 10, fontWeight: 600, color: '#4f46e5', letterSpacing: '.1em', textTransform: 'uppercase' }}>Gateway Portal</div>
             </div>
           </div>
 
@@ -683,7 +759,7 @@ function Login({ onLogin }) {
           </div>
 
           <div className="ac-login__footer">
-            © 2024 AuditChain by Morbis &nbsp;·&nbsp; Hospital Log Management v2.4.1
+            © 2026 Audit Trail Gateway &nbsp;·&nbsp; Secure Log Management v2.4.1
           </div>
         </div>
       </div>
@@ -710,6 +786,14 @@ function Dashboard({ onLogout }) {
   const [currentPage, setCurrentPage]   = useState(1);
   const [rowsPerPage, setRowsPerPage]   = useState(10);
   const [sidebarOpen, setSidebarOpen]   = useState(false);
+
+  // Decode JWT info for Workspace Context Indicator
+  const clientInfo = useMemo(() => {
+    const token = localStorage.getItem('token');
+    return parseJwt(token);
+  }, []);
+
+
 
   // Fetch data
   useEffect(() => {
@@ -825,8 +909,7 @@ function Dashboard({ onLogout }) {
     return pages;
   };
 
-  // Hero bar chart heights (decorative, based on recent logs bucketed)
-  const barHeights = [40, 55, 70, 45, 80, 65, 90, 50];
+
 
   return (
     <div className="ac-shell">
@@ -843,8 +926,8 @@ function Dashboard({ onLogout }) {
             </svg>
           </div>
           <div>
-            <div className="ac-topnav__brand-name">AuditChain</div>
-            <div className="ac-topnav__brand-sub">Powered by Morbis</div>
+            <div className="ac-topnav__brand-name">Audit Trail</div>
+            <div className="ac-topnav__brand-sub">Gateway Portal</div>
           </div>
         </div>
         <div className="ac-topnav__right">
@@ -866,7 +949,7 @@ function Dashboard({ onLogout }) {
       <aside className={`ac-sidebar${sidebarOpen ? ' ac-sidebar--open' : ''}`}>
         <div className="ac-sidebar__header">
           <div className="ac-sidebar__section-label">Audit Manager</div>
-          <div className="ac-sidebar__section-sub">Health Data Integrity</div>
+          <div className="ac-sidebar__section-sub">Secure Data Integrity</div>
         </div>
         <nav className="ac-sidebar__nav">
           <button className="ac-sidebar__nav-item ac-sidebar__nav-item--active">
@@ -901,48 +984,44 @@ function Dashboard({ onLogout }) {
       <main className="ac-main">
         <div className="ac-main__container">
 
+          {/* Client Workspace Context Widget */}
+          {clientInfo && (
+            <div className="ac-workspace-widget">
+              <div className="ac-workspace-widget__left">
+                <div className="ac-workspace-widget__icon">
+                  🏢
+                </div>
+                <div>
+                  <div className="ac-workspace-widget__title">Client Workspace Context</div>
+                  <div className="ac-workspace-widget__subtitle">
+                    <span>Sistem Klien Aktif:</span>
+                    <code className="ac-workspace-widget__code" title={clientInfo.client_id}>
+                      {clientInfo.client_id}
+                    </code>
+                    <span className="ac-workspace-widget__badge">
+                      👤 {clientInfo.username} ({clientInfo.role})
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="ac-workspace-widget__info-banner">
+                <strong>Isolasi Multi-Client:</strong> Data audit trail dipisahkan secara aman dan terisolasi untuk client workspace ini. Log dari sistem lain tidak dapat diakses atau dimodifikasi.
+              </div>
+            </div>
+          )}
+
           {/* Hero Section */}
           <section className="ac-hero">
             <div className="ac-hero__pattern"/>
             <div className="ac-hero__content">
               <div className="ac-hero__left">
                 <h1 className="ac-hero__title">
-                  🛡️ AuditChain Dashboard
+                  🛡️ Audit Trail Dashboard
                 </h1>
                 <p className="ac-hero__subtitle">
                   Monitor audit logs dan verifikasi blockchain secara real-time.
-                  Pastikan integritas data tertinggi di seluruh jaringan layanan kesehatan.
+                  Pastikan integritas data tertinggi di seluruh jaringan infrastruktur database.
                 </p>
-                <div className="ac-hero__actions">
-                  <button className="ac-hero__btn-primary">
-                    <Icon name="chart" size={16}/>
-                    Generate Report
-                  </button>
-                  <button className="ac-hero__btn-secondary">
-                    <Icon name="history" size={16}/>
-                    View Live Logs
-                  </button>
-                </div>
-              </div>
-
-              {/* Decorative bar chart */}
-              <div className="ac-hero__chart">
-                <div className="ac-hero__chart-header">
-                  <span className="ac-hero__chart-title">Real-time Activity</span>
-                  <Icon name="trending" size={14} style={{ color: 'rgba(255,255,255,0.7)' }}/>
-                </div>
-                <div className="ac-hero__bars">
-                  {barHeights.map((h, i) => (
-                    <div
-                      key={i}
-                      className={`ac-hero__bar${i === 6 ? ' ac-hero__bar--active' : ''}`}
-                      style={{ height: `${h}%` }}
-                    />
-                  ))}
-                </div>
-                <div style={{ marginTop: 8, fontSize: 10, color: 'rgba(255,255,255,0.55)', textAlign: 'right' }}>
-                  {recentLogs.length} events loaded
-                </div>
               </div>
             </div>
           </section>
