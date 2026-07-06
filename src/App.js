@@ -22,6 +22,45 @@ const parseJwt = (token) => {
   }
 };
 
+// Formatter timestamp dengan milidetik (misal: 3/7/2026, 16.26.42.123)
+const formatTimestamp = (dateString) => {
+  if (!dateString) return '—';
+  const d = new Date(dateString);
+  if (isNaN(d.getTime())) return dateString;
+
+  const day = d.getDate();
+  const month = d.getMonth() + 1;
+  const year = d.getFullYear();
+
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const seconds = String(d.getSeconds()).padStart(2, '0');
+  const ms = String(d.getMilliseconds()).padStart(3, '0');
+
+  return `${day}/${month}/${year}, ${hours}.${minutes}.${seconds}.${ms}`;
+};
+
+// Formatter cell metadata (container JSON horizontal scrollable)
+const renderMetadataCell = (metadata) => {
+  if (!metadata) return <span style={{ color: 'var(--color-outline)', fontSize: '11px' }}>—</span>;
+  let displayStr = '';
+  if (typeof metadata === 'string') {
+    displayStr = metadata;
+  } else {
+    try {
+      displayStr = JSON.stringify(metadata);
+    } catch (e) {
+      displayStr = String(metadata);
+    }
+  }
+  return (
+    <div className="ac-metadata-box" title={displayStr}>
+      {displayStr}
+    </div>
+  );
+};
+
+
 
 // ================================================================
 // ICON — tiny inline SVG helpers (no external icon dep needed)
@@ -529,7 +568,7 @@ function ResourceDetailModal({ resource, logs, verifyStatus, onClose }) {
                 >
                   <div className={`ac-log-card__header ${isFirst ? 'ac-log-card__header--latest' : 'ac-log-card__header--normal'}`}>
                     <span className="ac-log-card__time">
-                      {new Date(log.timestamp).toLocaleString('id-ID')}
+                      {formatTimestamp(log.timestamp)}
                     </span>
                     <ActionBadge action={log.action} />
                     <span className="ac-log-card__actor">👤 {log.actor}</span>
@@ -819,7 +858,8 @@ function Dashboard({ onLogout }) {
   // Grouping inventory by table name
   const groupedInventory = useMemo(() => {
     return inventory.reduce((acc, item) => {
-      const tableName = item.resource.includes(':') ? item.resource.split(':')[0] : item.resource;
+      const resource = item?.resource || '';
+      const tableName = resource.includes(':') ? resource.split(':')[0] : resource;
       if (!acc[tableName]) acc[tableName] = [];
       acc[tableName].push(item);
       return acc;
@@ -831,10 +871,12 @@ function Dashboard({ onLogout }) {
   // Filter & pagination
   const filteredLogs = recentLogs.filter(log => {
     const matchSearch =
-      log.resource.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.actor.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.hash_value.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchAction = filterAction === 'ALL' || log.action === filterAction;
+      (log?.resource?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+      (log?.actor?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+      (log?.source_system?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+      (log?.metadata?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+      (log?.hash_value?.toLowerCase() || '').includes(searchQuery.toLowerCase());
+    const matchAction = filterAction === 'ALL' || log?.action === filterAction;
     return matchSearch && matchAction;
   });
   const totalPages    = Math.ceil(filteredLogs.length / rowsPerPage) || 1;
@@ -845,6 +887,7 @@ function Dashboard({ onLogout }) {
   // Background verify — individual logs
   useEffect(() => {
     paginatedLogs.forEach(log => {
+      if (!log || !log.hash_value) return;
       setVerifyStatuses(prev => {
         if (prev[log.hash_value] && prev[log.hash_value].status !== 'pending' && prev[log.hash_value].status !== 'loading') return prev;
         api.get(`/dashboard/verify/${log.hash_value}`)
@@ -858,6 +901,7 @@ function Dashboard({ onLogout }) {
   // Background verify — inventory chain
   useEffect(() => {
     inventory.forEach(item => {
+      if (!item || !item.resource) return;
       setInventoryStatuses(prev => {
         if (prev[item.resource] && prev[item.resource].status !== 'pending' && prev[item.resource].status !== 'loading') return prev;
         api.get(`/dashboard/verify-resource/${encodeURIComponent(item.resource)}`)
@@ -870,6 +914,7 @@ function Dashboard({ onLogout }) {
 
   // Status badge for transaction table
   const renderStatusBadge = (log) => {
+    if (!log || !log.hash_value) return <span className="ac-status ac-status--invalid">🚨 INVALID</span>;
     const v = verifyStatuses[log.hash_value];
     if (!v || v.status === 'loading')
       return <span className="ac-status ac-status--checking">⏳ Memeriksa...</span>;
@@ -1165,13 +1210,14 @@ function Dashboard({ onLogout }) {
                     <th>Aktor</th>
                     <th>Aksi</th>
                     <th>Resource</th>
-                    <th>Integritas Log</th>
+                    <th>Metadata</th>
+                    <th>Source System</th>
                   </tr>
                 </thead>
                 <tbody>
                   {paginatedLogs.length === 0 ? (
                     <tr>
-                      <td colSpan={5}>
+                      <td colSpan={6}>
                         <div className="ac-empty">
                           <div className="ac-empty__icon">🔍</div>
                           Tidak ada transaksi yang cocok dengan filter.
@@ -1180,11 +1226,12 @@ function Dashboard({ onLogout }) {
                     </tr>
                   ) : paginatedLogs.map(log => (
                     <tr key={log.log_id} onClick={() => setSelectedResource(log.resource)}>
-                      <td className="ac-table__time">{new Date(log.timestamp).toLocaleString('id-ID')}</td>
+                      <td className="ac-table__time">{formatTimestamp(log.timestamp)}</td>
                       <td className="ac-table__actor">{log.actor}</td>
                       <td><ActionBadge action={log.action}/></td>
                       <td className="ac-table__mono">{log.resource}</td>
-                      <td onClick={e => e.stopPropagation()}>{renderStatusBadge(log)}</td>
+                      <td onClick={e => e.stopPropagation()}>{renderMetadataCell(log.metadata)}</td>
+                      <td className="ac-table__source-system">{log.source_system || '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1263,7 +1310,7 @@ function Dashboard({ onLogout }) {
                             </span>
                           </td>
                           <td><ActionBadge action={item.action}/></td>
-                          <td className="ac-table__time">{new Date(item.timestamp).toLocaleString('id-ID')}</td>
+                          <td className="ac-table__time">{formatTimestamp(item.timestamp)}</td>
                           <td onClick={e => e.stopPropagation()}>{renderInventoryBadge(item)}</td>
                         </tr>
                       );

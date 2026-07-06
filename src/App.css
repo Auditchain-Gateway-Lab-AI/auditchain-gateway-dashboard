@@ -1998,3 +1998,34 @@
   padding-top: 6px;
 }
 
+/* Metadata box and Source System styles */
+.ac-metadata-box {
+  display: block;
+  max-width: 250px;
+  overflow-x: auto;
+  white-space: nowrap;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  background-color: var(--color-surface-container-low, #f4f5f8);
+  border: 1px solid var(--color-outline-variant, #d2d6df);
+  border-radius: 6px;
+  padding: 5px 10px;
+  color: var(--color-on-surface-variant, #474747);
+  box-sizing: border-box;
+}
+
+.ac-metadata-box::-webkit-scrollbar {
+  height: 4px;
+}
+.ac-metadata-box::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ac-metadata-box::-webkit-scrollbar-thumb {
+  background: var(--color-primary, #005ea4);
+  border-radius: 2px;
+}
+
+.ac-table__source-system {
+  font-weight: 600;
+  color: var(--color-primary);
+}
