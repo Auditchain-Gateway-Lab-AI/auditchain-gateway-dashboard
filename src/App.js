@@ -285,7 +285,7 @@ function SnapshotViewer({ currentLog, previousLog }) {
   if (changed.length === 0) {
     return (
       <div>
-        <span style={{ color: 'var(--color-on-surface-variant)', fontSize: '12px' }}>Tidak ada perubahan field yang terdeteksi</span>
+        <span style={{ color: 'var(--color-on-surface-variant)', fontSize: '12px' }}>Tidak ada perubahan kolom yang terdeteksi</span>
         <table className="ac-diff" style={{ marginTop: '6px' }}>
           <tbody>
             {unchanged.map(k => (
@@ -305,7 +305,7 @@ function SnapshotViewer({ currentLog, previousLog }) {
       <table className="ac-diff">
         <thead>
           <tr>
-            <th>Field</th>
+            <th>Kolom</th>
             <th className="before">Sebelum</th>
             <th className="after">Sesudah</th>
           </tr>
@@ -323,7 +323,7 @@ function SnapshotViewer({ currentLog, previousLog }) {
       {unchanged.length > 0 && (
         <details style={{ marginTop: '6px' }}>
           <summary style={{ fontSize: '11px', color: 'var(--color-on-surface-variant)', cursor: 'pointer' }}>
-            {unchanged.length} field tidak berubah
+            {unchanged.length} kolom tidak berubah
           </summary>
           <table className="ac-diff" style={{ marginTop: '4px' }}>
             <tbody>
@@ -383,7 +383,7 @@ function VerificationDetail({ result, onClose }) {
   const statusEmoji = isScanning ? '🔍' : isSuccess ? '✅' : isPending ? '⏳' : '🚨';
   const statusLabel = isScanning ? 'Menjalankan Kriptografi Audit Trail...' : isSuccess ? 'Verifikasi Berhasil' : isPending ? 'Menunggu Blockchain' : 'Verifikasi Gagal';
   const statusMsg = isScanning 
-    ? 'Membaca record, menghitung ulang checksum hash, dan mencocokkan consensus root ledger...' 
+    ? 'Membaca data, menghitung ulang checksum hash, dan mencocokkan consensus root ledger...' 
     : (data.message || result.message || '');
 
   const getLayerStatus = (id) => {
@@ -518,7 +518,7 @@ function VerificationDetail({ result, onClose }) {
 // ================================================================
 function ResourceDetailModal({ resource, logs, verifyStatus, onClose }) {
   const sortedAsc = logs
-    .filter(l => l.resource === resource)
+    .filter(l => (l.source_table || l.resource) === resource)
     .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
   const resourceLogs = [...sortedAsc].reverse();
@@ -553,7 +553,7 @@ function ResourceDetailModal({ resource, logs, verifyStatus, onClose }) {
           {resourceLogs.length === 0 ? (
             <div className="ac-empty">
               <div className="ac-empty__icon">📭</div>
-              Tidak ada log untuk resource ini dalam 500 log terakhir.
+              Tidak ada log untuk sumber data ini dalam 500 log terakhir.
             </div>
           ) : (
             resourceLogs.map((log, idx) => {
@@ -669,16 +669,16 @@ function Login({ onLogin }) {
           </div>
           <div>
             <div className="ac-login-hero__brand-name">Audit Trail</div>
-            <div className="ac-login-hero__brand-sub">Gateway Portal</div>
+            <div className="ac-login-hero__brand-sub">Portal Gateway</div>
           </div>
         </div>
 
         {/* Headline */}
         <div>
-          <h1 className="ac-login-hero__title">Secure Audit<br/>Portal</h1>
+          <h1 className="ac-login-hero__title">Portal Audit<br/>Aman</h1>
           <p className="ac-login-hero__desc">
-            Blockchain-based Audit Log Monitoring System.
-            Ensuring absolute data integrity, immutability, and compliance across all connected environments.
+            Sistem Pemantauan Log Audit berbasis Blockchain.
+            Menjamin integritas data mutlak, keabadian (immutability), dan kepatuhan di semua lingkungan yang terhubung.
           </p>
         </div>
 
@@ -688,10 +688,10 @@ function Login({ onLogin }) {
             <Icon name="shield" size={20} style={{ color: 'rgba(255,255,255,0.85)' }}/>
           </div>
           <div>
-            <div className="ac-login-hero__infobox-title">Authorized Access Only</div>
+            <div className="ac-login-hero__infobox-title">Hanya Akses Resmi</div>
             <div className="ac-login-hero__infobox-text">
-              Only authorized auditors and administrators can access this system.
-              Your IP address and session are being logged.
+              Hanya auditor dan administrator resmi yang dapat mengakses sistem ini.
+              Alamat IP dan sesi Anda sedang direkam.
             </div>
           </div>
         </div>
@@ -711,13 +711,13 @@ function Login({ onLogin }) {
             </div>
             <div>
               <div style={{ fontSize: 18, fontWeight: 800, color: '#0d1b2e', letterSpacing: '.02em' }}>Audit Trail</div>
-              <div style={{ fontSize: 10, fontWeight: 600, color: '#4f46e5', letterSpacing: '.1em', textTransform: 'uppercase' }}>Gateway Portal</div>
+              <div style={{ fontSize: 10, fontWeight: 600, color: '#4f46e5', letterSpacing: '.1em', textTransform: 'uppercase' }}>Portal Gateway</div>
             </div>
           </div>
 
           <div className="ac-login-card__heading">
-            <h2 className="ac-login-card__title">Sign In</h2>
-            <p className="ac-login-card__subtitle">Please authenticate to access the portal.</p>
+            <h2 className="ac-login-card__title">Masuk</h2>
+            <p className="ac-login-card__subtitle">Silakan melakukan autentikasi untuk mengakses portal.</p>
           </div>
 
           {error && (
@@ -730,13 +730,13 @@ function Login({ onLogin }) {
           <form onSubmit={handleLogin}>
             {/* Username */}
             <div className="ac-field">
-              <label className="ac-field__label" htmlFor="login-username">Username</label>
+              <label className="ac-field__label" htmlFor="login-username">Nama Pengguna</label>
               <div className="ac-field__wrap">
                 <span className="ac-field__icon"><Icon name="user" size={17}/></span>
                 <input
                   id="login-username"
                   type="text"
-                  placeholder="Enter your username"
+                  placeholder="Masukkan nama pengguna Anda"
                   value={username}
                   onChange={e => setUsername(e.target.value)}
                   required
@@ -748,7 +748,7 @@ function Login({ onLogin }) {
 
             {/* Password */}
             <div className="ac-field">
-              <label className="ac-field__label" htmlFor="login-password">Password</label>
+              <label className="ac-field__label" htmlFor="login-password">Kata Sandi</label>
               <div className="ac-field__wrap">
                 <span className="ac-field__icon"><Icon name="lock" size={17}/></span>
                 <input
@@ -770,7 +770,7 @@ function Login({ onLogin }) {
             {/* Remember me */}
             <div className="ac-login-remember">
               <input id="remember-me" type="checkbox" className="ac-login-remember__check" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)}/>
-              <label htmlFor="remember-me" className="ac-login-remember__label">Remember me</label>
+              <label htmlFor="remember-me" className="ac-login-remember__label">Ingat saya</label>
             </div>
 
             {/* Submit */}
@@ -778,12 +778,12 @@ function Login({ onLogin }) {
               {isLoading ? (
                 <>
                   <Icon name="spinner" size={18} style={{ animation: 'spin 1s linear infinite' }}/>
-                  Signing in...
+                  Sedang masuk...
                 </>
               ) : (
                 <>
                   <Icon name="shield" size={18}/>
-                  Sign In
+                  Masuk
                 </>
               )}
             </button>
@@ -793,12 +793,12 @@ function Login({ onLogin }) {
           <div className="ac-login__security">
             <Icon name="warn" size={16} style={{ flexShrink: 0, marginTop: 1 }}/>
             <p className="ac-login__security-text">
-              This portal is restricted to authorized personnel only. All activities are monitored and recorded for security and compliance purposes.
+              Portal ini terbatas untuk personel resmi saja. Semua aktivitas dipantau dan direkam untuk tujuan keamanan dan kepatuhan.
             </p>
           </div>
 
           <div className="ac-login__footer">
-            © 2026 Audit Trail Gateway &nbsp;·&nbsp; Secure Log Management v2.4.1
+            © 2026 Portal Gateway Audit Trail &nbsp;·&nbsp; Manajemen Log Aman v2.4.1
           </div>
         </div>
       </div>
@@ -858,7 +858,7 @@ function Dashboard({ onLogout }) {
   // Grouping inventory by table name
   const groupedInventory = useMemo(() => {
     return inventory.reduce((acc, item) => {
-      const resource = item?.resource || '';
+      const resource = item?.source_table || item?.resource || '';
       const tableName = resource.includes(':') ? resource.split(':')[0] : resource;
       if (!acc[tableName]) acc[tableName] = [];
       acc[tableName].push(item);
@@ -871,7 +871,7 @@ function Dashboard({ onLogout }) {
   // Filter & pagination
   const filteredLogs = recentLogs.filter(log => {
     const matchSearch =
-      (log?.resource?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+      (log?.source_table?.toLowerCase() || log?.resource?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
       (log?.actor?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
       (log?.source_system?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
       (log?.metadata?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
@@ -901,13 +901,14 @@ function Dashboard({ onLogout }) {
   // Background verify — inventory chain
   useEffect(() => {
     inventory.forEach(item => {
-      if (!item || !item.resource) return;
+      const resource = item?.source_table || item?.resource;
+      if (!item || !resource) return;
       setInventoryStatuses(prev => {
-        if (prev[item.resource] && prev[item.resource].status !== 'pending' && prev[item.resource].status !== 'loading') return prev;
-        api.get(`/dashboard/verify-resource/${encodeURIComponent(item.resource)}`)
-          .then(res => setInventoryStatuses(p => ({ ...p, [item.resource]: res.data })))
-          .catch(err => setInventoryStatuses(p => ({ ...p, [item.resource]: err.response?.data || { status: 'failed' } })));
-        return { ...prev, [item.resource]: { status: 'loading' } };
+        if (prev[resource] && prev[resource].status !== 'pending' && prev[resource].status !== 'loading') return prev;
+        api.get(`/dashboard/verify-resource/${encodeURIComponent(resource)}`)
+          .then(res => setInventoryStatuses(p => ({ ...p, [resource]: res.data })))
+          .catch(err => setInventoryStatuses(p => ({ ...p, [resource]: err.response?.data || { status: 'failed' } })));
+        return { ...prev, [resource]: { status: 'loading' } };
       });
     });
   }, [inventory]);
@@ -927,7 +928,8 @@ function Dashboard({ onLogout }) {
 
   // Status badge for inventory
   const renderInventoryBadge = (item) => {
-    const v = inventoryStatuses[item.resource];
+    const resource = item?.source_table || item?.resource;
+    const v = inventoryStatuses[resource];
     if (!v || v.status === 'loading')
       return <span className="ac-chain-badge ac-status--checking">⏳</span>;
     if (v.status === 'success')
@@ -972,20 +974,20 @@ function Dashboard({ onLogout }) {
           </div>
           <div>
             <div className="ac-topnav__brand-name">Audit Trail</div>
-            <div className="ac-topnav__brand-sub">Gateway Portal</div>
+            <div className="ac-topnav__brand-sub">Portal Gateway</div>
           </div>
         </div>
         <div className="ac-topnav__right">
           <div className="ac-topnav__user">
             <div className="ac-topnav__user-info">
               <div className="ac-topnav__user-name">Auditor</div>
-              <div className="ac-topnav__user-role">System Administrator</div>
+              <div className="ac-topnav__user-role">Administrator Sistem</div>
             </div>
             <div className="ac-topnav__avatar">A</div>
           </div>
           <button className="ac-topnav__logout" onClick={onLogout}>
             <Icon name="logout" size={16}/>
-            Logout
+            Keluar
           </button>
         </div>
       </header>
@@ -993,8 +995,8 @@ function Dashboard({ onLogout }) {
       {/* ======= SIDEBAR ======= */}
       <aside className={`ac-sidebar${sidebarOpen ? ' ac-sidebar--open' : ''}`}>
         <div className="ac-sidebar__header">
-          <div className="ac-sidebar__section-label">Audit Manager</div>
-          <div className="ac-sidebar__section-sub">Secure Data Integrity</div>
+          <div className="ac-sidebar__section-label">Manajer Audit</div>
+          <div className="ac-sidebar__section-sub">Keamanan Integritas Data</div>
         </div>
         <nav className="ac-sidebar__nav">
           <button className="ac-sidebar__nav-item ac-sidebar__nav-item--active">
@@ -1004,15 +1006,15 @@ function Dashboard({ onLogout }) {
         </nav>
         <div className="ac-sidebar__footer">
           <div className="ac-sidebar__status-card">
-            <div className="ac-sidebar__status-label">System Status</div>
+            <div className="ac-sidebar__status-label">Status Sistem</div>
             <div className="ac-sidebar__status-row">
               <span className="ac-sidebar__pulse"/>
-              <span className="ac-sidebar__status-text">Blockchain Active</span>
+              <span className="ac-sidebar__status-text">Blockchain Aktif</span>
             </div>
           </div>
           <button className="ac-sidebar__nav-item" style={{ marginTop: 6 }} onClick={onLogout}>
             <Icon name="logout" size={18}/>
-            Logout
+            Keluar
           </button>
         </div>
       </aside>
@@ -1037,7 +1039,7 @@ function Dashboard({ onLogout }) {
                   🏢
                 </div>
                 <div>
-                  <div className="ac-workspace-widget__title">Client Workspace Context</div>
+                  <div className="ac-workspace-widget__title">Konteks Workspace Klien</div>
                   <div className="ac-workspace-widget__subtitle">
                     <span>Sistem Klien Aktif:</span>
                     <code className="ac-workspace-widget__code" title={clientInfo.client_id}>
@@ -1080,7 +1082,7 @@ function Dashboard({ onLogout }) {
               <div>
                 <div className="ac-stat-card__label">Total Log</div>
                 <div className="ac-stat-card__value">{stats.total_logs.toLocaleString()}</div>
-                <div className="ac-stat-card__sub ac-stat-card__sub--blue">All entries tracked</div>
+                <div className="ac-stat-card__sub ac-stat-card__sub--blue">Semua entri terlacak</div>
               </div>
             </div>
             <div className="ac-stat-card">
@@ -1088,10 +1090,10 @@ function Dashboard({ onLogout }) {
                 <Icon name="clock" size={26}/>
               </div>
               <div>
-                <div className="ac-stat-card__label">Pending Verification</div>
+                <div className="ac-stat-card__label">Verifikasi Tertunda</div>
                 <div className="ac-stat-card__value">{stats.pending_logs.toLocaleString()}</div>
                 <div className="ac-stat-card__sub ac-stat-card__sub--amber">
-                  {stats.pending_logs > 0 ? 'Requires attention' : 'All clear'}
+                  {stats.pending_logs > 0 ? 'Butuh perhatian' : 'Semua aman'}
                 </div>
               </div>
             </div>
@@ -1100,9 +1102,9 @@ function Dashboard({ onLogout }) {
                 <Icon name="link" size={26}/>
               </div>
               <div>
-                <div className="ac-stat-card__label">Anchored (Blockchain)</div>
+                <div className="ac-stat-card__label">Tersimpan (Blockchain)</div>
                 <div className="ac-stat-card__value">{stats.anchored_logs.toLocaleString()}</div>
-                <div className="ac-stat-card__sub ac-stat-card__sub--teal">Successfully secured</div>
+                <div className="ac-stat-card__sub ac-stat-card__sub--teal">Berhasil diamankan</div>
               </div>
             </div>
           </section>
@@ -1156,7 +1158,7 @@ function Dashboard({ onLogout }) {
                       <td>{groupedInventory[tableName].length.toLocaleString()} Record</td>
                       <td style={{ textAlign: 'right' }}>
                         <button className="ac-btn-ghost" onClick={e => { e.stopPropagation(); setSelectedTableModal(tableName); }}>
-                          View Records
+                          Lihat Baris
                           <Icon name="chevronRight" size={13}/>
                         </button>
                       </td>
@@ -1182,7 +1184,7 @@ function Dashboard({ onLogout }) {
                   <input
                     type="text"
                     className="ac-search__input"
-                    placeholder="Cari Aktor, Resource, Hash..."
+                    placeholder="Cari Aktor, Sumber Data, Hash..."
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
                   />
@@ -1209,9 +1211,9 @@ function Dashboard({ onLogout }) {
                     <th>Waktu</th>
                     <th>Aktor</th>
                     <th>Aksi</th>
-                    <th>Resource</th>
+                    <th>Sumber Data</th>
                     <th>Metadata</th>
-                    <th>Source System</th>
+                    <th>Sistem Sumber</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1225,11 +1227,11 @@ function Dashboard({ onLogout }) {
                       </td>
                     </tr>
                   ) : paginatedLogs.map(log => (
-                    <tr key={log.log_id} onClick={() => setSelectedResource(log.resource)}>
+                    <tr key={log.log_id} onClick={() => setSelectedResource(log.source_table || log.resource)}>
                       <td className="ac-table__time">{formatTimestamp(log.timestamp)}</td>
                       <td className="ac-table__actor">{log.actor}</td>
                       <td><ActionBadge action={log.action}/></td>
-                      <td className="ac-table__mono">{log.resource}</td>
+                      <td className="ac-table__mono">{log.source_table || log.resource || '—'}</td>
                       <td onClick={e => e.stopPropagation()}>{renderMetadataCell(log.metadata)}</td>
                       <td className="ac-table__source-system">{log.source_system || '—'}</td>
                     </tr>
@@ -1290,7 +1292,7 @@ function Dashboard({ onLogout }) {
                 <table className="ac-table">
                   <thead>
                     <tr>
-                      <th>Resource ID</th>
+                      <th>ID Sumber Data</th>
                       <th>Aksi Terakhir</th>
                       <th>Pembaruan Terakhir</th>
                       <th>Status Rantai</th>
@@ -1298,11 +1300,12 @@ function Dashboard({ onLogout }) {
                   </thead>
                   <tbody>
                     {groupedInventory[selectedTableModal].map(item => {
-                      const resourceID = item.resource.includes(':') ? item.resource.split(':')[1] : item.resource;
+                      const resource = item.source_table || item.resource || '';
+                      const resourceID = resource.includes(':') ? resource.split(':')[1] : resource;
                       return (
                         <tr
-                          key={item.resource}
-                          onClick={() => { setSelectedResource(item.resource); setSelectedTableModal(null); }}
+                          key={resource}
+                          onClick={() => { setSelectedResource(resource); setSelectedTableModal(null); }}
                         >
                           <td>
                             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600 }}>
