@@ -844,7 +844,8 @@ function Dashboard({ onLogout }) {
           api.get('/dashboard/inventory'),
         ]);
         setStats(statsRes.data);
-        setRecentLogs(logsRes.data || []);
+        const logsArray = Array.isArray(logsRes.data) ? logsRes.data : (logsRes.data?.data || []);
+        setRecentLogs(logsArray);
         setInventory(invRes.data || []);
       } catch (err) {
         if (err.response?.status === 401) onLogout();
