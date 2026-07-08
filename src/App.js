@@ -835,6 +835,7 @@ function Dashboard({ onLogout }) {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterAction, setFilterAction] = useState('ALL');
+  const [filterVerification, setFilterVerification] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -1335,6 +1336,11 @@ function Dashboard({ onLogout }) {
                   <option value="INSERT">INSERT</option>
                   <option value="UPDATE">UPDATE</option>
                   <option value="DELETE">DELETE</option>
+                </select>
+                <select className="ac-select" value={filterVerification} onChange={e => setFilterVerification(e.target.value)}>
+                  <option value="ALL">All Status</option>
+                  <option value="VALID">VALID</option>
+                  <option value="INVALID">INVALID</option>
                 </select>
                 <select className="ac-select" value={rowsPerPage} onChange={e => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}>
                   <option value={5}>5 Rows</option>
