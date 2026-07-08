@@ -979,12 +979,20 @@ function Dashboard({ onLogout }) {
           </div>
         </div>
         <div className="ac-topnav__right">
+          {clientInfo && (
+            <div className="ac-topnav__client-pill">
+              <span className="ac-topnav__client-dot" />
+              <span className="ac-topnav__client-label">{clientInfo.client_id}</span>
+            </div>
+          )}
           <div className="ac-topnav__user">
             <div className="ac-topnav__user-info">
-              <div className="ac-topnav__user-name">Auditor</div>
-              <div className="ac-topnav__user-role">System Administrator</div>
+              <div className="ac-topnav__user-name">{clientInfo?.username || 'Auditor'}</div>
+              <div className="ac-topnav__user-role">{clientInfo?.role || 'System Administrator'}</div>
             </div>
-            <div className="ac-topnav__avatar">A</div>
+            <div className="ac-topnav__avatar">
+              {(clientInfo?.username || 'A').charAt(0).toUpperCase()}
+            </div>
           </div>
           <button className="ac-topnav__logout" onClick={onLogout}>
             <Icon name="logout" size={16} />
@@ -1006,13 +1014,30 @@ function Dashboard({ onLogout }) {
           </button>
         </nav>
         <div className="ac-sidebar__footer">
-          <div className="ac-sidebar__status-card">
-            <div className="ac-sidebar__status-label">System Status</div>
-            <div className="ac-sidebar__status-row">
-              <span className="ac-sidebar__pulse" />
-              <span className="ac-sidebar__status-text">Blockchain Active</span>
+          {clientInfo && (
+            <div className="ac-sidebar__identity-card">
+              <div className="ac-sidebar__identity-label">Session Identity</div>
+              <div className="ac-sidebar__identity-user">
+                <span className="ac-sidebar__identity-avatar">
+                  {clientInfo.username.charAt(0).toUpperCase()}
+                </span>
+                <div className="ac-sidebar__identity-details">
+                  <span className="ac-sidebar__identity-name" title={clientInfo.username}>
+                    {clientInfo.username}
+                  </span>
+                  <span className="ac-sidebar__identity-role">
+                    {clientInfo.role}
+                  </span>
+                </div>
+              </div>
+              <div className="ac-sidebar__identity-client">
+                <span className="ac-sidebar__identity-client-title">Client Workspace</span>
+                <span className="ac-sidebar__identity-client-val" title={clientInfo.client_id}>
+                  {clientInfo.client_id}
+                </span>
+              </div>
             </div>
-          </div>
+          )}
           <button className="ac-sidebar__nav-item" style={{ marginTop: 6 }} onClick={onLogout}>
             <Icon name="logout" size={18} />
             Logout
@@ -1032,28 +1057,55 @@ function Dashboard({ onLogout }) {
       <main className="ac-main">
         <div className="ac-main__container">
 
-          {/* Client Workspace Context Widget */}
+          {/* ===== CLIENT IDENTITY BANNER ===== */}
           {clientInfo && (
-            <div className="ac-workspace-widget">
-              <div className="ac-workspace-widget__left">
-                <div className="ac-workspace-widget__icon">
-                  🏢
-                </div>
-                <div>
-                  <div className="ac-workspace-widget__title">Client Workspace Context</div>
-                  <div className="ac-workspace-widget__subtitle">
-                    <span>Active Client System:</span>
-                    <code className="ac-workspace-widget__code" title={clientInfo.client_id}>
+            <div className="ac-cib">
+              {/* Animated background decoration */}
+              <div className="ac-cib__bg-grid" />
+
+              {/* TOP ROW: Client + Admin panels */}
+              <div className="ac-cib__top-row">
+                {/* Left — Client System Block */}
+                <div className="ac-cib__client-block">
+                  <div className="ac-cib__client-icon">🏢</div>
+                  <div className="ac-cib__client-meta">
+                    <div className="ac-cib__client-eyebrow">Audit Trail System</div>
+                    <div className="ac-cib__client-name" title={clientInfo.client_id}>
                       {clientInfo.client_id}
-                    </code>
-                    <span className="ac-workspace-widget__badge">
-                      👤 {clientInfo.username} ({clientInfo.role})
-                    </span>
+                    </div>
+                    <div className="ac-cib__client-badge">
+                      <span className="ac-cib__live-dot" />
+                      Active Session
+                    </div>
+                  </div>
+                </div>
+
+                {/* Divider */}
+                <div className="ac-cib__divider" />
+
+                {/* Right — Admin Identity Block */}
+                <div className="ac-cib__admin-block">
+                  <div className="ac-cib__admin-avatar">
+                    {clientInfo.username.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="ac-cib__admin-meta">
+                    <div className="ac-cib__admin-eyebrow">Logged in as</div>
+                    <div className="ac-cib__admin-name">{clientInfo.username}</div>
+                    <div className="ac-cib__admin-role">
+                      <span className="ac-cib__role-chip">{clientInfo.role}</span>
+                    </div>
                   </div>
                 </div>
               </div>
-              <div className="ac-workspace-widget__info-banner">
-                <strong>Multi-Client Isolation:</strong> Audit trail data is securely separated and isolated for this client workspace. Logs from other systems cannot be accessed or modified.
+
+              {/* BOTTOM ROW: Security isolation notice */}
+              <div className="ac-cib__notice-bar">
+                <span className="ac-cib__notice-icon">🔒</span>
+                <span className="ac-cib__notice-text">
+                  <strong>Data Isolation Active</strong> — Audit logs are exclusively scoped to the{' '}
+                  <span className="ac-cib__notice-highlight">{clientInfo.client_id}</span>{' '}
+                  workspace. Cross-client access is blocked at the gateway level.
+                </span>
               </div>
             </div>
           )}
@@ -1215,6 +1267,7 @@ function Dashboard({ onLogout }) {
                     <th>Resource</th>
                     <th>Metadata</th>
                     <th>Source System</th>
+                    <th>Verification</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1235,6 +1288,7 @@ function Dashboard({ onLogout }) {
                       <td className="ac-table__mono">{log.source_table || log.resource || '—'}</td>
                       <td onClick={e => e.stopPropagation()}>{renderMetadataCell(log.metadata)}</td>
                       <td className="ac-table__source-system">{log.source_system || '—'}</td>
+                      <td onClick={e => e.stopPropagation()}>{renderStatusBadge(log)}</td>
                     </tr>
                   ))}
                 </tbody>
