@@ -1,5 +1,5 @@
 // src/App.js
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import api from './api';
 import './App.css';
@@ -816,6 +816,19 @@ function Dashboard({ onLogout }) {
   const [verifyStatuses, setVerifyStatuses] = useState({});
   const [inventoryStatuses, setInventoryStatuses] = useState({});
   const [selectedVerifyResult, setSelectedVerifyResult] = useState(null);
+  const [totalLogsCount, setTotalLogsCount] = useState(0);
+  const [isServerPaginated, setIsServerPaginated] = useState(false);
+
+  const verifyStatusesRef = useRef(verifyStatuses);
+  const inventoryStatusesRef = useRef(inventoryStatuses);
+
+  useEffect(() => {
+    verifyStatusesRef.current = verifyStatuses;
+  }, [verifyStatuses]);
+
+  useEffect(() => {
+    inventoryStatusesRef.current = inventoryStatuses;
+  }, [inventoryStatuses]);
 
   const [selectedResource, setSelectedResource] = useState(null);
   const [selectedTableModal, setSelectedTableModal] = useState(null);
@@ -840,12 +853,28 @@ function Dashboard({ onLogout }) {
       try {
         const [statsRes, logsRes, invRes] = await Promise.all([
           api.get('/dashboard/stats'),
-          api.get('/dashboard/logs', { params: { page: 1, page_size: 500 } }),
+          api.get('/dashboard/logs', { params: { page: currentPage, page_size: rowsPerPage } }),
           api.get('/dashboard/inventory'),
         ]);
         setStats(statsRes.data);
-        const logsArray = Array.isArray(logsRes.data) ? logsRes.data : (logsRes.data?.data || []);
+        
+        let logsArray = [];
+        let serverTotal = 0;
+        let serverPaginated = false;
+        
+        if (Array.isArray(logsRes.data)) {
+          logsArray = logsRes.data;
+          serverTotal = logsRes.data.length;
+          serverPaginated = false;
+        } else if (logsRes.data?.data) {
+          logsArray = logsRes.data.data;
+          serverTotal = logsRes.data.pagination?.total || logsRes.data.data.length;
+          serverPaginated = true;
+        }
+        
         setRecentLogs(logsArray);
+        setTotalLogsCount(serverTotal);
+        setIsServerPaginated(serverPaginated);
         setInventory(invRes.data || []);
       } catch (err) {
         if (err.response?.status === 401) onLogout();
@@ -854,7 +883,7 @@ function Dashboard({ onLogout }) {
     fetchData();
     const id = setInterval(fetchData, 5000);
     return () => clearInterval(id);
-  }, [onLogout]);
+  }, [onLogout, currentPage, rowsPerPage]);
 
   // Grouping inventory by table name
   const groupedInventory = useMemo(() => {
@@ -880,22 +909,59 @@ function Dashboard({ onLogout }) {
     const matchAction = filterAction === 'ALL' || log?.action === filterAction;
     return matchSearch && matchAction;
   });
-  const totalPages = Math.ceil(filteredLogs.length / rowsPerPage) || 1;
-  const paginatedLogs = filteredLogs.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+  const totalPages = isServerPaginated
+    ? (Math.ceil(totalLogsCount / rowsPerPage) || 1)
+    : (Math.ceil(filteredLogs.length / rowsPerPage) || 1);
 
-  useEffect(() => { if (currentPage > totalPages) setCurrentPage(1); }, [filteredLogs.length, currentPage, totalPages]);
+  const paginatedLogs = isServerPaginated
+    ? filteredLogs
+    : filteredLogs.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(1);
+    }
+  }, [isServerPaginated, totalLogsCount, filteredLogs.length, currentPage, totalPages]);
+
+  const isFiltered = searchQuery || filterAction !== 'ALL';
+  const displayTotal = isServerPaginated
+    ? (isFiltered ? filteredLogs.length : totalLogsCount)
+    : filteredLogs.length;
 
   // Background verify — individual logs
   useEffect(() => {
     paginatedLogs.forEach(log => {
       if (!log || !log.log_id) return;
-      setVerifyStatuses(prev => {
-        if (prev[log.log_id] && prev[log.log_id].status !== 'pending' && prev[log.log_id].status !== 'loading') return prev;
-        api.get(`/dashboard/verify/${log.log_id}`)
-          .then(res => setVerifyStatuses(p => ({ ...p, [log.log_id]: res.data })))
-          .catch(err => setVerifyStatuses(p => ({ ...p, [log.log_id]: err.response?.data || { status: 'failed' } })));
-        return { ...prev, [log.log_id]: { status: 'loading' } };
-      });
+      const logId = log.log_id;
+      const currentStatus = verifyStatusesRef.current[logId]?.status;
+
+      // Skip if already success, pending, or permanently failed
+      if (
+        currentStatus === 'success' ||
+        currentStatus === 'pending' ||
+        currentStatus === 'loading' ||
+        currentStatus === 'failed_local' ||
+        currentStatus === 'failed_kafka' ||
+        currentStatus === 'failed_onchain'
+      ) {
+        return;
+      }
+
+      setVerifyStatuses(prev => ({
+        ...prev,
+        [logId]: { status: 'loading' }
+      }));
+
+      api.get(`/dashboard/verify/${logId}`)
+        .then(res => {
+          setVerifyStatuses(prev => ({ ...prev, [logId]: res.data }));
+        })
+        .catch(err => {
+          setVerifyStatuses(prev => ({
+            ...prev,
+            [logId]: err.response?.data || { status: 'failed' }
+          }));
+        });
     });
   }, [paginatedLogs]);
 
@@ -904,13 +970,35 @@ function Dashboard({ onLogout }) {
     inventory.forEach(item => {
       const resource = item?.source_table || item?.resource;
       if (!item || !resource) return;
-      setInventoryStatuses(prev => {
-        if (prev[resource] && prev[resource].status !== 'pending' && prev[resource].status !== 'loading') return prev;
-        api.get(`/dashboard/verify-resource/${encodeURIComponent(resource)}`)
-          .then(res => setInventoryStatuses(p => ({ ...p, [resource]: res.data })))
-          .catch(err => setInventoryStatuses(p => ({ ...p, [resource]: err.response?.data || { status: 'failed' } })));
-        return { ...prev, [resource]: { status: 'loading' } };
-      });
+      const currentStatus = inventoryStatusesRef.current[resource]?.status;
+
+      // Skip if already success, pending, or permanently failed
+      if (
+        currentStatus === 'success' ||
+        currentStatus === 'pending' ||
+        currentStatus === 'loading' ||
+        currentStatus === 'failed_local' ||
+        currentStatus === 'failed_kafka' ||
+        currentStatus === 'failed_onchain'
+      ) {
+        return;
+      }
+
+      setInventoryStatuses(prev => ({
+        ...prev,
+        [resource]: { status: 'loading' }
+      }));
+
+      api.get(`/dashboard/verify-resource/${encodeURIComponent(resource)}`)
+        .then(res => {
+          setInventoryStatuses(prev => ({ ...prev, [resource]: res.data }));
+        })
+        .catch(err => {
+          setInventoryStatuses(prev => ({
+            ...prev,
+            [resource]: err.response?.data || { status: 'failed' }
+          }));
+        });
     });
   }, [inventory]);
 
@@ -1298,7 +1386,7 @@ function Dashboard({ onLogout }) {
             {/* Pagination */}
             <div className="ac-pagination">
               <span className="ac-pagination__info">
-                Showing {paginatedLogs.length} of {filteredLogs.length} results
+                Showing {paginatedLogs.length} of {displayTotal} results
               </span>
               <div className="ac-pagination__controls">
                 <button
