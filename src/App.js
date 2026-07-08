@@ -840,7 +840,7 @@ function Dashboard({ onLogout }) {
       try {
         const [statsRes, logsRes, invRes] = await Promise.all([
           api.get('/dashboard/stats'),
-          api.get('/dashboard/logs'),
+          api.get('/dashboard/logs', { params: { page: 1, page_size: 500 } }),
           api.get('/dashboard/inventory'),
         ]);
         setStats(statsRes.data);
@@ -888,13 +888,13 @@ function Dashboard({ onLogout }) {
   // Background verify — individual logs
   useEffect(() => {
     paginatedLogs.forEach(log => {
-      if (!log || !log.hash_value) return;
+      if (!log || !log.log_id) return;
       setVerifyStatuses(prev => {
-        if (prev[log.hash_value] && prev[log.hash_value].status !== 'pending' && prev[log.hash_value].status !== 'loading') return prev;
-        api.get(`/dashboard/verify/${log.hash_value}`)
-          .then(res => setVerifyStatuses(p => ({ ...p, [log.hash_value]: res.data })))
-          .catch(err => setVerifyStatuses(p => ({ ...p, [log.hash_value]: err.response?.data || { status: 'failed' } })));
-        return { ...prev, [log.hash_value]: { status: 'loading' } };
+        if (prev[log.log_id] && prev[log.log_id].status !== 'pending' && prev[log.log_id].status !== 'loading') return prev;
+        api.get(`/dashboard/verify/${log.log_id}`)
+          .then(res => setVerifyStatuses(p => ({ ...p, [log.log_id]: res.data })))
+          .catch(err => setVerifyStatuses(p => ({ ...p, [log.log_id]: err.response?.data || { status: 'failed' } })));
+        return { ...prev, [log.log_id]: { status: 'loading' } };
       });
     });
   }, [paginatedLogs]);
@@ -916,8 +916,8 @@ function Dashboard({ onLogout }) {
 
   // Status badge for transaction table
   const renderStatusBadge = (log) => {
-    if (!log || !log.hash_value) return <span className="ac-status ac-status--invalid">🚨 INVALID</span>;
-    const v = verifyStatuses[log.hash_value];
+    if (!log || !log.log_id || !log.hash_value) return <span className="ac-status ac-status--invalid">🚨 INVALID</span>;
+    const v = verifyStatuses[log.log_id];
     if (!v || v.status === 'loading')
       return <span className="ac-status ac-status--checking">⏳ Memeriksa...</span>;
     if (v.status === 'success')
