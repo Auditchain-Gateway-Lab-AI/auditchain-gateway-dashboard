@@ -929,7 +929,7 @@ function Dashboard({ onLogout }) {
     ? (isFiltered ? filteredLogs.length : totalLogsCount)
     : filteredLogs.length;
 
-  // // Background verify — individual logs
+  // // Background verify — individual logs (Nonaktifkan dulu sampai endpoint baru siap)
   // useEffect(() => {
   //   paginatedLogs.forEach(log => {
   //     if (!log || !log.log_id) return;
@@ -966,7 +966,7 @@ function Dashboard({ onLogout }) {
   //   });
   // }, [paginatedLogs]);
 
-  // // Background verify — inventory chain
+  // // Background verify — inventory chain (Nonaktifkan dulu sampai endpoint baru siap)
   // useEffect(() => {
   //   inventory.forEach(item => {
   //     const resource = item?.source_table || item?.resource;
