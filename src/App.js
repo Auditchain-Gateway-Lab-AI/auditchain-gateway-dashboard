@@ -381,7 +381,7 @@ function VerificationDetail({ result, onClose }) {
         : 'ac-verify__header--failed';
 
   const statusEmoji = isScanning ? '🔍' : isSuccess ? '✅' : isPending ? '⏳' : '🚨';
-  const statusLabel = isScanning ? 'Executing Audit Trail Cryptography...' : isSuccess ? 'Verification Successful' : isPending ? 'Awaiting Blockchain' : 'Verification Failed';
+  const statusLabel = isScanning ? 'Executing Auditchain Gateway Cryptography...' : isSuccess ? 'Verification Successful' : isPending ? 'Awaiting Blockchain' : 'Verification Failed';
   const statusMsg = isScanning
     ? 'Reading data, recalculating checksum hashes, and matching consensus ledger root...'
     : (data.message || result.message || '');
@@ -668,7 +668,7 @@ function Login({ onLogin }) {
             </svg>
           </div>
           <div>
-            <div className="ac-login-hero__brand-name">Audit Trail</div>
+            <div className="ac-login-hero__brand-name">Auditchain Gateway</div>
             <div className="ac-login-hero__brand-sub">Gateway Portal</div>
           </div>
         </div>
@@ -710,7 +710,7 @@ function Login({ onLogin }) {
               </svg>
             </div>
             <div>
-              <div style={{ fontSize: 18, fontWeight: 800, color: '#0d1b2e', letterSpacing: '.02em' }}>Audit Trail</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: '#0d1b2e', letterSpacing: '.02em' }}>Auditchain Gateway</div>
               <div style={{ fontSize: 10, fontWeight: 600, color: '#4f46e5', letterSpacing: '.1em', textTransform: 'uppercase' }}>Gateway Portal</div>
             </div>
           </div>
@@ -798,7 +798,7 @@ function Login({ onLogin }) {
           </div>
 
           <div className="ac-login__footer">
-            © 2026 Audit Trail Gateway &nbsp;·&nbsp; Secure Log Management v2.4.1
+            © 2026 Auditchain Gateway &nbsp;·&nbsp; Secure Log Management v2.4.1
           </div>
         </div>
       </div>
@@ -1063,7 +1063,7 @@ function Dashboard({ onLogout }) {
             </svg>
           </div>
           <div>
-            <div className="ac-topnav__brand-name">Audit Trail</div>
+            <div className="ac-topnav__brand-name">Auditchain Gateway</div>
             <div className="ac-topnav__brand-sub">Gateway Portal</div>
           </div>
         </div>
@@ -1158,7 +1158,7 @@ function Dashboard({ onLogout }) {
                 <div className="ac-cib__client-block">
                   <div className="ac-cib__client-icon">🏢</div>
                   <div className="ac-cib__client-meta">
-                    <div className="ac-cib__client-eyebrow">Audit Trail System</div>
+                    <div className="ac-cib__client-eyebrow">Auditchain Gateway System</div>
                     <div className="ac-cib__client-name" title={clientInfo.client_id}>
                       {clientInfo.client_id}
                     </div>
@@ -1205,7 +1205,7 @@ function Dashboard({ onLogout }) {
             <div className="ac-hero__content">
               <div className="ac-hero__left">
                 <h1 className="ac-hero__title">
-                  🛡️ Audit Trail Dashboard
+                  🛡️ Auditchain Gateway Dashboard
                 </h1>
                 <p className="ac-hero__subtitle">
                   Monitor audit logs and verify blockchain transactions in real-time.
