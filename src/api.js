@@ -2,8 +2,8 @@
 import axios from 'axios';
 
 const api = axios.create({
-  // Sesuaikan port dengan port gateway Anda (default: 8080 atau 3000)
-  baseURL: 'http://192.168.11.94:8080/api', 
+  // Sesuaikan port dengan port gateway Anda (default: 8081)
+  baseURL: 'http://192.168.11.94:8080/api',
 });
 
 // Interceptor untuk menyisipkan token JWT

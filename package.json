@@ -1,5 +1,5 @@
 {
-  "name": "auditchain-dashboard",
+  "name": "audit-trail-dashboard",
   "version": "0.1.0",
   "private": true,
   "dependencies": {
