@@ -966,42 +966,42 @@ function Dashboard({ onLogout }) {
     });
   }, [paginatedLogs]);
 
-  // Background verify — inventory chain
-  useEffect(() => {
-    inventory.forEach(item => {
-      const resource = item?.source_table || item?.resource;
-      if (!item || !resource) return;
-      const currentStatus = inventoryStatusesRef.current[resource]?.status;
+  // // Background verify — inventory chain
+  // useEffect(() => {
+  //   inventory.forEach(item => {
+  //     const resource = item?.source_table || item?.resource;
+  //     if (!item || !resource) return;
+  //     const currentStatus = inventoryStatusesRef.current[resource]?.status;
 
-      // Skip if already success, pending, or permanently failed
-      if (
-        currentStatus === 'success' ||
-        currentStatus === 'pending' ||
-        currentStatus === 'loading' ||
-        currentStatus === 'failed_local' ||
-        currentStatus === 'failed_kafka' ||
-        currentStatus === 'failed_onchain'
-      ) {
-        return;
-      }
+  //     // Skip if already success, pending, or permanently failed
+  //     if (
+  //       currentStatus === 'success' ||
+  //       currentStatus === 'pending' ||
+  //       currentStatus === 'loading' ||
+  //       currentStatus === 'failed_local' ||
+  //       currentStatus === 'failed_kafka' ||
+  //       currentStatus === 'failed_onchain'
+  //     ) {
+  //       return;
+  //     }
 
-      setInventoryStatuses(prev => ({
-        ...prev,
-        [resource]: { status: 'loading' }
-      }));
+  //     setInventoryStatuses(prev => ({
+  //       ...prev,
+  //       [resource]: { status: 'loading' }
+  //     }));
 
-      api.get(`/dashboard/verify-resource/${encodeURIComponent(resource)}`)
-        .then(res => {
-          setInventoryStatuses(prev => ({ ...prev, [resource]: res.data }));
-        })
-        .catch(err => {
-          setInventoryStatuses(prev => ({
-            ...prev,
-            [resource]: err.response?.data || { status: 'failed' }
-          }));
-        });
-    });
-  }, [inventory]);
+  //     api.get(`/dashboard/verify-resource/${encodeURIComponent(resource)}`)
+  //       .then(res => {
+  //         setInventoryStatuses(prev => ({ ...prev, [resource]: res.data }));
+  //       })
+  //       .catch(err => {
+  //         setInventoryStatuses(prev => ({
+  //           ...prev,
+  //           [resource]: err.response?.data || { status: 'failed' }
+  //         }));
+  //       });
+  //   });
+  // }, [inventory]);
 
   // Status badge for transaction table
   const renderStatusBadge = (log) => {
