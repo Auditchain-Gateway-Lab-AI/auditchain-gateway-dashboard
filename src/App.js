@@ -929,42 +929,42 @@ function Dashboard({ onLogout }) {
     ? (isFiltered ? filteredLogs.length : totalLogsCount)
     : filteredLogs.length;
 
-  // Background verify — individual logs
-  useEffect(() => {
-    paginatedLogs.forEach(log => {
-      if (!log || !log.log_id) return;
-      const logId = log.log_id;
-      const currentStatus = verifyStatusesRef.current[logId]?.status;
+  // // Background verify — individual logs
+  // useEffect(() => {
+  //   paginatedLogs.forEach(log => {
+  //     if (!log || !log.log_id) return;
+  //     const logId = log.log_id;
+  //     const currentStatus = verifyStatusesRef.current[logId]?.status;
 
-      // Skip if already success, pending, or permanently failed
-      if (
-        currentStatus === 'success' ||
-        currentStatus === 'pending' ||
-        currentStatus === 'loading' ||
-        currentStatus === 'failed_local' ||
-        currentStatus === 'failed_kafka' ||
-        currentStatus === 'failed_onchain'
-      ) {
-        return;
-      }
+  //     // Skip if already success, pending, or permanently failed
+  //     if (
+  //       currentStatus === 'success' ||
+  //       currentStatus === 'pending' ||
+  //       currentStatus === 'loading' ||
+  //       currentStatus === 'failed_local' ||
+  //       currentStatus === 'failed_kafka' ||
+  //       currentStatus === 'failed_onchain'
+  //     ) {
+  //       return;
+  //     }
 
-      setVerifyStatuses(prev => ({
-        ...prev,
-        [logId]: { status: 'loading' }
-      }));
+  //     setVerifyStatuses(prev => ({
+  //       ...prev,
+  //       [logId]: { status: 'loading' }
+  //     }));
 
-      api.get(`/dashboard/verify/${logId}`)
-        .then(res => {
-          setVerifyStatuses(prev => ({ ...prev, [logId]: res.data }));
-        })
-        .catch(err => {
-          setVerifyStatuses(prev => ({
-            ...prev,
-            [logId]: err.response?.data || { status: 'failed' }
-          }));
-        });
-    });
-  }, [paginatedLogs]);
+  //     api.get(`/dashboard/verify/${logId}`)
+  //       .then(res => {
+  //         setVerifyStatuses(prev => ({ ...prev, [logId]: res.data }));
+  //       })
+  //       .catch(err => {
+  //         setVerifyStatuses(prev => ({
+  //           ...prev,
+  //           [logId]: err.response?.data || { status: 'failed' }
+  //         }));
+  //       });
+  //   });
+  // }, [paginatedLogs]);
 
   // // Background verify — inventory chain
   // useEffect(() => {
