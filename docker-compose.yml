@@ -12,7 +12,7 @@ services:
   dashboard:
     build:
       context: .
-      dockerfile: Dockerfile.dashboard
+      dockerfile: Dockerfile
       args:
         # Di-embed ke bundle JS saat build (CRA env var bersifat build-time).
         # Harus alamat yang bisa dijangkau BROWSER pengguna.
