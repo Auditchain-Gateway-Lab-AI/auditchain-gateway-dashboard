@@ -869,7 +869,7 @@ function Dashboard({ onLogout }) {
           serverPaginated = false;
         } else if (logsRes.data?.data) {
           logsArray = logsRes.data.data;
-          serverTotal = logsRes.data.pagination?.total || logsRes.data.data.length;
+          serverTotal = logsRes.data.pagination?.total_items ?? logsRes.data.data.length;
           serverPaginated = true;
         }
         
