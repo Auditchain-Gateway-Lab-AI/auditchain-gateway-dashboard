@@ -1,5 +1,5 @@
 // src/App.js
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import api from './api';
 import './App.css';
@@ -810,6 +810,7 @@ function Login({ onLogin }) {
 // KOMPONEN: Dashboard
 // ================================================================
 function Dashboard({ onLogout }) {
+  const navigate = useNavigate();
   const [stats, setStats] = useState({ total_logs: 0, pending_logs: 0, anchored_logs: 0 });
   const [recentLogs, setRecentLogs] = useState([]);
   const [inventory, setInventory] = useState([]);
@@ -846,16 +847,27 @@ function Dashboard({ onLogout }) {
     return parseJwt(token);
   }, []);
 
+  const [selectedClient, setSelectedClient] = useState(clientInfo?.client_id || '');
 
+  // Update selectedClient if clientInfo changes
+  useEffect(() => {
+    if (clientInfo?.client_id) {
+      setSelectedClient(clientInfo.client_id);
+    }
+  }, [clientInfo]);
 
   // Fetch data
   useEffect(() => {
     const fetchData = async () => {
       try {
+        const params = {};
+        if (selectedClient) {
+          params.client_id = selectedClient;
+        }
         const [statsRes, logsRes, invRes] = await Promise.all([
-          api.get('/dashboard/stats'),
-          api.get('/dashboard/logs', { params: { page: currentPage, page_size: rowsPerPage } }),
-          api.get('/dashboard/inventory'),
+          api.get('/dashboard/stats', { params }),
+          api.get('/dashboard/logs', { params: { ...params, page: currentPage, page_size: rowsPerPage } }),
+          api.get('/dashboard/inventory', { params }),
         ]);
         setStats(statsRes.data);
         
@@ -884,7 +896,7 @@ function Dashboard({ onLogout }) {
     fetchData();
     const id = setInterval(fetchData, 5000);
     return () => clearInterval(id);
-  }, [onLogout, currentPage, rowsPerPage]);
+  }, [onLogout, currentPage, rowsPerPage, selectedClient]);
 
   // Grouping inventory by table name
   const groupedInventory = useMemo(() => {
@@ -1101,6 +1113,16 @@ function Dashboard({ onLogout }) {
             <Icon name="dashboard" size={18} />
             Dashboard
           </button>
+          {clientInfo && clientInfo.role?.toLowerCase() === 'admin' && (
+            <button
+              className="ac-sidebar__nav-item"
+              onClick={() => navigate('/admin')}
+              style={{ marginTop: 4 }}
+            >
+              <Icon name="shield" size={18} />
+              Admin Panel
+            </button>
+          )}
         </nav>
         <div className="ac-sidebar__footer">
           {clientInfo && (
@@ -1159,9 +1181,39 @@ function Dashboard({ onLogout }) {
                   <div className="ac-cib__client-icon">🏢</div>
                   <div className="ac-cib__client-meta">
                     <div className="ac-cib__client-eyebrow">Auditchain Gateway System</div>
-                    <div className="ac-cib__client-name" title={clientInfo.client_id}>
-                      {clientInfo.client_id}
-                    </div>
+                    {clientInfo.role?.toLowerCase() === 'admin' ? (
+                      <select
+                        value={selectedClient}
+                        onChange={e => setSelectedClient(e.target.value)}
+                        style={{
+                          background: 'rgba(255,255,255,0.12)',
+                          border: '1.5px solid rgba(255,255,255,0.2)',
+                          color: '#fff',
+                          padding: '6px 12px',
+                          borderRadius: 'var(--radius-md)',
+                          fontSize: '14px',
+                          fontWeight: '700',
+                          outline: 'none',
+                          cursor: 'pointer',
+                          marginTop: '4px',
+                          minWidth: '240px'
+                        }}
+                      >
+                        <option style={{ color: '#000' }} value={clientInfo.client_id}>
+                          {clientInfo.client_id} (Admin Default)
+                        </option>
+                        <option style={{ color: '#000' }} value="ed067ad4-e549-4baa-9c9d-3d27ff24194d">
+                          SIMRS Dummy 2 (ed067ad4-e549-4baa-9c9d-3d27ff24194d)
+                        </option>
+                        <option style={{ color: '#000' }} value="7f2bc265-d419-48fe-9892-d6ef198751e1">
+                          Satu Peta Debezium (7f2bc265-d419-48fe-9892-d6ef198751e1)
+                        </option>
+                      </select>
+                    ) : (
+                      <div className="ac-cib__client-name" title={clientInfo.client_id}>
+                        {clientInfo.client_id}
+                      </div>
+                    )}
                     <div className="ac-cib__client-badge">
                       <span className="ac-cib__live-dot" />
                       Active Session
@@ -1192,7 +1244,7 @@ function Dashboard({ onLogout }) {
                 <span className="ac-cib__notice-icon">🔒</span>
                 <span className="ac-cib__notice-text">
                   <strong>Data Isolation Active</strong> — Audit logs are exclusively scoped to the{' '}
-                  <span className="ac-cib__notice-highlight">{clientInfo.client_id}</span>{' '}
+                  <span className="ac-cib__notice-highlight">{selectedClient}</span>{' '}
                   workspace. Cross-client access is blocked at the gateway level.
                 </span>
               </div>
@@ -1489,18 +1541,618 @@ function Dashboard({ onLogout }) {
 }
 
 // ================================================================
+// ADMIN DASHBOARD — Data Dummy (Ganti API call setelah backend siap)
+// ================================================================
+
+function generateDummyApiKey() {
+  const chars = 'abcdef0123456789';
+  let result = 'ak_live_';
+  for (let i = 0; i < 64; i++) result += chars[Math.floor(Math.random() * chars.length)];
+  return result;
+}
+
+const DUMMY_CLIENTS_INIT = [
+  {
+    id: 'ed067ad4-e549-4baa-9c9d-3d27ff24194d',
+    company_name: 'SIMRS Dummy 2',
+    subscription_tier: 'basic',
+    rate_limit_per_sec: 50,
+    status: 'active',
+    actor_field: 'actor',
+    action_field: 'action',
+    resource_field: 'resource',
+    fallback_actor_field: '',
+    created_at: '2026-07-01T00:00:00Z',
+  },
+  {
+    id: '7f2bc265-d419-48fe-9892-d6ef198751e1',
+    company_name: 'Satu Peta Debezium',
+    subscription_tier: 'enterprise',
+    rate_limit_per_sec: 100,
+    status: 'active',
+    actor_field: 'actor',
+    action_field: 'action',
+    resource_field: 'resource',
+    fallback_actor_field: '',
+    created_at: '2026-07-02T00:00:00Z',
+  },
+];
+
+const DUMMY_KAFKA_CONFIGS_INIT = [
+  {
+    id: 'cfg-001',
+    client_id: 'ed067ad4-e549-4baa-9c9d-3d27ff24194d',
+    company_name: 'SIMRS Dummy 2',
+    topic_prefix: 'simrs_audit',
+    kafka_brokers: '192.168.11.94:9092',
+    source_system: 'SIMRS-Prod',
+    actor_field: '__user_name',
+    pk_field: 'ID',
+    is_active: true,
+    created_at: '2026-07-01T00:00:00Z',
+  },
+];
+
+function AdminDashboard({ onLogout }) {
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState('clients');
+  const [clients, setClients] = useState(DUMMY_CLIENTS_INIT);
+  const [kafkaConfigs, setKafkaConfigs] = useState(DUMMY_KAFKA_CONFIGS_INIT);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Modal states
+  const [showClientModal, setShowClientModal] = useState(false);
+  const [showKafkaModal, setShowKafkaModal] = useState(false);
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [newApiKey, setNewApiKey] = useState('');
+  const [apiKeyCopied, setApiKeyCopied] = useState(false);
+
+  // Client form state
+  const [clientForm, setClientForm] = useState({
+    company_name: '', subscription_tier: 'basic', rate_limit_per_sec: 50,
+    status: 'active', actor_field: 'actor', fallback_actor_field: '',
+    action_field: 'action', resource_field: 'resource',
+  });
+
+  // Kafka form state
+  const [kafkaForm, setKafkaForm] = useState({
+    client_id: '', kafka_brokers: '', topic_prefix: '',
+    source_system: '', pk_field: 'ID', actor_field: '__user_name',
+  });
+
+  const clientInfo = useMemo(() => {
+    const token = localStorage.getItem('token');
+    return parseJwt(token);
+  }, []);
+
+  const handleSubmitClient = useCallback((e) => {
+    e.preventDefault();
+    const apiKey = generateDummyApiKey();
+    const newClient = {
+      id: 'dummy-' + Date.now(),
+      ...clientForm,
+      rate_limit_per_sec: parseInt(clientForm.rate_limit_per_sec, 10),
+      created_at: new Date().toISOString(),
+    };
+    setClients(prev => [...prev, newClient]);
+    setNewApiKey(apiKey);
+    setShowClientModal(false);
+    setShowApiKeyModal(true);
+    setClientForm({
+      company_name: '', subscription_tier: 'basic', rate_limit_per_sec: 50,
+      status: 'active', actor_field: 'actor', fallback_actor_field: '',
+      action_field: 'action', resource_field: 'resource',
+    });
+  }, [clientForm]);
+
+  const handleSubmitKafka = useCallback((e) => {
+    e.preventDefault();
+    const client = clients.find(c => c.id === kafkaForm.client_id);
+    const newConfig = {
+      id: 'cfg-' + Date.now(),
+      ...kafkaForm,
+      company_name: client?.company_name || kafkaForm.client_id,
+      is_active: true,
+      created_at: new Date().toISOString(),
+    };
+    setKafkaConfigs(prev => [...prev, newConfig]);
+    setShowKafkaModal(false);
+    setKafkaForm({ client_id: '', kafka_brokers: '', topic_prefix: '', source_system: '', pk_field: 'ID', actor_field: '__user_name' });
+  }, [clients, kafkaForm]);
+
+  const handleToggleKafka = useCallback((configId) => {
+    setKafkaConfigs(prev => prev.map(cfg =>
+      cfg.id === configId ? { ...cfg, is_active: !cfg.is_active } : cfg
+    ));
+  }, []);
+
+  const handleCopyApiKey = useCallback(() => {
+    navigator.clipboard.writeText(newApiKey).then(() => {
+      setApiKeyCopied(true);
+      setTimeout(() => setApiKeyCopied(false), 2000);
+    }).catch(() => {
+      // Fallback untuk browser yang tidak support clipboard API
+      const el = document.createElement('textarea');
+      el.value = newApiKey;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+      setApiKeyCopied(true);
+      setTimeout(() => setApiKeyCopied(false), 2000);
+    });
+  }, [newApiKey]);
+
+  return (
+    <div className="ac-shell">
+
+      {/* ======= TOP NAV ======= */}
+      <header className="ac-topnav">
+        <div className="ac-topnav__brand">
+          <button className="ac-topnav__menu-btn" onClick={() => setSidebarOpen(o => !o)}>
+            <Icon name="menu" size={22} />
+          </button>
+          <div className="ac-topnav__logo">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" fill="rgba(255,255,255,0.95)" />
+              <path d="M10 17l-3-3 1.4-1.4 1.6 1.6 4.6-4.6 1.4 1.4L10 17z" fill="#0077ce" />
+            </svg>
+          </div>
+          <div>
+            <div className="ac-topnav__brand-name">Auditchain Gateway</div>
+            <div className="ac-topnav__brand-sub ac-admin-portal-label">Admin Portal</div>
+          </div>
+        </div>
+        <div className="ac-topnav__right">
+          <div className="ac-topnav__client-pill ac-admin-pill">
+            <span className="ac-topnav__client-dot ac-admin-dot" />
+            <span className="ac-topnav__client-label">SUPER ADMIN</span>
+          </div>
+          <div className="ac-topnav__user">
+            <div className="ac-topnav__user-info">
+              <div className="ac-topnav__user-name">{clientInfo?.username || 'Admin'}</div>
+              <div className="ac-topnav__user-role">{clientInfo?.role || 'System Administrator'}</div>
+            </div>
+            <div className="ac-topnav__avatar">
+              {(clientInfo?.username || 'A').charAt(0).toUpperCase()}
+            </div>
+          </div>
+          <button className="ac-topnav__logout" onClick={onLogout}>
+            <Icon name="logout" size={16} />
+            Logout
+          </button>
+        </div>
+      </header>
+
+      {/* ======= SIDEBAR ======= */}
+      <aside className={`ac-sidebar${sidebarOpen ? ' ac-sidebar--open' : ''}`}>
+        <div className="ac-sidebar__header">
+          <div className="ac-sidebar__section-label">Admin Panel</div>
+          <div className="ac-sidebar__section-sub">Client System Management</div>
+        </div>
+        <nav className="ac-sidebar__nav">
+          <button
+            className={`ac-sidebar__nav-item${activeTab === 'clients' ? ' ac-sidebar__nav-item--active' : ''}`}
+            onClick={() => { setActiveTab('clients'); setSidebarOpen(false); }}
+          >
+            <Icon name="database" size={18} />
+            Client Registry
+          </button>
+          <button
+            className={`ac-sidebar__nav-item${activeTab === 'kafka' ? ' ac-sidebar__nav-item--active' : ''}`}
+            onClick={() => { setActiveTab('kafka'); setSidebarOpen(false); }}
+          >
+            <Icon name="link" size={18} />
+            Kafka Configuration
+          </button>
+          <div style={{ height: 1, background: 'var(--color-outline-variant)', margin: '8px 14px' }} />
+          <button className="ac-sidebar__nav-item" onClick={() => navigate('/dashboard')}>
+            <Icon name="dashboard" size={18} />
+            Auditor Dashboard
+          </button>
+        </nav>
+        <div className="ac-sidebar__footer">
+          {clientInfo && (
+            <div className="ac-sidebar__identity-card">
+              <div className="ac-sidebar__identity-label">Session Identity</div>
+              <div className="ac-sidebar__identity-user">
+                <span className="ac-sidebar__identity-avatar">
+                  {clientInfo.username.charAt(0).toUpperCase()}
+                </span>
+                <div className="ac-sidebar__identity-details">
+                  <span className="ac-sidebar__identity-name" title={clientInfo.username}>{clientInfo.username}</span>
+                  <span className="ac-sidebar__identity-role">{clientInfo.role}</span>
+                </div>
+              </div>
+            </div>
+          )}
+          <button className="ac-sidebar__nav-item" style={{ marginTop: 6 }} onClick={onLogout}>
+            <Icon name="logout" size={18} />
+            Logout
+          </button>
+        </div>
+      </aside>
+
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 35, background: 'rgba(0,0,0,0.3)' }}
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* ======= MAIN CONTENT ======= */}
+      <main className="ac-main">
+        <div className="ac-main__container">
+
+          {/* ===== HERO ADMIN ===== */}
+          <section className="ac-hero">
+            <div className="ac-hero__pattern" />
+            <div className="ac-hero__content">
+              <div className="ac-hero__left">
+                <h1 className="ac-hero__title">⚙️ Admin Panel</h1>
+                <p className="ac-hero__subtitle">
+                  Register and manage all client systems connected to the AuditChain Gateway.
+                  Each client is provisioned with a unique API Key, Kafka stream configuration, and isolated database storage.
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: 12, flexShrink: 0 }}>
+                <div className="ac-admin-hero-stat">
+                  <div className="ac-admin-hero-stat__val">{clients.length}</div>
+                  <div className="ac-admin-hero-stat__label">Registered Clients</div>
+                </div>
+                <div className="ac-admin-hero-stat">
+                  <div className="ac-admin-hero-stat__val">{kafkaConfigs.filter(k => k.is_active).length}</div>
+                  <div className="ac-admin-hero-stat__label">Active Streams</div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* ===== TAB NAVIGATION ===== */}
+          <div className="ac-admin-tabs">
+            <button
+              className={`ac-admin-tab${activeTab === 'clients' ? ' ac-admin-tab--active' : ''}`}
+              onClick={() => setActiveTab('clients')}
+            >
+              👥 Client Registry
+              <span className="ac-admin-tab__count">{clients.length}</span>
+            </button>
+            <button
+              className={`ac-admin-tab${activeTab === 'kafka' ? ' ac-admin-tab--active' : ''}`}
+              onClick={() => setActiveTab('kafka')}
+            >
+              ⚙️ Kafka Configuration
+              <span className="ac-admin-tab__count">{kafkaConfigs.length}</span>
+            </button>
+          </div>
+
+          {/* ===== TAB: DAFTAR KLIEN ===== */}
+          {activeTab === 'clients' && (
+            <section className="ac-card" style={{ animation: 'fadeIn 0.3s ease' }}>
+              <div className="ac-card__header">
+                <div>
+                  <div className="ac-card__title">Client Registry</div>
+                  <div className="ac-admin-card-sub">All client companies and systems registered under the AuditChain Gateway</div>
+                </div>
+                <button className="ac-btn-primary" onClick={() => setShowClientModal(true)}>
+                  + Register New Client
+                </button>
+              </div>
+              <div className="ac-table-wrap">
+                <table className="ac-table">
+                  <thead>
+                    <tr>
+                      <th>Company Name</th>
+                      <th>Status</th>
+                      <th>Field Mapping</th>
+                      <th>Registration Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clients.length === 0 && (
+                      <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--color-outline)', padding: '32px 0' }}>No registered clients found.</td></tr>
+                    )}
+                    {clients.map(client => (
+                      <tr key={client.id}>
+                        <td>
+                          <div style={{ fontWeight: 600, color: 'var(--color-on-surface)' }}>{client.company_name}</div>
+                          <div style={{ fontSize: 11, color: 'var(--color-outline)', fontFamily: 'var(--font-mono)', marginTop: 2 }}>{client.id}</div>
+                        </td>
+                        <td>
+                          <span className={`ac-dot-status${client.status === 'active' ? ' ac-dot-status--active' : ' ac-dot-status--inactive'}`}>
+                            {client.status === 'active' ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="ac-field-map">
+                            <div className="ac-field-map__item"><span className="ac-field-map__key">actor</span> {client.actor_field || '—'}</div>
+                            <div className="ac-field-map__item"><span className="ac-field-map__key">action</span> {client.action_field || '—'}</div>
+                            <div className="ac-field-map__item"><span className="ac-field-map__key">resource</span> {client.resource_field || '—'}</div>
+                          </div>
+                        </td>
+                        <td className="ac-table__time">{formatTimestamp(client.created_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          {/* ===== TAB: KONFIGURASI KAFKA ===== */}
+          {activeTab === 'kafka' && (
+            <section className="ac-card" style={{ animation: 'fadeIn 0.3s ease' }}>
+              <div className="ac-card__header">
+                <div>
+                  <div className="ac-card__title">Kafka Stream Configuration</div>
+                  <div className="ac-admin-card-sub">Kafka consumer configurations per client for real-time audit log ingestion</div>
+                </div>
+                <button className="ac-btn-primary" onClick={() => setShowKafkaModal(true)}>
+                  + Add Configuration
+                </button>
+              </div>
+              <div className="ac-table-wrap">
+                <table className="ac-table">
+                  <thead>
+                    <tr>
+                      <th>Client</th>
+                      <th>Kafka Brokers</th>
+                      <th>Topic Prefix</th>
+                      <th>Source System</th>
+                      <th>PK Field</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {kafkaConfigs.length === 0 && (
+                      <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--color-outline)', padding: '32px 0' }}>No Kafka configurations found. Click "+ Add Configuration" to get started.</td></tr>
+                    )}
+                    {kafkaConfigs.map(cfg => (
+                      <tr key={cfg.id}>
+                        <td>
+                          <div style={{ fontWeight: 600 }}>{cfg.company_name}</div>
+                          <div style={{ fontSize: 11, color: 'var(--color-outline)', fontFamily: 'var(--font-mono)', marginTop: 2 }}>{cfg.client_id}</div>
+                        </td>
+                        <td><code className="ac-code-chip">{cfg.kafka_brokers}</code></td>
+                        <td><code className="ac-code-chip">{cfg.topic_prefix}</code></td>
+                        <td>{cfg.source_system}</td>
+                        <td><code className="ac-code-chip">{cfg.pk_field}</code></td>
+                        <td>
+                          <label className="ac-toggle-wrap" title={cfg.is_active ? 'Click to deactivate' : 'Click to activate'}>
+                            <input
+                              type="checkbox"
+                              checked={cfg.is_active}
+                              onChange={() => handleToggleKafka(cfg.id)}
+                              style={{ display: 'none' }}
+                            />
+                            <span className={`ac-toggle${cfg.is_active ? ' ac-toggle--on' : ''}`} />
+                            <span className={`ac-toggle-label${cfg.is_active ? ' ac-toggle-label--on' : ''}`}>
+                              {cfg.is_active ? 'Active' : 'Inactive'}
+                            </span>
+                          </label>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+        </div>
+      </main>
+
+      {/* ===== MODAL: DAFTARKAN KLIEN BARU ===== */}
+      {showClientModal && (
+        <div className="ac-modal-overlay" onClick={() => setShowClientModal(false)}>
+          <div className="ac-modal ac-modal--sm" onClick={e => e.stopPropagation()}>
+            <div className="ac-modal__header">
+              <div>
+                <div className="ac-modal__title">🏢 Register New Client</div>
+                <div className="ac-modal__subtitle">Fill in the details for the new client company to establish connection</div>
+              </div>
+              <button className="ac-modal__close" onClick={() => setShowClientModal(false)}>×</button>
+            </div>
+            <div className="ac-modal__body">
+              <form onSubmit={handleSubmitClient}>
+                <div className="ac-form-grid">
+                  <div className="ac-form-field" style={{ gridColumn: '1 / -1' }}>
+                    <label className="ac-form-label">Company Name <span style={{ color: 'var(--color-error)' }}>*</span></label>
+                    <input className="ac-form-input" required placeholder="PT Contoh Indonesia"
+                      value={clientForm.company_name}
+                      onChange={e => setClientForm(f => ({ ...f, company_name: e.target.value }))} />
+                  </div>
+                  <div className="ac-form-field">
+                    <label className="ac-form-label">Subscription Tier</label>
+                    <select className="ac-form-input" value={clientForm.subscription_tier}
+                      onChange={e => setClientForm(f => ({ ...f, subscription_tier: e.target.value }))}>
+                      <option value="basic">Basic</option>
+                      <option value="enterprise">Enterprise</option>
+                    </select>
+                  </div>
+                  <div className="ac-form-field">
+                    <label className="ac-form-label">Rate Limit (req/sec)</label>
+                    <input className="ac-form-input" type="number" min="1" max="1000"
+                      value={clientForm.rate_limit_per_sec}
+                      onChange={e => setClientForm(f => ({ ...f, rate_limit_per_sec: e.target.value }))} />
+                  </div>
+                  <div className="ac-form-field">
+                    <label className="ac-form-label">Status</label>
+                    <select className="ac-form-input" value={clientForm.status}
+                      onChange={e => setClientForm(f => ({ ...f, status: e.target.value }))}>
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                    </select>
+                  </div>
+                  <div className="ac-form-field">
+                    <label className="ac-form-label">Fallback Actor Field</label>
+                    <input className="ac-form-input" placeholder="(optional — e.g., db_user)"
+                      value={clientForm.fallback_actor_field}
+                      onChange={e => setClientForm(f => ({ ...f, fallback_actor_field: e.target.value }))} />
+                  </div>
+                </div>
+                <div style={{ height: 1, background: 'var(--color-outline-variant)', margin: '16px 0' }} />
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-on-surface-variant)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 12 }}>Custom Field Mapping</div>
+                <div className="ac-form-grid">
+                  <div className="ac-form-field">
+                    <label className="ac-form-label">Actor Field</label>
+                    <input className="ac-form-input" placeholder="actor"
+                      value={clientForm.actor_field}
+                      onChange={e => setClientForm(f => ({ ...f, actor_field: e.target.value }))} />
+                  </div>
+                  <div className="ac-form-field">
+                    <label className="ac-form-label">Action Field</label>
+                    <input className="ac-form-input" placeholder="action"
+                      value={clientForm.action_field}
+                      onChange={e => setClientForm(f => ({ ...f, action_field: e.target.value }))} />
+                  </div>
+                  <div className="ac-form-field">
+                    <label className="ac-form-label">Resource Field</label>
+                    <input className="ac-form-input" placeholder="resource"
+                      value={clientForm.resource_field}
+                      onChange={e => setClientForm(f => ({ ...f, resource_field: e.target.value }))} />
+                  </div>
+                </div>
+                <div className="ac-form-actions">
+                  <button type="button" className="ac-btn-ghost-action" onClick={() => setShowClientModal(false)}>Cancel</button>
+                  <button type="submit" className="ac-btn-primary">Register Client</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== MODAL: API KEY REVEAL ===== */}
+      {showApiKeyModal && (
+        <div className="ac-modal-overlay">
+          <div className="ac-modal ac-modal--sm" onClick={e => e.stopPropagation()}>
+            <div className="ac-modal__header">
+              <div>
+                <div className="ac-modal__title">✅ Client Successfully Registered!</div>
+                <div className="ac-modal__subtitle">Make sure to copy and save the API Key below before closing this window</div>
+              </div>
+            </div>
+            <div className="ac-modal__body">
+              <div className="ac-api-key-box">
+                <div className="ac-api-key-box__label">🔑 API Key</div>
+                <div className="ac-api-key-box__key">{newApiKey}</div>
+                <button
+                  className={`ac-btn-primary${apiKeyCopied ? ' ac-btn-primary--success' : ''}`}
+                  style={{ marginTop: 14, width: '100%' }}
+                  onClick={handleCopyApiKey}
+                >
+                  {apiKeyCopied ? '✅ Copied to Clipboard!' : '📋 Copy API Key'}
+                </button>
+              </div>
+              <div className="ac-api-key-box__warning">
+                ⚠️ <strong>Attention:</strong> This API Key is generated and displayed only once.
+                After closing this dialog, the key cannot be retrieved.
+                Ensure it is stored securely before proceeding.
+              </div>
+              <div style={{ marginTop: 16 }}>
+                <button
+                  className="ac-btn-primary"
+                  style={{ width: '100%' }}
+                  onClick={() => { setShowApiKeyModal(false); setNewApiKey(''); }}
+                >
+                  I Have Saved the API Key — Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== MODAL: TAMBAH KONFIGURASI KAFKA ===== */}
+      {showKafkaModal && (
+        <div className="ac-modal-overlay" onClick={() => setShowKafkaModal(false)}>
+          <div className="ac-modal ac-modal--sm" onClick={e => e.stopPropagation()}>
+            <div className="ac-modal__header">
+              <div>
+                <div className="ac-modal__title">⚙️ Add Kafka Configuration</div>
+                <div className="ac-modal__subtitle">Establish a connection between the client and a Kafka stream for log ingestion</div>
+              </div>
+              <button className="ac-modal__close" onClick={() => setShowKafkaModal(false)}>×</button>
+            </div>
+            <div className="ac-modal__body">
+              <form onSubmit={handleSubmitKafka}>
+                <div className="ac-form-grid">
+                  <div className="ac-form-field" style={{ gridColumn: '1 / -1' }}>
+                    <label className="ac-form-label">Client <span style={{ color: 'var(--color-error)' }}>*</span></label>
+                    <select className="ac-form-input" required value={kafkaForm.client_id}
+                      onChange={e => setKafkaForm(f => ({ ...f, client_id: e.target.value }))}>
+                      <option value="">-- Select Client --</option>
+                      {clients.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
+                    </select>
+                  </div>
+                  <div className="ac-form-field">
+                    <label className="ac-form-label">Kafka Brokers <span style={{ color: 'var(--color-error)' }}>*</span></label>
+                    <input className="ac-form-input" required placeholder="192.168.1.1:9092"
+                      value={kafkaForm.kafka_brokers}
+                      onChange={e => setKafkaForm(f => ({ ...f, kafka_brokers: e.target.value }))} />
+                  </div>
+                  <div className="ac-form-field">
+                    <label className="ac-form-label">Topic Prefix <span style={{ color: 'var(--color-error)' }}>*</span></label>
+                    <input className="ac-form-input" required placeholder="cdc_simrs"
+                      value={kafkaForm.topic_prefix}
+                      onChange={e => setKafkaForm(f => ({ ...f, topic_prefix: e.target.value }))} />
+                  </div>
+                  <div className="ac-form-field">
+                    <label className="ac-form-label">Source System <span style={{ color: 'var(--color-error)' }}>*</span></label>
+                    <input className="ac-form-input" required placeholder="SIMRS-Prod"
+                      value={kafkaForm.source_system}
+                      onChange={e => setKafkaForm(f => ({ ...f, source_system: e.target.value }))} />
+                  </div>
+                  <div className="ac-form-field">
+                    <label className="ac-form-label">PK Field</label>
+                    <input className="ac-form-input" placeholder="ID"
+                      value={kafkaForm.pk_field}
+                      onChange={e => setKafkaForm(f => ({ ...f, pk_field: e.target.value }))} />
+                  </div>
+                  <div className="ac-form-field">
+                    <label className="ac-form-label">Actor Field</label>
+                    <input className="ac-form-input" placeholder="__user_name"
+                      value={kafkaForm.actor_field}
+                      onChange={e => setKafkaForm(f => ({ ...f, actor_field: e.target.value }))} />
+                  </div>
+                </div>
+                <div className="ac-form-actions">
+                  <button type="button" className="ac-btn-ghost-action" onClick={() => setShowKafkaModal(false)}>Cancel</button>
+                  <button type="submit" className="ac-btn-primary">Add Configuration</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
+
+// ================================================================
 // ROUTER UTAMA
 // ================================================================
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'));
   const handleLogout = () => { localStorage.removeItem('token'); setIsAuthenticated(false); };
 
+  const clientInfo = useMemo(() => {
+    const token = localStorage.getItem('token');
+    return token ? parseJwt(token) : null;
+  }, [isAuthenticated]);
+
+  const isAdmin = clientInfo?.role?.toLowerCase() === 'admin';
+
   return (
     <Router>
       <Routes>
-        <Route path="/login" element={!isAuthenticated ? <Login onLogin={setIsAuthenticated} /> : <Navigate to="/dashboard" />} />
+        <Route path="/login" element={!isAuthenticated ? <Login onLogin={setIsAuthenticated} /> : <Navigate to={isAdmin ? "/admin" : "/dashboard"} />} />
         <Route path="/dashboard" element={isAuthenticated ? <Dashboard onLogout={handleLogout} /> : <Navigate to="/login" />} />
-        <Route path="*" element={<Navigate to={isAuthenticated ? '/dashboard' : '/login'} />} />
+        <Route path="/admin" element={isAuthenticated && isAdmin ? <AdminDashboard onLogout={handleLogout} /> : <Navigate to="/dashboard" />} />
+        <Route path="*" element={<Navigate to={isAuthenticated ? (isAdmin ? "/admin" : "/dashboard") : "/login"} />} />
       </Routes>
     </Router>
   );

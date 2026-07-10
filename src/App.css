@@ -2422,4 +2422,437 @@
   line-height: 1.3;
 }
 
+/* ================================================================
+   ADMIN DASHBOARD — Namespace ac-admin-*
+   Semua warna pakai CSS token yang sama dengan dashboard auditor
+   ================================================================ */
+
+/* Aksen amber khusus Admin Portal — hanya dipakai untuk marker visual */
+:root {
+  --color-admin-accent: #d97706;
+  --color-admin-accent-bg: rgba(217, 119, 6, 0.08);
+  --color-admin-accent-border: rgba(217, 119, 6, 0.25);
+}
+
+/* TopNav — label "Admin Portal" berwarna amber */
+.ac-admin-portal-label {
+  color: var(--color-admin-accent) !important;
+}
+
+/* TopNav — pill "SUPER ADMIN" bertema amber */
+.ac-admin-pill {
+  background: var(--color-admin-accent-bg) !important;
+  border-color: var(--color-admin-accent-border) !important;
+  color: var(--color-admin-accent) !important;
+}
+
+.ac-admin-dot {
+  background: var(--color-admin-accent) !important;
+}
+
+/* ===== HERO STAT (kotak kecil di hero banner) ===== */
+.ac-admin-hero-stat {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-lg);
+  padding: 12px 20px;
+  text-align: center;
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  min-width: 90px;
+}
+
+.ac-admin-hero-stat__val {
+  font-size: 26px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.ac-admin-hero-stat__label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+/* ===== TAB NAVIGATION ===== */
+.ac-admin-tabs {
+  display: flex;
+  gap: 6px;
+  background: var(--color-surface-container-lowest);
+  border: 1px solid rgba(192, 199, 212, 0.4);
+  border-radius: var(--radius-xl);
+  padding: 6px;
+  box-shadow: var(--shadow-sm);
+}
+
+.ac-admin-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border-radius: var(--radius-lg);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-on-surface-variant);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ac-admin-tab:hover:not(.ac-admin-tab--active) {
+  background: var(--color-surface-container);
+  color: var(--color-on-surface);
+}
+
+.ac-admin-tab--active {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+}
+
+.ac-admin-tab__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  background: var(--color-primary);
+  color: #fff;
+  border-radius: var(--radius-full);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.ac-admin-tab:not(.ac-admin-tab--active) .ac-admin-tab__count {
+  background: var(--color-outline-variant);
+  color: var(--color-on-surface-variant);
+}
+
+/* ===== CARD SUB TITLE (admin variant) ===== */
+.ac-admin-card-sub {
+  font-size: 12px;
+  color: var(--color-on-surface-variant);
+  margin-top: 2px;
+}
+
+/* ===== TIER BADGE ===== */
+.ac-tier-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ac-tier-badge--enterprise {
+  background: var(--color-primary-fixed);
+  color: var(--color-primary-dark);
+}
+
+.ac-tier-badge--basic {
+  background: var(--color-surface-container-high);
+  color: var(--color-on-surface-variant);
+}
+
+/* ===== STATUS DOT BADGE ===== */
+.ac-dot-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+}
+
+.ac-dot-status--active {
+  background: rgba(0, 104, 89, 0.1);
+  color: var(--color-tertiary);
+}
+
+.ac-dot-status--active::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-tertiary);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+.ac-dot-status--inactive {
+  background: var(--color-surface-container);
+  color: var(--color-outline);
+}
+
+.ac-dot-status--inactive::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-outline);
+}
+
+/* ===== FIELD MAP (tampilan mapping field di tabel) ===== */
+.ac-field-map {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ac-field-map__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--color-on-surface-variant);
+}
+
+.ac-field-map__key {
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--color-surface-container);
+  color: var(--color-primary);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+
+/* ===== CODE CHIP (inline code display) ===== */
+.ac-code-chip {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  background: var(--color-surface-container);
+  color: var(--color-on-surface);
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-outline-variant);
+}
+
+/* ===== TOGGLE SWITCH (iOS-style) ===== */
+.ac-toggle-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.ac-toggle {
+  display: inline-block;
+  width: 38px;
+  height: 22px;
+  background: var(--color-outline-variant);
+  border-radius: var(--radius-full);
+  position: relative;
+  transition: background 0.22s;
+  flex-shrink: 0;
+}
+
+.ac-toggle::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  transition: transform 0.22s;
+}
+
+.ac-toggle--on {
+  background: var(--color-tertiary);
+}
+
+.ac-toggle--on::after {
+  transform: translateX(16px);
+}
+
+.ac-toggle-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-outline);
+  margin-left: 8px;
+}
+
+.ac-toggle-label--on {
+  color: var(--color-tertiary);
+}
+
+/* ===== BUTTON: PRIMARY ===== */
+.ac-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+  box-shadow: 0 2px 8px rgba(0, 94, 164, 0.25);
+  white-space: nowrap;
+}
+
+.ac-btn-primary:hover {
+  background: var(--color-primary-dark);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0, 94, 164, 0.35);
+}
+
+.ac-btn-primary:active {
+  transform: translateY(0);
+}
+
+.ac-btn-primary--success {
+  background: var(--color-tertiary) !important;
+  box-shadow: 0 2px 8px rgba(0, 104, 89, 0.25) !important;
+}
+
+/* ===== BUTTON: GHOST ACTION ===== */
+.ac-btn-ghost-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  background: none;
+  color: var(--color-on-surface-variant);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ac-btn-ghost-action:hover {
+  background: var(--color-surface-container-low);
+  border-color: var(--color-outline);
+  color: var(--color-on-surface);
+}
+
+/* ===== FORM GRID & FIELDS ===== */
+.ac-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.ac-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.ac-form-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-on-surface-variant);
+  letter-spacing: 0.01em;
+}
+
+.ac-form-input {
+  height: 38px;
+  padding: 0 12px;
+  background: var(--color-surface-container-low);
+  border: 1.5px solid var(--color-outline-variant);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  color: var(--color-on-surface);
+  font-family: var(--font-family);
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.ac-form-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(0, 94, 164, 0.1);
+  background: #fff;
+}
+
+.ac-form-input::placeholder {
+  color: var(--color-outline);
+}
+
+/* ===== FORM ACTIONS (baris tombol di bawah form) ===== */
+.ac-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-outline-variant);
+}
+
+/* ===== API KEY BOX ===== */
+.ac-api-key-box {
+  background: var(--color-admin-accent-bg);
+  border: 1.5px solid var(--color-admin-accent-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
+}
+
+.ac-api-key-box__label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-admin-accent);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.ac-api-key-box__key {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-on-surface);
+  background: var(--color-surface-container-lowest);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  word-break: break-all;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+}
+
+.ac-api-key-box__warning {
+  margin-top: 14px;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-warning-container);
+  border: 1px solid rgba(133, 100, 4, 0.25);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  color: var(--color-warning);
+  line-height: 1.6;
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 640px) {
+  .ac-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ac-admin-tabs {
+    flex-wrap: wrap;
+  }
+
+  .ac-admin-hero-stat {
+    min-width: 70px;
+    padding: 10px 14px;
+  }
+}
 
