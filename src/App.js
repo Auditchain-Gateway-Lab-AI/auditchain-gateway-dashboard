@@ -1,5 +1,5 @@
 // src/App.js
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import api from './api';
 import './App.css';
@@ -351,6 +351,7 @@ function VerificationDetail({ result, onClose }) {
   const [scanStep, setScanStep] = useState(0);
 
   useEffect(() => {
+    if (result && result.range) return;
     // Reset scan when result changes
     setScanStep(0);
 
@@ -370,6 +371,90 @@ function VerificationDetail({ result, onClose }) {
 
   if (!result) return null;
 
+  if (result.range) {
+    return (
+      <div className="ac-verify ac-verify__scanning-container" style={{ maxHeight: '550px', overflowY: 'auto' }}>
+        <div className="ac-verify__header ac-verify__header--info" style={{ backgroundColor: 'var(--color-primary, #005ea4)' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <span className="ac-verify__header-icon">📊</span>
+              <span className="ac-verify__header-title" style={{ color: '#fff' }}>Range Verification Results</span>
+            </div>
+            <div className="ac-verify__header-msg" style={{ color: 'rgba(255,255,255,0.9)' }}>
+              Checked logs from {formatTimestamp(result.range.from)} to {formatTimestamp(result.range.to)}
+            </div>
+          </div>
+          <button className="ac-verify__header-close" onClick={onClose}>×</button>
+        </div>
+
+        <div className="ac-verify__details" style={{ padding: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-around', textAlign: 'center', marginBottom: '20px', backgroundColor: 'var(--color-surface-container-high)', padding: '12px', borderRadius: 'var(--radius-md)' }}>
+            <div>
+              <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{result.summary.total}</div>
+              <div style={{ fontSize: '11px', color: 'var(--color-outline)' }}>Total Checked</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#2e7d32' }}>{result.summary.valid}</div>
+              <div style={{ fontSize: '11px', color: 'var(--color-outline)' }}>✅ Valid</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#c62828' }}>{result.summary.invalid}</div>
+              <div style={{ fontSize: '11px', color: 'var(--color-outline)' }}>🚨 Mismatch</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#f57f17' }}>{result.summary.pending}</div>
+              <div style={{ fontSize: '11px', color: 'var(--color-outline)' }}>⏱️ Pending</div>
+            </div>
+          </div>
+
+          <div style={{ fontSize: '13px', fontWeight: '700', marginBottom: '8px', color: 'var(--color-on-surface)' }}>
+            Log Items checked ({result.results?.length || 0}):
+          </div>
+          
+          <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--color-outline-variant)', borderRadius: 'var(--radius-sm)' }}>
+            <table className="ac-table" style={{ fontSize: '12px' }}>
+              <thead>
+                <tr>
+                  <th style={{ padding: '6px 10px' }}>Timestamp</th>
+                  <th style={{ padding: '6px 10px' }}>Resource</th>
+                  <th style={{ padding: '6px 10px' }}>Action</th>
+                  <th style={{ padding: '6px 10px' }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(!result.results || result.results.length === 0) ? (
+                  <tr>
+                    <td colSpan={4} style={{ textAlign: 'center', padding: '12px', color: 'var(--color-outline)' }}>
+                      No log entries found in this range.
+                    </td>
+                  </tr>
+                ) : (
+                  result.results.map((item, idx) => {
+                    const statusClass = item.verify_status === 'valid' ? 'ac-status--valid'
+                      : item.verify_status === 'pending' ? 'ac-status--pending'
+                      : 'ac-status--invalid';
+                    return (
+                      <tr key={idx}>
+                        <td style={{ padding: '6px 10px', fontSize: '11px' }}>{formatTimestamp(item.timestamp)}</td>
+                        <td style={{ padding: '6px 10px', fontFamily: 'monospace' }}>{item.resource}</td>
+                        <td style={{ padding: '6px 10px' }}><ActionBadge action={item.action} /></td>
+                        <td style={{ padding: '6px 10px' }}>
+                          <span className={`ac-status ${statusClass}`} style={{ fontSize: '10px', padding: '2px 6px' }}>
+                            {item.verify_status?.toUpperCase() || 'UNKNOWN'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const isScanning = scanStep < 4;
   const isSuccess = result.status === 'success' || result.data?.is_valid;
   const isPending = result.status === 'pending';
@@ -381,7 +466,7 @@ function VerificationDetail({ result, onClose }) {
         : 'ac-verify__header--failed';
 
   const statusEmoji = isScanning ? '🔍' : isSuccess ? '✅' : isPending ? '⏳' : '🚨';
-  const statusLabel = isScanning ? 'Executing Audit Trail Cryptography...' : isSuccess ? 'Verification Successful' : isPending ? 'Awaiting Blockchain' : 'Verification Failed';
+  const statusLabel = isScanning ? 'Executing Auditchain Gateway Cryptography...' : isSuccess ? 'Verification Successful' : isPending ? 'Awaiting Blockchain' : 'Verification Failed';
   const statusMsg = isScanning
     ? 'Reading data, recalculating checksum hashes, and matching consensus ledger root...'
     : (data.message || result.message || '');
@@ -616,7 +701,13 @@ function Login({ onLogin }) {
     setIsLoading(true);
     try {
       const response = await api.post('/auth/login', { username, password });
-      localStorage.setItem('token', response.data.token);
+      if (rememberMe) {
+        localStorage.setItem('token', response.data.token);
+        sessionStorage.removeItem('token');
+      } else {
+        sessionStorage.setItem('token', response.data.token);
+        localStorage.removeItem('token');
+      }
       onLogin(true);
       navigate('/dashboard');
     } catch (err) {
@@ -668,7 +759,7 @@ function Login({ onLogin }) {
             </svg>
           </div>
           <div>
-            <div className="ac-login-hero__brand-name">Audit Trail</div>
+            <div className="ac-login-hero__brand-name">Auditchain Gateway</div>
             <div className="ac-login-hero__brand-sub">Gateway Portal</div>
           </div>
         </div>
@@ -710,7 +801,7 @@ function Login({ onLogin }) {
               </svg>
             </div>
             <div>
-              <div style={{ fontSize: 18, fontWeight: 800, color: '#0d1b2e', letterSpacing: '.02em' }}>Audit Trail</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: '#0d1b2e', letterSpacing: '.02em' }}>Auditchain Gateway</div>
               <div style={{ fontSize: 10, fontWeight: 600, color: '#4f46e5', letterSpacing: '.1em', textTransform: 'uppercase' }}>Gateway Portal</div>
             </div>
           </div>
@@ -798,7 +889,7 @@ function Login({ onLogin }) {
           </div>
 
           <div className="ac-login__footer">
-            © 2026 Audit Trail Gateway &nbsp;·&nbsp; Secure Log Management v2.4.1
+            © 2026 Auditchain Gateway &nbsp;·&nbsp; Secure Log Management v2.4.1
           </div>
         </div>
       </div>
@@ -810,6 +901,7 @@ function Login({ onLogin }) {
 // KOMPONEN: Dashboard
 // ================================================================
 function Dashboard({ onLogout }) {
+  const navigate = useNavigate();
   const [stats, setStats] = useState({ total_logs: 0, pending_logs: 0, anchored_logs: 0 });
   const [recentLogs, setRecentLogs] = useState([]);
   const [inventory, setInventory] = useState([]);
@@ -839,23 +931,60 @@ function Dashboard({ onLogout }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeView, setActiveView] = useState('dashboard');
+  const [tempDateFrom, setTempDateFrom] = useState('');
+  const [tempDateTo, setTempDateTo] = useState('');
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo] = useState('');
 
   // Decode JWT info for Workspace Context Indicator
   const clientInfo = useMemo(() => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
     return parseJwt(token);
   }, []);
 
+  const [selectedClient, setSelectedClient] = useState(clientInfo?.client_id || '');
+  const [adminClients, setAdminClients] = useState([]);
 
+  // Fetch client list for admin dropdown
+  useEffect(() => {
+    if (clientInfo?.role?.toLowerCase() === 'admin') {
+      api.get('/admin/clients')
+        .then(res => {
+          setAdminClients(res.data || []);
+        })
+        .catch(err => {
+          console.error("Gagal memuat daftar klien admin:", err);
+        });
+    }
+  }, [clientInfo]);
+
+  // Update selectedClient if clientInfo changes
+  useEffect(() => {
+    if (clientInfo?.client_id) {
+      setSelectedClient(clientInfo.client_id);
+    }
+  }, [clientInfo]);
 
   // Fetch data
   useEffect(() => {
     const fetchData = async () => {
       try {
+        const params = {};
+        if (selectedClient) {
+          params.client_id = selectedClient;
+        }
+        
+        // Jika filter tanggal aktif, tarik data dalam jumlah besar (page_size: 1000)
+        // agar penyaringan frontend bekerja dengan cakupan data yang luas.
+        const isDateFilterActive = !!(filterDateFrom || filterDateTo);
+        const logsPage = isDateFilterActive ? 1 : currentPage;
+        const logsPageSize = isDateFilterActive ? 1000 : rowsPerPage;
+
         const [statsRes, logsRes, invRes] = await Promise.all([
-          api.get('/dashboard/stats'),
-          api.get('/dashboard/logs', { params: { page: currentPage, page_size: rowsPerPage } }),
-          api.get('/dashboard/inventory'),
+          api.get('/dashboard/stats', { params }),
+          api.get('/dashboard/logs', { params: { ...params, page: logsPage, page_size: logsPageSize } }),
+          api.get('/dashboard/inventory', { params }),
         ]);
         setStats(statsRes.data);
         
@@ -884,7 +1013,48 @@ function Dashboard({ onLogout }) {
     fetchData();
     const id = setInterval(fetchData, 5000);
     return () => clearInterval(id);
-  }, [onLogout, currentPage, rowsPerPage]);
+  }, [onLogout, currentPage, rowsPerPage, selectedClient, filterDateFrom, filterDateTo]);
+
+  // Verify range using backend API
+  const handleVerifyRange = useCallback(async () => {
+    if (!filterDateFrom || !filterDateTo) return;
+    try {
+      const fromISO = new Date(filterDateFrom).toISOString();
+      const toISO = new Date(filterDateTo).toISOString();
+      
+      setSelectedVerifyResult({ status: 'loading' });
+      
+      const params = {
+        from: fromISO,
+        to: toISO
+      };
+      if (selectedClient) {
+        params.client_id = selectedClient;
+      }
+      
+      const res = await api.get('/dashboard/verify-range', { params });
+      
+      setSelectedVerifyResult({
+        range: { from: filterDateFrom, to: filterDateTo },
+        summary: res.data.summary || {
+          total: res.data.results?.length || 0,
+          valid: res.data.results?.filter(r => r.verify_status === 'valid').length || 0,
+          invalid: res.data.results?.filter(r => r.verify_status === 'tampered' || r.verify_status === 'failed_local' || r.verify_status === 'failed_onchain').length || 0,
+          pending: res.data.results?.filter(r => r.verify_status === 'pending').length || 0
+        },
+        results: res.data.results || []
+      });
+    } catch (err) {
+      console.error("Gagal verifikasi range:", err);
+      setSelectedVerifyResult({
+        range: { from: filterDateFrom, to: filterDateTo },
+        summary: { total: 0, valid: 0, invalid: 0, pending: 0 },
+        results: [],
+        status: 'failed_local',
+        message: err.response?.data?.error || 'Kesalahan koneksi saat memverifikasi range log.'
+      });
+    }
+  }, [filterDateFrom, filterDateTo, selectedClient]);
 
   // Grouping inventory by table name
   const groupedInventory = useMemo(() => {
@@ -908,26 +1078,44 @@ function Dashboard({ onLogout }) {
       (log?.metadata?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
       (log?.hash_value?.toLowerCase() || '').includes(searchQuery.toLowerCase());
     const matchAction = filterAction === 'ALL' || log?.action === filterAction;
-    return matchSearch && matchAction;
-  });
-  const totalPages = isServerPaginated
-    ? (Math.ceil(totalLogsCount / rowsPerPage) || 1)
-    : (Math.ceil(filteredLogs.length / rowsPerPage) || 1);
+    
+    let matchDate = true;
+    if (log?.timestamp) {
+      const logTime = new Date(log.timestamp).getTime();
+      if (filterDateFrom) {
+        const fromTime = new Date(filterDateFrom).getTime();
+        if (logTime < fromTime) matchDate = false;
+      }
+      if (filterDateTo) {
+        const toTime = new Date(filterDateTo).getTime();
+        if (logTime > toTime) matchDate = false;
+      }
+    } else if (filterDateFrom || filterDateTo) {
+      matchDate = false;
+    }
 
-  const paginatedLogs = isServerPaginated
-    ? filteredLogs
-    : filteredLogs.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+    return matchSearch && matchAction && matchDate;
+  });
+  const isLocalPaginated = !isServerPaginated || filterDateFrom || filterDateTo;
+
+  const totalPages = isLocalPaginated
+    ? (Math.ceil(filteredLogs.length / rowsPerPage) || 1)
+    : (Math.ceil(totalLogsCount / rowsPerPage) || 1);
+
+  const paginatedLogs = isLocalPaginated
+    ? filteredLogs.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage)
+    : filteredLogs;
 
   useEffect(() => {
     if (currentPage > totalPages) {
       setCurrentPage(1);
     }
-  }, [isServerPaginated, totalLogsCount, filteredLogs.length, currentPage, totalPages]);
+  }, [isLocalPaginated, totalLogsCount, filteredLogs.length, currentPage, totalPages]);
 
-  const isFiltered = searchQuery || filterAction !== 'ALL';
-  const displayTotal = isServerPaginated
-    ? (isFiltered ? filteredLogs.length : totalLogsCount)
-    : filteredLogs.length;
+  const isFiltered = searchQuery || filterAction !== 'ALL' || filterDateFrom || filterDateTo;
+  const displayTotal = isLocalPaginated
+    ? filteredLogs.length
+    : (isFiltered ? filteredLogs.length : totalLogsCount);
 
   // // Background verify — individual logs (Nonaktifkan dulu sampai endpoint baru siap)
   // useEffect(() => {
@@ -1063,7 +1251,7 @@ function Dashboard({ onLogout }) {
             </svg>
           </div>
           <div>
-            <div className="ac-topnav__brand-name">Audit Trail</div>
+            <div className="ac-topnav__brand-name">Auditchain Gateway</div>
             <div className="ac-topnav__brand-sub">Gateway Portal</div>
           </div>
         </div>
@@ -1097,10 +1285,23 @@ function Dashboard({ onLogout }) {
           <div className="ac-sidebar__section-sub">Secure Data Integrity</div>
         </div>
         <nav className="ac-sidebar__nav">
-          <button className="ac-sidebar__nav-item ac-sidebar__nav-item--active">
+          <button
+            className={`ac-sidebar__nav-item${activeView === 'dashboard' ? ' ac-sidebar__nav-item--active' : ''}`}
+            onClick={() => { setActiveView('dashboard'); setSidebarOpen(false); }}
+          >
             <Icon name="dashboard" size={18} />
             Dashboard
           </button>
+          {clientInfo && clientInfo.role?.toLowerCase() === 'admin' && (
+            <button
+              className="ac-sidebar__nav-item"
+              onClick={() => navigate('/admin')}
+              style={{ marginTop: 4 }}
+            >
+              <Icon name="shield" size={18} />
+              Admin Panel
+            </button>
+          )}
         </nav>
         <div className="ac-sidebar__footer">
           {clientInfo && (
@@ -1158,10 +1359,53 @@ function Dashboard({ onLogout }) {
                 <div className="ac-cib__client-block">
                   <div className="ac-cib__client-icon">🏢</div>
                   <div className="ac-cib__client-meta">
-                    <div className="ac-cib__client-eyebrow">Audit Trail System</div>
-                    <div className="ac-cib__client-name" title={clientInfo.client_id}>
-                      {clientInfo.client_id}
-                    </div>
+                    <div className="ac-cib__client-eyebrow">Auditchain Gateway System</div>
+                    {clientInfo.role?.toLowerCase() === 'admin' ? (
+                      <select
+                        value={selectedClient}
+                        onChange={e => setSelectedClient(e.target.value)}
+                        style={{
+                          background: 'rgba(255,255,255,0.12)',
+                          border: '1.5px solid rgba(255,255,255,0.2)',
+                          color: '#fff',
+                          padding: '6px 12px',
+                          borderRadius: 'var(--radius-md)',
+                          fontSize: '14px',
+                          fontWeight: '700',
+                          outline: 'none',
+                          cursor: 'pointer',
+                          marginTop: '4px',
+                          minWidth: '240px'
+                        }}
+                      >
+                        <option style={{ color: '#000' }} value={clientInfo.client_id}>
+                          {clientInfo.client_id} (Admin Default)
+                        </option>
+                        {adminClients.length === 0 ? (
+                          <>
+                            <option style={{ color: '#000' }} value="ed067ad4-e549-4baa-9c9d-3d27ff24194d">
+                              SIMRS Dummy 2 (ed067ad4-e549-4baa-9c9d-3d27ff24194d)
+                            </option>
+                            <option style={{ color: '#000' }} value="7f2bc265-d419-48fe-9892-d6ef198751e1">
+                              Satu Peta Debezium (7f2bc265-d419-48fe-9892-d6ef198751e1)
+                            </option>
+                          </>
+                        ) : (
+                          adminClients.map(client => {
+                            if (client.id === clientInfo.client_id) return null;
+                            return (
+                              <option style={{ color: '#000' }} key={client.id} value={client.id}>
+                                {client.company_name || 'Klien'} ({client.id})
+                              </option>
+                            );
+                          })
+                        )}
+                      </select>
+                    ) : (
+                      <div className="ac-cib__client-name" title={clientInfo.client_id}>
+                        {clientInfo.client_id}
+                      </div>
+                    )}
                     <div className="ac-cib__client-badge">
                       <span className="ac-cib__live-dot" />
                       Active Session
@@ -1192,20 +1436,21 @@ function Dashboard({ onLogout }) {
                 <span className="ac-cib__notice-icon">🔒</span>
                 <span className="ac-cib__notice-text">
                   <strong>Data Isolation Active</strong> — Audit logs are exclusively scoped to the{' '}
-                  <span className="ac-cib__notice-highlight">{clientInfo.client_id}</span>{' '}
+                  <span className="ac-cib__notice-highlight">{selectedClient}</span>{' '}
                   workspace. Cross-client access is blocked at the gateway level.
                 </span>
               </div>
             </div>
           )}
 
-          {/* Hero Section */}
-          <section className="ac-hero">
-            <div className="ac-hero__pattern" />
-            <div className="ac-hero__content">
-              <div className="ac-hero__left">
+          <>
+              {/* Hero Section */}
+              <section className="ac-hero">
+                <div className="ac-hero__pattern" />
+                <div className="ac-hero__content">
+                  <div className="ac-hero__left">
                 <h1 className="ac-hero__title">
-                  🛡️ Audit Trail Dashboard
+                  🛡️ Auditchain Gateway Dashboard
                 </h1>
                 <p className="ac-hero__subtitle">
                   Monitor audit logs and verify blockchain transactions in real-time.
@@ -1313,41 +1558,117 @@ function Dashboard({ onLogout }) {
 
           {/* ===== AUDIT TRANSACTIONS ===== */}
           <section className="ac-card">
-            <div className="ac-card__header">
-              <div className="ac-card__header-left">
-                <span className="ac-card__icon">📜</span>
-                <span className="ac-card__title">All Transaction History</span>
+            <div className="ac-card__header" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '12px' }}>
+                <div className="ac-card__header-left">
+                  <span className="ac-card__icon">📜</span>
+                  <span className="ac-card__title">All Transaction History</span>
+                </div>
+                <div className="ac-toolbar">
+                  <div className="ac-search">
+                    <span className="ac-search__icon">
+                      <Icon name="search" size={15} />
+                    </span>
+                    <input
+                      type="text"
+                      className="ac-search__input"
+                      placeholder="Search Actor, Resource, Hash..."
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+                  <select className="ac-select" value={filterAction} onChange={e => setFilterAction(e.target.value)}>
+                    <option value="ALL">All Actions</option>
+                    <option value="INSERT">INSERT</option>
+                    <option value="UPDATE">UPDATE</option>
+                    <option value="DELETE">DELETE</option>
+                  </select>
+                  <select className="ac-select" value={filterVerification} onChange={e => setFilterVerification(e.target.value)}>
+                    <option value="ALL">All Status</option>
+                    <option value="VALID">VALID</option>
+                    <option value="INVALID">INVALID</option>
+                  </select>
+                  <select className="ac-select" value={rowsPerPage} onChange={e => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}>
+                    <option value={5}>5 Rows</option>
+                    <option value={10}>10 Rows</option>
+                    <option value={20}>20 Rows</option>
+                    <option value={50}>50 Rows</option>
+                  </select>
+                </div>
               </div>
-              <div className="ac-toolbar">
-                <div className="ac-search">
-                  <span className="ac-search__icon">
-                    <Icon name="search" size={15} />
-                  </span>
+
+              {/* Date Filter Range Toolbar */}
+              <div style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '12px',
+                alignItems: 'center',
+                paddingTop: '12px',
+                borderTop: '1px solid var(--color-outline-variant)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--color-on-surface-variant)' }}>📅 From:</span>
                   <input
-                    type="text"
-                    className="ac-search__input"
-                    placeholder="Search Actor, Resource, Hash..."
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
+                    type="datetime-local"
+                    className="ac-select"
+                    style={{ padding: '6px 10px', height: '36px', minWidth: '180px' }}
+                    value={tempDateFrom}
+                    onChange={e => setTempDateFrom(e.target.value)}
                   />
                 </div>
-                <select className="ac-select" value={filterAction} onChange={e => setFilterAction(e.target.value)}>
-                  <option value="ALL">All Actions</option>
-                  <option value="INSERT">INSERT</option>
-                  <option value="UPDATE">UPDATE</option>
-                  <option value="DELETE">DELETE</option>
-                </select>
-                <select className="ac-select" value={filterVerification} onChange={e => setFilterVerification(e.target.value)}>
-                  <option value="ALL">All Status</option>
-                  <option value="VALID">VALID</option>
-                  <option value="INVALID">INVALID</option>
-                </select>
-                <select className="ac-select" value={rowsPerPage} onChange={e => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}>
-                  <option value={5}>5 Rows</option>
-                  <option value={10}>10 Rows</option>
-                  <option value={20}>20 Rows</option>
-                  <option value={50}>50 Rows</option>
-                </select>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--color-on-surface-variant)' }}>📅 To:</span>
+                  <input
+                    type="datetime-local"
+                    className="ac-select"
+                    style={{ padding: '6px 10px', height: '36px', minWidth: '180px' }}
+                    value={tempDateTo}
+                    onChange={e => setTempDateTo(e.target.value)}
+                  />
+                </div>
+                <button
+                  className="ac-btn-primary"
+                  style={{ padding: '0 16px', height: '36px', minWidth: 'auto', fontSize: '13px' }}
+                  onClick={() => {
+                    setFilterDateFrom(tempDateFrom);
+                    setFilterDateTo(tempDateTo);
+                    setCurrentPage(1);
+                  }}
+                >
+                  Apply Range
+                </button>
+                {(tempDateFrom || tempDateTo || filterDateFrom || filterDateTo) && (
+                  <button
+                    className="ac-btn-ghost-action"
+                    style={{ padding: '0 12px', height: '36px', minWidth: 'auto', fontSize: '13px' }}
+                    onClick={() => {
+                      setTempDateFrom('');
+                      setTempDateTo('');
+                      setFilterDateFrom('');
+                      setFilterDateTo('');
+                      setCurrentPage(1);
+                    }}
+                  >
+                    Clear Range
+                  </button>
+                )}
+                {filterDateFrom && filterDateTo && (
+                  <button
+                    className="ac-btn-primary"
+                    style={{
+                      padding: '0 16px',
+                      height: '36px',
+                      minWidth: 'auto',
+                      fontSize: '13px',
+                      backgroundColor: '#2c3e50',
+                      border: 'none',
+                      marginLeft: 'auto'
+                    }}
+                    onClick={handleVerifyRange}
+                  >
+                    ⚡ Verify Range
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1421,9 +1742,10 @@ function Dashboard({ onLogout }) {
               </div>
             </div>
           </section>
+        </>
 
-        </div>
-      </main>
+    </div>
+  </main>
 
       {/* ===== MODAL LEVEL 1: Table Records ===== */}
       {selectedTableModal && (
@@ -1489,18 +1811,579 @@ function Dashboard({ onLogout }) {
 }
 
 // ================================================================
+// ADMIN DASHBOARD — Data Dummy (Ganti API call setelah backend siap)
+// ================================================================
+
+function AdminDashboard({ onLogout }) {
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState('clients');
+  const [clients, setClients] = useState([]);
+  const [kafkaConfigs, setKafkaConfigs] = useState([]);
+  const [summary, setSummary] = useState({ total_clients: 0, active_streams: 0 });
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Modal states
+  const [showClientModal, setShowClientModal] = useState(false);
+  const [showKafkaModal, setShowKafkaModal] = useState(false);
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [newApiKey, setNewApiKey] = useState('');
+  const [apiKeyCopied, setApiKeyCopied] = useState(false);
+
+  // Client form state
+  const [clientForm, setClientForm] = useState({
+    company_name: '', subscription_tier: 'basic', rate_limit_per_sec: 50,
+    status: 'active', actor_field: 'actor', fallback_actor_field: '',
+    action_field: 'action', resource_field: 'resource',
+  });
+
+  // Kafka form state
+  const [kafkaForm, setKafkaForm] = useState({
+    client_id: '', kafka_brokers: '', topic_prefix: '',
+    source_system: '', pk_field: 'ID', actor_field: '__user_name',
+  });
+
+  const clientInfo = useMemo(() => {
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    return parseJwt(token);
+  }, []);
+
+  const fetchData = useCallback(async () => {
+    try {
+      const [summaryRes, clientsRes, kafkaRes] = await Promise.all([
+        api.get('/admin/summary'),
+        api.get('/admin/clients'),
+        api.get('/admin/kafka-configs')
+      ]);
+      setSummary(summaryRes.data || { total_clients: 0, active_streams: 0 });
+      setClients(clientsRes.data || []);
+      setKafkaConfigs(kafkaRes.data || []);
+    } catch (err) {
+      console.error("Gagal load admin dashboard data:", err);
+      if (err.response?.status === 401) {
+        onLogout();
+      }
+    }
+  }, [onLogout]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleSubmitClient = useCallback(async (e) => {
+    e.preventDefault();
+    try {
+      const response = await api.post('/admin/clients', {
+        company_name: clientForm.company_name,
+        status: clientForm.status,
+        actor_field: clientForm.actor_field,
+        fallback_actor_field: clientForm.fallback_actor_field,
+        action_field: clientForm.action_field,
+        resource_field: clientForm.resource_field
+      });
+      setNewApiKey(response.data.api_key);
+      setShowClientModal(false);
+      setShowApiKeyModal(true);
+      setClientForm({
+        company_name: '', subscription_tier: 'basic', rate_limit_per_sec: 50,
+        status: 'active', actor_field: 'actor', fallback_actor_field: '',
+        action_field: 'action', resource_field: 'resource',
+      });
+      fetchData();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Gagal mendaftarkan klien');
+    }
+  }, [clientForm, fetchData]);
+
+  const handleSubmitKafka = useCallback(async (e) => {
+    e.preventDefault();
+    try {
+      await api.post('/admin/kafka-config', {
+        client_id: kafkaForm.client_id,
+        kafka_brokers: kafkaForm.kafka_brokers,
+        topic_prefix: kafkaForm.topic_prefix,
+        source_system: kafkaForm.source_system,
+        pk_field: kafkaForm.pk_field,
+        actor_field: kafkaForm.actor_field,
+      });
+      setShowKafkaModal(false);
+      setKafkaForm({ client_id: '', kafka_brokers: '', topic_prefix: '', source_system: '', pk_field: 'ID', actor_field: '__user_name' });
+      fetchData();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Gagal menyimpan konfigurasi Kafka');
+    }
+  }, [kafkaForm, fetchData]);
+
+  const handleToggleKafka = useCallback(async (configId) => {
+    try {
+      await api.patch(`/admin/kafka-config/${configId}/toggle`);
+      fetchData();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Gagal memperbarui status konfigurasi Kafka');
+    }
+  }, [fetchData]);
+
+  const handleCopyApiKey = useCallback(() => {
+    navigator.clipboard.writeText(newApiKey).then(() => {
+      setApiKeyCopied(true);
+      setTimeout(() => setApiKeyCopied(false), 2000);
+    }).catch(() => {
+      // Fallback untuk browser yang tidak support clipboard API
+      const el = document.createElement('textarea');
+      el.value = newApiKey;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+      setApiKeyCopied(true);
+      setTimeout(() => setApiKeyCopied(false), 2000);
+    });
+  }, [newApiKey]);
+
+  return (
+    <div className="ac-shell">
+
+      {/* ======= TOP NAV ======= */}
+      <header className="ac-topnav">
+        <div className="ac-topnav__brand">
+          <button className="ac-topnav__menu-btn" onClick={() => setSidebarOpen(o => !o)}>
+            <Icon name="menu" size={22} />
+          </button>
+          <div className="ac-topnav__logo">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" fill="rgba(255,255,255,0.95)" />
+              <path d="M10 17l-3-3 1.4-1.4 1.6 1.6 4.6-4.6 1.4 1.4L10 17z" fill="#0077ce" />
+            </svg>
+          </div>
+          <div>
+            <div className="ac-topnav__brand-name">Auditchain Gateway</div>
+            <div className="ac-topnav__brand-sub ac-admin-portal-label">Admin Portal</div>
+          </div>
+        </div>
+        <div className="ac-topnav__right">
+          <div className="ac-topnav__client-pill ac-admin-pill">
+            <span className="ac-topnav__client-dot ac-admin-dot" />
+            <span className="ac-topnav__client-label">SUPER ADMIN</span>
+          </div>
+          <div className="ac-topnav__user">
+            <div className="ac-topnav__user-info">
+              <div className="ac-topnav__user-name">{clientInfo?.username || 'Admin'}</div>
+              <div className="ac-topnav__user-role">{clientInfo?.role || 'System Administrator'}</div>
+            </div>
+            <div className="ac-topnav__avatar">
+              {(clientInfo?.username || 'A').charAt(0).toUpperCase()}
+            </div>
+          </div>
+          <button className="ac-topnav__logout" onClick={onLogout}>
+            <Icon name="logout" size={16} />
+            Logout
+          </button>
+        </div>
+      </header>
+
+      {/* ======= SIDEBAR ======= */}
+      <aside className={`ac-sidebar${sidebarOpen ? ' ac-sidebar--open' : ''}`}>
+        <div className="ac-sidebar__header">
+          <div className="ac-sidebar__section-label">Admin Panel</div>
+          <div className="ac-sidebar__section-sub">Client System Management</div>
+        </div>
+        <nav className="ac-sidebar__nav">
+          <button
+            className={`ac-sidebar__nav-item${activeTab === 'clients' ? ' ac-sidebar__nav-item--active' : ''}`}
+            onClick={() => { setActiveTab('clients'); setSidebarOpen(false); }}
+          >
+            <Icon name="database" size={18} />
+            Client Registry
+          </button>
+          <button
+            className={`ac-sidebar__nav-item${activeTab === 'kafka' ? ' ac-sidebar__nav-item--active' : ''}`}
+            onClick={() => { setActiveTab('kafka'); setSidebarOpen(false); }}
+          >
+            <Icon name="link" size={18} />
+            Kafka Configuration
+          </button>
+          <div style={{ height: 1, background: 'var(--color-outline-variant)', margin: '8px 14px' }} />
+          <button className="ac-sidebar__nav-item" onClick={() => navigate('/dashboard')}>
+            <Icon name="dashboard" size={18} />
+            Auditor Dashboard
+          </button>
+        </nav>
+        <div className="ac-sidebar__footer">
+          {clientInfo && (
+            <div className="ac-sidebar__identity-card">
+              <div className="ac-sidebar__identity-label">Session Identity</div>
+              <div className="ac-sidebar__identity-user">
+                <span className="ac-sidebar__identity-avatar">
+                  {clientInfo.username.charAt(0).toUpperCase()}
+                </span>
+                <div className="ac-sidebar__identity-details">
+                  <span className="ac-sidebar__identity-name" title={clientInfo.username}>{clientInfo.username}</span>
+                  <span className="ac-sidebar__identity-role">{clientInfo.role}</span>
+                </div>
+              </div>
+            </div>
+          )}
+          <button className="ac-sidebar__nav-item" style={{ marginTop: 6 }} onClick={onLogout}>
+            <Icon name="logout" size={18} />
+            Logout
+          </button>
+        </div>
+      </aside>
+
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 35, background: 'rgba(0,0,0,0.3)' }}
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* ======= MAIN CONTENT ======= */}
+      <main className="ac-main">
+        <div className="ac-main__container">
+
+          {/* ===== HERO ADMIN ===== */}
+          <section className="ac-hero">
+            <div className="ac-hero__pattern" />
+            <div className="ac-hero__content">
+              <div className="ac-hero__left">
+                <h1 className="ac-hero__title">⚙️ Admin Panel</h1>
+                <p className="ac-hero__subtitle">
+                  Register and manage all client systems connected to the AuditChain Gateway.
+                  Each client is provisioned with a unique API Key, Kafka stream configuration, and isolated database storage.
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: 12, flexShrink: 0 }}>
+                <div className="ac-admin-hero-stat">
+                  <div className="ac-admin-hero-stat__val">{clients.length}</div>
+                  <div className="ac-admin-hero-stat__label">Registered Clients</div>
+                </div>
+                <div className="ac-admin-hero-stat">
+                  <div className="ac-admin-hero-stat__val">{kafkaConfigs.filter(k => k.is_active).length}</div>
+                  <div className="ac-admin-hero-stat__label">Active Streams</div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+
+          {/* ===== TAB: DAFTAR KLIEN ===== */}
+          {activeTab === 'clients' && (
+            <section className="ac-card" style={{ animation: 'fadeIn 0.3s ease' }}>
+              <div className="ac-card__header">
+                <div>
+                  <div className="ac-card__title">Client Registry</div>
+                  <div className="ac-admin-card-sub">All client companies and systems registered under the AuditChain Gateway</div>
+                </div>
+                <button className="ac-btn-primary" onClick={() => setShowClientModal(true)}>
+                  + Register New Client
+                </button>
+              </div>
+              <div className="ac-table-wrap">
+                <table className="ac-table">
+                  <thead>
+                    <tr>
+                      <th>Company Name</th>
+                      <th>Status</th>
+                      <th>Field Mapping</th>
+                      <th>Registration Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clients.length === 0 && (
+                      <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--color-outline)', padding: '32px 0' }}>No registered clients found.</td></tr>
+                    )}
+                    {clients.map(client => (
+                      <tr key={client.id}>
+                        <td>
+                          <div style={{ fontWeight: 600, color: 'var(--color-on-surface)' }}>{client.company_name}</div>
+                          <div style={{ fontSize: 11, color: 'var(--color-outline)', fontFamily: 'var(--font-mono)', marginTop: 2 }}>{client.id}</div>
+                        </td>
+                        <td>
+                          <span className={`ac-dot-status${client.status === 'active' ? ' ac-dot-status--active' : ' ac-dot-status--inactive'}`}>
+                            {client.status === 'active' ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="ac-field-map">
+                            <div className="ac-field-map__item"><span className="ac-field-map__key">actor</span> {client.actor_field || '—'}</div>
+                            <div className="ac-field-map__item"><span className="ac-field-map__key">action</span> {client.action_field || '—'}</div>
+                            <div className="ac-field-map__item"><span className="ac-field-map__key">resource</span> {client.resource_field || '—'}</div>
+                          </div>
+                        </td>
+                        <td className="ac-table__time">{formatTimestamp(client.created_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          {/* ===== TAB: KONFIGURASI KAFKA ===== */}
+          {activeTab === 'kafka' && (
+            <section className="ac-card" style={{ animation: 'fadeIn 0.3s ease' }}>
+              <div className="ac-card__header">
+                <div>
+                  <div className="ac-card__title">Kafka Stream Configuration</div>
+                  <div className="ac-admin-card-sub">Kafka consumer configurations per client for real-time audit log ingestion</div>
+                </div>
+                <button className="ac-btn-primary" onClick={() => setShowKafkaModal(true)}>
+                  + Add Configuration
+                </button>
+              </div>
+              <div className="ac-table-wrap">
+                <table className="ac-table">
+                  <thead>
+                    <tr>
+                      <th>Client</th>
+                      <th>Kafka Brokers</th>
+                      <th>Topic Prefix</th>
+                      <th>Source System</th>
+                      <th>PK Field</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {kafkaConfigs.length === 0 && (
+                      <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--color-outline)', padding: '32px 0' }}>No Kafka configurations found. Click "+ Add Configuration" to get started.</td></tr>
+                    )}
+                    {kafkaConfigs.map(cfg => (
+                      <tr key={cfg.id}>
+                        <td>
+                          <div style={{ fontWeight: 600 }}>{cfg.company_name}</div>
+                          <div style={{ fontSize: 11, color: 'var(--color-outline)', fontFamily: 'var(--font-mono)', marginTop: 2 }}>{cfg.client_id}</div>
+                        </td>
+                        <td><code className="ac-code-chip">{cfg.kafka_brokers}</code></td>
+                        <td><code className="ac-code-chip">{cfg.topic_prefix}</code></td>
+                        <td>{cfg.source_system}</td>
+                        <td><code className="ac-code-chip">{cfg.pk_field}</code></td>
+                        <td>
+                          <label className="ac-toggle-wrap" title={cfg.is_active ? 'Click to deactivate' : 'Click to activate'}>
+                            <input
+                              type="checkbox"
+                              checked={cfg.is_active}
+                              onChange={() => handleToggleKafka(cfg.id)}
+                              style={{ display: 'none' }}
+                            />
+                            <span className={`ac-toggle${cfg.is_active ? ' ac-toggle--on' : ''}`} />
+                            <span className={`ac-toggle-label${cfg.is_active ? ' ac-toggle-label--on' : ''}`}>
+                              {cfg.is_active ? 'Active' : 'Inactive'}
+                            </span>
+                          </label>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+        </div>
+      </main>
+
+      {/* ===== MODAL: DAFTARKAN KLIEN BARU ===== */}
+      {showClientModal && (
+        <div className="ac-modal-overlay" onClick={() => setShowClientModal(false)}>
+          <div className="ac-modal ac-modal--sm" onClick={e => e.stopPropagation()}>
+            <div className="ac-modal__header">
+              <div>
+                <div className="ac-modal__title">🏢 Register New Client</div>
+                <div className="ac-modal__subtitle">Fill in the details for the new client company to establish connection</div>
+              </div>
+              <button className="ac-modal__close" onClick={() => setShowClientModal(false)}>×</button>
+            </div>
+            <div className="ac-modal__body">
+              <form onSubmit={handleSubmitClient}>
+                <div className="ac-form-grid">
+                  <div className="ac-form-field" style={{ gridColumn: '1 / -1' }}>
+                    <label className="ac-form-label">Company Name <span style={{ color: 'var(--color-error)' }}>*</span></label>
+                    <input className="ac-form-input" required placeholder="PT Contoh Indonesia"
+                      value={clientForm.company_name}
+                      onChange={e => setClientForm(f => ({ ...f, company_name: e.target.value }))} />
+                  </div>
+                  <div className="ac-form-field">
+                    <label className="ac-form-label">Status</label>
+                    <select className="ac-form-input" value={clientForm.status}
+                      onChange={e => setClientForm(f => ({ ...f, status: e.target.value }))}>
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                    </select>
+                  </div>
+                  <div className="ac-form-field">
+                    <label className="ac-form-label">Fallback Actor Field</label>
+                    <input className="ac-form-input" placeholder="(optional — e.g., db_user)"
+                      value={clientForm.fallback_actor_field}
+                      onChange={e => setClientForm(f => ({ ...f, fallback_actor_field: e.target.value }))} />
+                  </div>
+                </div>
+                <div style={{ height: 1, background: 'var(--color-outline-variant)', margin: '16px 0' }} />
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-on-surface-variant)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 12 }}>Custom Field Mapping</div>
+                <div className="ac-form-grid">
+                  <div className="ac-form-field">
+                    <label className="ac-form-label">Actor Field</label>
+                    <input className="ac-form-input" placeholder="actor"
+                      value={clientForm.actor_field}
+                      onChange={e => setClientForm(f => ({ ...f, actor_field: e.target.value }))} />
+                  </div>
+                  <div className="ac-form-field">
+                    <label className="ac-form-label">Action Field</label>
+                    <input className="ac-form-input" placeholder="action"
+                      value={clientForm.action_field}
+                      onChange={e => setClientForm(f => ({ ...f, action_field: e.target.value }))} />
+                  </div>
+                  <div className="ac-form-field">
+                    <label className="ac-form-label">Resource Field</label>
+                    <input className="ac-form-input" placeholder="resource"
+                      value={clientForm.resource_field}
+                      onChange={e => setClientForm(f => ({ ...f, resource_field: e.target.value }))} />
+                  </div>
+                </div>
+                <div className="ac-form-actions">
+                  <button type="button" className="ac-btn-ghost-action" onClick={() => setShowClientModal(false)}>Cancel</button>
+                  <button type="submit" className="ac-btn-primary">Register Client</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== MODAL: API KEY REVEAL ===== */}
+      {showApiKeyModal && (
+        <div className="ac-modal-overlay">
+          <div className="ac-modal ac-modal--sm" onClick={e => e.stopPropagation()}>
+            <div className="ac-modal__header">
+              <div>
+                <div className="ac-modal__title">✅ Client Successfully Registered!</div>
+                <div className="ac-modal__subtitle">Make sure to copy and save the API Key below before closing this window</div>
+              </div>
+            </div>
+            <div className="ac-modal__body">
+              <div className="ac-api-key-box">
+                <div className="ac-api-key-box__label">🔑 API Key</div>
+                <div className="ac-api-key-box__key">{newApiKey}</div>
+                <button
+                  className={`ac-btn-primary${apiKeyCopied ? ' ac-btn-primary--success' : ''}`}
+                  style={{ marginTop: 14, width: '100%' }}
+                  onClick={handleCopyApiKey}
+                >
+                  {apiKeyCopied ? '✅ Copied to Clipboard!' : '📋 Copy API Key'}
+                </button>
+              </div>
+              <div className="ac-api-key-box__warning">
+                ⚠️ <strong>Attention:</strong> This API Key is generated and displayed only once.
+                After closing this dialog, the key cannot be retrieved.
+                Ensure it is stored securely before proceeding.
+              </div>
+              <div style={{ marginTop: 16 }}>
+                <button
+                  className="ac-btn-primary"
+                  style={{ width: '100%' }}
+                  onClick={() => { setShowApiKeyModal(false); setNewApiKey(''); }}
+                >
+                  I Have Saved the API Key — Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== MODAL: TAMBAH KONFIGURASI KAFKA ===== */}
+      {showKafkaModal && (
+        <div className="ac-modal-overlay" onClick={() => setShowKafkaModal(false)}>
+          <div className="ac-modal ac-modal--sm" onClick={e => e.stopPropagation()}>
+            <div className="ac-modal__header">
+              <div>
+                <div className="ac-modal__title">⚙️ Add Kafka Configuration</div>
+                <div className="ac-modal__subtitle">Establish a connection between the client and a Kafka stream for log ingestion</div>
+              </div>
+              <button className="ac-modal__close" onClick={() => setShowKafkaModal(false)}>×</button>
+            </div>
+            <div className="ac-modal__body">
+              <form onSubmit={handleSubmitKafka}>
+                <div className="ac-form-grid">
+                  <div className="ac-form-field" style={{ gridColumn: '1 / -1' }}>
+                    <label className="ac-form-label">Client <span style={{ color: 'var(--color-error)' }}>*</span></label>
+                    <select className="ac-form-input" required value={kafkaForm.client_id}
+                      onChange={e => setKafkaForm(f => ({ ...f, client_id: e.target.value }))}>
+                      <option value="">-- Select Client --</option>
+                      {clients.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
+                    </select>
+                  </div>
+                  <div className="ac-form-field">
+                    <label className="ac-form-label">Kafka Brokers <span style={{ color: 'var(--color-error)' }}>*</span></label>
+                    <input className="ac-form-input" required placeholder="192.168.1.1:9092"
+                      value={kafkaForm.kafka_brokers}
+                      onChange={e => setKafkaForm(f => ({ ...f, kafka_brokers: e.target.value }))} />
+                  </div>
+                  <div className="ac-form-field">
+                    <label className="ac-form-label">Topic Prefix <span style={{ color: 'var(--color-error)' }}>*</span></label>
+                    <input className="ac-form-input" required placeholder="cdc_simrs"
+                      value={kafkaForm.topic_prefix}
+                      onChange={e => setKafkaForm(f => ({ ...f, topic_prefix: e.target.value }))} />
+                  </div>
+                  <div className="ac-form-field">
+                    <label className="ac-form-label">Source System <span style={{ color: 'var(--color-error)' }}>*</span></label>
+                    <input className="ac-form-input" required placeholder="SIMRS-Prod"
+                      value={kafkaForm.source_system}
+                      onChange={e => setKafkaForm(f => ({ ...f, source_system: e.target.value }))} />
+                  </div>
+                  <div className="ac-form-field">
+                    <label className="ac-form-label">PK Field</label>
+                    <input className="ac-form-input" placeholder="ID"
+                      value={kafkaForm.pk_field}
+                      onChange={e => setKafkaForm(f => ({ ...f, pk_field: e.target.value }))} />
+                  </div>
+                  <div className="ac-form-field">
+                    <label className="ac-form-label">Actor Field</label>
+                    <input className="ac-form-input" placeholder="__user_name"
+                      value={kafkaForm.actor_field}
+                      onChange={e => setKafkaForm(f => ({ ...f, actor_field: e.target.value }))} />
+                  </div>
+                </div>
+                <div className="ac-form-actions">
+                  <button type="button" className="ac-btn-ghost-action" onClick={() => setShowKafkaModal(false)}>Cancel</button>
+                  <button type="submit" className="ac-btn-primary">Add Configuration</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
+
+
+
+// ================================================================
 // ROUTER UTAMA
 // ================================================================
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'));
-  const handleLogout = () => { localStorage.removeItem('token'); setIsAuthenticated(false); };
+  const [isAuthenticated, setIsAuthenticated] = useState(!!(localStorage.getItem('token') || sessionStorage.getItem('token')));
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    sessionStorage.removeItem('token');
+    setIsAuthenticated(false);
+  };
+
+  const clientInfo = useMemo(() => {
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    return token ? parseJwt(token) : null;
+  }, [isAuthenticated]);
+
+  const isAdmin = clientInfo?.role?.toLowerCase() === 'admin';
 
   return (
     <Router>
       <Routes>
-        <Route path="/login" element={!isAuthenticated ? <Login onLogin={setIsAuthenticated} /> : <Navigate to="/dashboard" />} />
+        <Route path="/login" element={!isAuthenticated ? <Login onLogin={setIsAuthenticated} /> : <Navigate to={isAdmin ? "/admin" : "/dashboard"} />} />
         <Route path="/dashboard" element={isAuthenticated ? <Dashboard onLogout={handleLogout} /> : <Navigate to="/login" />} />
-        <Route path="*" element={<Navigate to={isAuthenticated ? '/dashboard' : '/login'} />} />
+        <Route path="/admin" element={isAuthenticated && isAdmin ? <AdminDashboard onLogout={handleLogout} /> : <Navigate to="/dashboard" />} />
+        <Route path="*" element={<Navigate to={isAuthenticated ? (isAdmin ? "/admin" : "/dashboard") : "/login"} />} />
       </Routes>
     </Router>
   );
