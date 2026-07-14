@@ -905,8 +905,8 @@ function Dashboard({ onLogout }) {
   const [stats, setStats] = useState({ total_logs: 0, pending_logs: 0, anchored_logs: 0 });
   const [recentLogs, setRecentLogs] = useState([]);
   const [inventory, setInventory] = useState([]);
-  const [verifyStatuses, setVerifyStatuses] = useState({});
-  const [inventoryStatuses, setInventoryStatuses] = useState({});
+  const [verifyStatuses] = useState({});
+  const [inventoryStatuses] = useState({});
   const [selectedVerifyResult, setSelectedVerifyResult] = useState(null);
   const [totalLogsCount, setTotalLogsCount] = useState(0);
   const [isServerPaginated, setIsServerPaginated] = useState(false);
@@ -975,17 +975,30 @@ function Dashboard({ onLogout }) {
           params.client_id = selectedClient;
         }
         
-        // Jika filter tanggal aktif, tarik data dalam jumlah besar (page_size: 1000)
-        // agar penyaringan frontend bekerja dengan cakupan data yang luas.
-        const isDateFilterActive = !!(filterDateFrom || filterDateTo);
-        const logsPage = isDateFilterActive ? 1 : currentPage;
-        const logsPageSize = isDateFilterActive ? 1000 : rowsPerPage;
+        // Hanya aktifkan jika kedua filter tanggal (From dan To) terisi
+        const isDateFilterActive = !!(filterDateFrom && filterDateTo);
+        
+        let statsRes, logsRes, invRes;
 
-        const [statsRes, logsRes, invRes] = await Promise.all([
-          api.get('/dashboard/stats', { params }),
-          api.get('/dashboard/logs', { params: { ...params, page: logsPage, page_size: logsPageSize } }),
-          api.get('/dashboard/inventory', { params }),
-        ]);
+        if (isDateFilterActive) {
+          // Tarik data dalam jumlah besar (page_size: 1000) agar penyaringan frontend bekerja
+          const logsPage = 1;
+          const logsPageSize = 1000;
+
+          [statsRes, logsRes, invRes] = await Promise.all([
+            api.get('/dashboard/stats', { params }),
+            api.get('/dashboard/logs', { params: { ...params, page: logsPage, page_size: logsPageSize } }),
+            api.get('/dashboard/inventory', { params }),
+          ]);
+        } else {
+          // Jika filter tanggal tidak aktif, jangan panggil api logs untuk menghemat performa
+          [statsRes, invRes] = await Promise.all([
+            api.get('/dashboard/stats', { params }),
+            api.get('/dashboard/inventory', { params }),
+          ]);
+          logsRes = { data: [] };
+        }
+        
         setStats(statsRes.data);
         
         let logsArray = [];
@@ -1629,6 +1642,7 @@ function Dashboard({ onLogout }) {
                 <button
                   className="ac-btn-primary"
                   style={{ padding: '0 16px', height: '36px', minWidth: 'auto', fontSize: '13px' }}
+                  disabled={!tempDateFrom || !tempDateTo}
                   onClick={() => {
                     setFilterDateFrom(tempDateFrom);
                     setFilterDateTo(tempDateTo);
@@ -1688,10 +1702,21 @@ function Dashboard({ onLogout }) {
                 <tbody>
                   {paginatedLogs.length === 0 ? (
                     <tr>
-                      <td colSpan={6}>
+                      <td colSpan={7}>
                         <div className="ac-empty">
-                          <div className="ac-empty__icon">🔍</div>
-                          No transactions match the filter.
+                          <div className="ac-empty__icon">📅</div>
+                          {!filterDateFrom || !filterDateTo ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                              <span style={{ fontWeight: '600', color: 'var(--color-on-surface)' }}>
+                                Please select a date range (From & To) to view transaction history
+                              </span>
+                              <span style={{ fontSize: '13px', color: 'var(--color-on-surface-variant)' }}>
+                                Transactions are not loaded automatically to ensure optimal performance.
+                              </span>
+                            </div>
+                          ) : (
+                            "No transactions match the selected filter."
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -2054,11 +2079,11 @@ function AdminDashboard({ onLogout }) {
               </div>
               <div style={{ display: 'flex', gap: 12, flexShrink: 0 }}>
                 <div className="ac-admin-hero-stat">
-                  <div className="ac-admin-hero-stat__val">{clients.length}</div>
+                  <div className="ac-admin-hero-stat__val">{summary.total_clients}</div>
                   <div className="ac-admin-hero-stat__label">Registered Clients</div>
                 </div>
                 <div className="ac-admin-hero-stat">
-                  <div className="ac-admin-hero-stat__val">{kafkaConfigs.filter(k => k.is_active).length}</div>
+                  <div className="ac-admin-hero-stat__val">{summary.active_streams}</div>
                   <div className="ac-admin-hero-stat__label">Active Streams</div>
                 </div>
               </div>
@@ -2371,6 +2396,7 @@ function App() {
   };
 
   const clientInfo = useMemo(() => {
+    if (!isAuthenticated) return null;
     const token = localStorage.getItem('token') || sessionStorage.getItem('token');
     return token ? parseJwt(token) : null;
   }, [isAuthenticated]);
