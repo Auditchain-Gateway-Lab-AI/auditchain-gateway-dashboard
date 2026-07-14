@@ -1857,7 +1857,6 @@ function Dashboard({ onLogout }) {
     <th>Resource ID</th>
     <th>Last Action</th>
     <th>Last Updated</th>
-    <th>Chain Status</th>
   </tr>
 </thead>
 <tbody>
@@ -1876,7 +1875,6 @@ function Dashboard({ onLogout }) {
         </td>
         <td><ActionBadge action={item.action} /></td>
         <td className="ac-table__time">{formatTimestamp(item.timestamp)}</td>
-        <td onClick={e => e.stopPropagation()}>{renderInventoryBadge(item)}</td>
       </tr>
     );
   })}
