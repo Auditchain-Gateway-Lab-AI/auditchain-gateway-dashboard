@@ -971,7 +971,7 @@ function Dashboard({ onLogout }) {
   const [stats, setStats] = useState({ total_logs: 0, pending_logs: 0, anchored_logs: 0 });
   const [recentLogs, setRecentLogs] = useState([]);
   const [inventory, setInventory] = useState([]);
-  const [verifyStatuses] = useState({});
+  const [verifyStatuses, setVerifyStatuses] = useState({});
   const [inventoryStatuses] = useState({});
   const [selectedVerifyResult, setSelectedVerifyResult] = useState(null);
   const [totalLogsCount, setTotalLogsCount] = useState(0);
@@ -1094,6 +1094,27 @@ function Dashboard({ onLogout }) {
     return () => clearInterval(id);
   }, [onLogout, currentPage, rowsPerPage, selectedClient, filterDateFrom, filterDateTo]);
 
+  // Verifikasi satu log SECARA ON-DEMAND — dipicu klik tombol, bukan lagi
+// otomatis untuk setiap baris. Endpoint /dashboard/verify/:log_id melakukan
+// rehash + query Fabric, jadi sengaja hanya dijalankan saat user benar-benar
+// minta, bukan setiap 5 detik siklus polling tabel.
+const handleVerifyLog = useCallback((logId) => {
+  setVerifyStatuses(prev => ({
+    ...prev,
+    [logId]: { status: 'loading' }
+  }));
+
+  api.get(`/dashboard/verify/${logId}`)
+    .then(res => {
+      setVerifyStatuses(prev => ({ ...prev, [logId]: res.data }));
+      setSelectedVerifyResult(res.data);
+    })
+    .catch(err => {
+      const data = err.response?.data || { status: 'failed', message: 'Gagal menghubungi server verifikasi.' };
+      setVerifyStatuses(prev => ({ ...prev, [logId]: data }));
+      setSelectedVerifyResult(data);
+    });
+}, []);
   // Verify range using backend API
   const handleVerifyRange = useCallback(async () => {
     if (!filterDateFrom || !filterDateTo) return;
@@ -1272,16 +1293,30 @@ function Dashboard({ onLogout }) {
 
   // Status badge for transaction table
   const renderStatusBadge = (log) => {
-    if (!log || !log.log_id || !log.hash_value) return <span className="ac-status ac-status--invalid">🚨 INVALID</span>;
-    const v = verifyStatuses[log.log_id];
-    if (!v || v.status === 'loading')
-      return <span className="ac-status ac-status--checking">⏳ Memeriksa...</span>;
-    if (v.status === 'success')
-      return <span className="ac-status ac-status--valid" onClick={() => setSelectedVerifyResult(v)}>✅ VALID</span>;
-    if (v.status === 'pending')
-      return <span className="ac-status ac-status--pending" onClick={() => setSelectedVerifyResult(v)}>⏱️ PENDING</span>;
-    return <span className="ac-status ac-status--invalid" onClick={() => setSelectedVerifyResult(v)}>🚨 INVALID</span>;
-  };
+  if (!log || !log.log_id || !log.hash_value) return <span className="ac-status ac-status--invalid">🚨 INVALID</span>;
+  const v = verifyStatuses[log.log_id];
+
+  // Belum pernah diverifikasi sama sekali — tampilkan tombol, bukan status.
+  if (!v) {
+    return (
+      <button
+        className="ac-btn-ghost"
+        style={{ padding: '4px 10px', fontSize: '11px' }}
+        onClick={(e) => { e.stopPropagation(); handleVerifyLog(log.log_id); }}
+      >
+        🔍 Verify
+      </button>
+    );
+  }
+
+  if (v.status === 'loading')
+    return <span className="ac-status ac-status--checking">⏳ Memeriksa...</span>;
+  if (v.status === 'success')
+    return <span className="ac-status ac-status--valid" onClick={() => setSelectedVerifyResult(v)}>✅ VALID</span>;
+  if (v.status === 'pending')
+    return <span className="ac-status ac-status--pending" onClick={() => setSelectedVerifyResult(v)}>⏱️ PENDING</span>;
+  return <span className="ac-status ac-status--invalid" onClick={() => setSelectedVerifyResult(v)}>🚨 INVALID</span>;
+};
 
   // Status badge for inventory
   const renderInventoryBadge = (item) => {
