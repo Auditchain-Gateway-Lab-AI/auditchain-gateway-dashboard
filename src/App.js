@@ -1217,79 +1217,79 @@ const handleVerifyLog = useCallback((logId) => {
     ? filteredLogs.length
     : (isFiltered ? filteredLogs.length : totalLogsCount);
 
-  // Background verify — individual logs
-  useEffect(() => {
-    paginatedLogs.forEach(log => {
-      if (!log || !log.log_id) return;
-      const logId = log.log_id;
-      const currentStatus = verifyStatusesRef.current[logId]?.status;
+  // Background verify — individual logs (Nonaktifkan dulu sampai endpoint baru siap)
+  // useEffect(() => {
+  //   paginatedLogs.forEach(log => {
+  //     if (!log || !log.log_id) return;
+  //     const logId = log.log_id;
+  //     const currentStatus = verifyStatusesRef.current[logId]?.status;
 
-      // Skip if already success, pending, or permanently failed
-      if (
-        currentStatus === 'success' ||
-        currentStatus === 'pending' ||
-        currentStatus === 'loading' ||
-        currentStatus === 'failed_local' ||
-        currentStatus === 'failed_kafka' ||
-        currentStatus === 'failed_onchain'
-      ) {
-        return;
-      }
+  //     // Skip if already success, pending, or permanently failed
+  //     if (
+  //       currentStatus === 'success' ||
+  //       currentStatus === 'pending' ||
+  //       currentStatus === 'loading' ||
+  //       currentStatus === 'failed_local' ||
+  //       currentStatus === 'failed_kafka' ||
+  //       currentStatus === 'failed_onchain'
+  //     ) {
+  //       return;
+  //     }
 
-      setVerifyStatuses(prev => ({
-        ...prev,
-        [logId]: { status: 'loading' }
-      }));
+  //     setVerifyStatuses(prev => ({
+  //       ...prev,
+  //       [logId]: { status: 'loading' }
+  //     }));
 
-      api.get(`/dashboard/verify/${logId}`, { params: { client_id: selectedClient } })
-        .then(res => {
-          setVerifyStatuses(prev => ({ ...prev, [logId]: res.data }));
-        })
-        .catch(err => {
-          setVerifyStatuses(prev => ({
-            ...prev,
-            [logId]: { ...(err.response?.data || {}), status: 'failed' }
-          }));
-        });
-    });
-  }, [paginatedLogs, selectedClient]);
+  //     api.get(`/dashboard/verify/${logId}`)
+  //       .then(res => {
+  //         setVerifyStatuses(prev => ({ ...prev, [logId]: res.data }));
+  //       })
+  //       .catch(err => {
+  //         setVerifyStatuses(prev => ({
+  //           ...prev,
+  //           [logId]: err.response?.data || { status: 'failed' }
+  //         }));
+  //       });
+  //   });
+  // }, [paginatedLogs]);
 
-  // Background verify — inventory chain
-  useEffect(() => {
-    inventory.forEach(item => {
-      const resource = item?.source_table || item?.resource;
-      if (!item || !resource) return;
-      const currentStatus = inventoryStatusesRef.current[resource]?.status;
+  // // Background verify — inventory chain (Nonaktifkan dulu sampai endpoint baru siap)
+  // useEffect(() => {
+  //   inventory.forEach(item => {
+  //     const resource = item?.source_table || item?.resource;
+  //     if (!item || !resource) return;
+  //     const currentStatus = inventoryStatusesRef.current[resource]?.status;
 
-      // Skip if already success, pending, or permanently failed
-      if (
-        currentStatus === 'success' ||
-        currentStatus === 'pending' ||
-        currentStatus === 'loading' ||
-        currentStatus === 'failed_local' ||
-        currentStatus === 'failed_kafka' ||
-        currentStatus === 'failed_onchain'
-      ) {
-        return;
-      }
+  //     // Skip if already success, pending, or permanently failed
+  //     if (
+  //       currentStatus === 'success' ||
+  //       currentStatus === 'pending' ||
+  //       currentStatus === 'loading' ||
+  //       currentStatus === 'failed_local' ||
+  //       currentStatus === 'failed_kafka' ||
+  //       currentStatus === 'failed_onchain'
+  //     ) {
+  //       return;
+  //     }
 
-      setInventoryStatuses(prev => ({
-        ...prev,
-        [resource]: { status: 'loading' }
-      }));
+  //     setInventoryStatuses(prev => ({
+  //       ...prev,
+  //       [resource]: { status: 'loading' }
+  //     }));
 
-      api.get(`/dashboard/verify-resource/${encodeURIComponent(resource)}`, { params: { client_id: selectedClient } })
-        .then(res => {
-          setInventoryStatuses(prev => ({ ...prev, [resource]: res.data }));
-        })
-        .catch(err => {
-          setInventoryStatuses(prev => ({
-            ...prev,
-            [resource]: { ...(err.response?.data || {}), status: 'failed' }
-          }));
-        });
-    });
-  }, [inventory, selectedClient]);
+  //     api.get(`/dashboard/verify-resource/${encodeURIComponent(resource)}`)
+  //       .then(res => {
+  //         setInventoryStatuses(prev => ({ ...prev, [resource]: res.data }));
+  //       })
+  //       .catch(err => {
+  //         setInventoryStatuses(prev => ({
+  //           ...prev,
+  //           [resource]: err.response?.data || { status: 'failed' }
+  //         }));
+  //       });
+  //   });
+  // }, [inventory]);
 
   // Status badge for transaction table
   const renderStatusBadge = (log) => {
