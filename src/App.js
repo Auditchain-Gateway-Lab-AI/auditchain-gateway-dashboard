@@ -40,6 +40,35 @@ const formatTimestamp = (dateString) => {
   return `${day}/${month}/${year}, ${hours}.${minutes}.${seconds}.${ms}`;
 };
 
+// Mengubah satu RangeItemResult (dari GET /dashboard/verify-range) menjadi
+// shape VerificationResult yang sudah dipahami renderStatusBadge dan
+// VerificationDetail — supaya hasil Verify Range bisa mengisi kolom
+// Verification yang sama persis dengan hasil klik "Verify" satuan, tanpa
+// perlu dua jalur rendering terpisah.
+const mapRangeItemToVerifyStatus = (item) => {
+  const statusMap = {
+    success: 'success',
+    pending: 'pending',
+    failed_local: 'failed_local',
+    failed_onchain: 'failed_onchain',
+  };
+  const status = statusMap[item.verify_status] || 'failed';
+
+  return {
+    status,
+    message: item.message,
+    data: {
+      log_id: item.log_id,
+      is_valid: status === 'success',
+      message: item.message,
+      expected_hash: item.expected_hash || item.hash_value,
+      actual_hash: item.actual_hash,
+      blockchain_tx_id: item.blockchain_tx_id,
+      db_root: item.merkle_root,
+    },
+  };
+};
+
 // Formatter cell metadata (container JSON horizontal scrollable)
 const renderMetadataCell = (metadata) => {
   if (!metadata) return <span style={{ color: 'var(--color-outline)', fontSize: '11px' }}>—</span>;
@@ -648,17 +677,33 @@ function ResourceDetailModal({ resource, onClose }) {
   });
 
   const chainChip = () => {
-    if (!chainStatus) return null;
-    const cls = chainStatus.chain_status === 'valid' ? 'ac-status--valid'
-      : chainStatus.chain_status === 'pending' ? 'ac-status--pending'
-        : chainStatus.chain_status === 'unreachable' ? 'ac-status--pending'
-          : 'ac-status--invalid';
-    const label = chainStatus.chain_status === 'valid' ? '✅ Valid Chain'
-      : chainStatus.chain_status === 'pending' ? '⏱️ Pending'
-        : chainStatus.chain_status === 'unreachable' ? '⚠️ Unreachable'
-          : '🚨 Tampered';
-    return <span className={`ac-status ${cls}`}>{label}</span>;
+  if (!chainStatus) return null;
+  const cls = chainStatus.chain_status === 'valid' ? 'ac-status--valid'
+    : chainStatus.chain_status === 'pending' ? 'ac-status--pending'
+      : chainStatus.chain_status === 'unreachable' ? 'ac-status--pending'
+        : 'ac-status--invalid';
+  const label = chainStatus.chain_status === 'valid' ? '✅ Valid Chain'
+    : chainStatus.chain_status === 'pending' ? '⏱️ Pending'
+      : chainStatus.chain_status === 'unreachable' ? '⚠️ Unreachable'
+        : '🚨 Tampered';
+
+  // chain_issues berisi "category:log_id" — ambil kategorinya saja untuk
+  // ringkasan tooltip, log_id sudah kelihatan di kartu log masing-masing.
+  const issueLabels = {
+    client_mismatch: 'Client data no longer matches latest log',
+    log_integrity_failed: 'One or more logs failed integrity check',
   };
+  const uniqueCategories = [...new Set(
+    (chainStatus.chain_issues || []).map(issue => issue.split(':')[0])
+  )];
+  const tooltip = uniqueCategories.map(cat => issueLabels[cat] || cat).join(' • ');
+
+  return (
+    <span className={`ac-status ${cls}`} title={tooltip || undefined}>
+      {label}
+    </span>
+  );
+};
 
   return (
     <div className="ac-modal-overlay" onClick={onClose}>
@@ -695,53 +740,68 @@ function ResourceDetailModal({ resource, onClose }) {
             </div>
           ) : (
             resourceLogs.map((log, idx) => {
-              const ascIdx = sortedAsc.findIndex(l => l.log_id === log.log_id);
-              const prevLog = ascIdx > 0 ? sortedAsc[ascIdx - 1] : null;
-              const isFirst = idx === 0;
-              const logStatus = logStatusMap[log.log_id];
+  const ascIdx = sortedAsc.findIndex(l => l.log_id === log.log_id);
+  const prevLog = ascIdx > 0 ? sortedAsc[ascIdx - 1] : null;
+  const isFirst = idx === 0;
+  const logStatus = logStatusMap[log.log_id];
 
-              return (
-                <div
-                  key={log.log_id}
-                  className={`ac-log-card ${isFirst ? 'ac-log-card--latest' : ''}`}
-                >
-                  <div className={`ac-log-card__header ${isFirst ? 'ac-log-card__header--latest' : 'ac-log-card__header--normal'}`}>
-                    <span className="ac-log-card__time">
-                      {formatTimestamp(log.timestamp)}
-                    </span>
-                    <ActionBadge action={log.action} />
-                    <span className="ac-log-card__actor">👤 {log.actor}</span>
-                    <span className="ac-log-card__source">📡 {log.source_system}</span>
-                    {logStatus && (
-                      <span
-                        className={`ac-chain-badge ${
-                          logStatus.integrity_status === 'valid' ? 'ac-status--valid'
-                          : logStatus.integrity_status === 'pending' ? 'ac-status--pending'
-                          : 'ac-status--invalid'
-                        }`}
-                        title={logStatus.is_latest ? `Agent: ${logStatus.agent_status}` : 'Riwayat historis — tidak dibandingkan ke Agent'}
-                      >
-                        {logStatus.integrity_status}
-                      </span>
-                    )}
-                    {isFirst && <span className="ac-log-card__latest-chip">● Latest</span>}
-                  </div>
+  // Cek apakah log ini disebut spesifik di chain_issues (format "category:log_id")
+  const relatedIssues = (chainStatus?.chain_issues || [])
+    .filter(issue => issue.endsWith(`:${log.log_id}`))
+    .map(issue => issue.split(':')[0]);
 
-                  <div className="ac-log-card__body">
-                    <div className="ac-log-card__section-label">
-                      {log.action === 'INSERT' ? 'New Data'
-                        : log.action === 'DELETE' ? 'Deleted Data'
-                          : 'Changes (compared to previous log)'}
-                    </div>
-                    <SnapshotViewer currentLog={log} previousLog={prevLog} />
-                  </div>
+  return (
+    <div
+      key={log.log_id}
+      className={`ac-log-card ${isFirst ? 'ac-log-card--latest' : ''}`}
+    >
+      <div className={`ac-log-card__header ${isFirst ? 'ac-log-card__header--latest' : 'ac-log-card__header--normal'}`}>
+        <span className="ac-log-card__time">
+          {formatTimestamp(log.timestamp)}
+        </span>
+        <ActionBadge action={log.action} />
+        <span className="ac-log-card__actor">👤 {log.actor}</span>
+        <span className="ac-log-card__source">📡 {log.source_system}</span>
+        {logStatus && (
+          <span
+            className={`ac-chain-badge ${
+              logStatus.integrity_status === 'valid' ? 'ac-status--valid'
+              : logStatus.integrity_status === 'pending' ? 'ac-status--pending'
+              : 'ac-status--invalid'
+            }`}
+            title={logStatus.is_latest ? `Agent: ${logStatus.agent_status}` : 'Riwayat historis — tidak dibandingkan ke Agent'}
+          >
+            {logStatus.integrity_status}
+          </span>
+        )}
+        {relatedIssues.includes('client_mismatch') && (
+          <span className="ac-chain-badge ac-status--invalid" title="Data live klien tidak cocok dengan log ini">
+            🔌 Client Mismatch
+          </span>
+        )}
+        {relatedIssues.includes('log_integrity_failed') && (
+          <span className="ac-chain-badge ac-status--invalid" title="Log ini gagal verifikasi integritas (rehash/Merkle)">
+            🔓 Integrity Failed
+          </span>
+        )}
+        {isFirst && <span className="ac-log-card__latest-chip">● Latest</span>}
+      </div>
 
-                  <div className="ac-log-card__hash">
-                    <code className="ac-log-card__hash-code">🔑 {log.hash_value}</code>
-                  </div>
-                </div>
-              );
-            })
+      <div className="ac-log-card__body">
+        <div className="ac-log-card__section-label">
+          {log.action === 'INSERT' ? 'New Data'
+            : log.action === 'DELETE' ? 'Deleted Data'
+              : 'Changes (compared to previous log)'}
+        </div>
+        <SnapshotViewer currentLog={log} previousLog={prevLog} />
+      </div>
+
+      <div className="ac-log-card__hash">
+        <code className="ac-log-card__hash-code">🔑 {log.hash_value}</code>
+      </div>
+    </div>
+  );
+})
           )}
         </div>
       </div>
@@ -1117,44 +1177,58 @@ const handleVerifyLog = useCallback((logId) => {
 }, []);
   // Verify range using backend API
   const handleVerifyRange = useCallback(async () => {
-    if (!filterDateFrom || !filterDateTo) return;
-    try {
-      const fromISO = new Date(filterDateFrom).toISOString();
-      const toISO = new Date(filterDateTo).toISOString();
-      
-      setSelectedVerifyResult({ status: 'loading' });
-      
-      const params = {
-        from: fromISO,
-        to: toISO
-      };
-      if (selectedClient) {
-        params.client_id = selectedClient;
-      }
-      
-      const res = await api.get('/dashboard/verify-range', { params });
-      
-      setSelectedVerifyResult({
-        range: { from: filterDateFrom, to: filterDateTo },
-        summary: res.data.summary || {
-          total: res.data.results?.length || 0,
-          valid: res.data.results?.filter(r => r.verify_status === 'valid').length || 0,
-          invalid: res.data.results?.filter(r => r.verify_status === 'tampered' || r.verify_status === 'failed_local' || r.verify_status === 'failed_onchain').length || 0,
-          pending: res.data.results?.filter(r => r.verify_status === 'pending').length || 0
-        },
-        results: res.data.results || []
-      });
-    } catch (err) {
-      console.error("Gagal verifikasi range:", err);
-      setSelectedVerifyResult({
-        range: { from: filterDateFrom, to: filterDateTo },
-        summary: { total: 0, valid: 0, invalid: 0, pending: 0 },
-        results: [],
-        status: 'failed_local',
-        message: err.response?.data?.error || 'Kesalahan koneksi saat memverifikasi range log.'
-      });
+  if (!filterDateFrom || !filterDateTo) return;
+  try {
+    const fromISO = new Date(filterDateFrom).toISOString();
+    const toISO = new Date(filterDateTo).toISOString();
+
+    setSelectedVerifyResult({ status: 'loading' });
+
+    const params = {
+      from: fromISO,
+      to: toISO
+    };
+    if (selectedClient) {
+      params.client_id = selectedClient;
     }
-  }, [filterDateFrom, filterDateTo, selectedClient]);
+
+    const res = await api.get('/dashboard/verify-range', { params });
+    const results = res.data.results || [];
+
+    // Tulis balik hasil per-log ke verifyStatuses supaya kolom Verification
+    // di tabel utama ikut ter-update — bukan cuma tampil di panel ringkasan
+    // range di atas. Ini yang membuat Verify Range terasa sebagai "verify
+    // banyak baris sekaligus", bukan laporan terpisah yang tidak nyambung
+    // ke tabel.
+    setVerifyStatuses(prev => {
+      const next = { ...prev };
+      results.forEach(item => {
+        next[item.log_id] = mapRangeItemToVerifyStatus(item);
+      });
+      return next;
+    });
+
+    setSelectedVerifyResult({
+      range: { from: filterDateFrom, to: filterDateTo },
+      summary: res.data.summary || {
+        total: results.length,
+        valid: results.filter(r => r.verify_status === 'success').length,
+        invalid: results.filter(r => r.verify_status === 'tampered' || r.verify_status === 'failed_local' || r.verify_status === 'failed_onchain').length,
+        pending: results.filter(r => r.verify_status === 'pending').length
+      },
+      results
+    });
+  } catch (err) {
+    console.error("Gagal verifikasi range:", err);
+    setSelectedVerifyResult({
+      range: { from: filterDateFrom, to: filterDateTo },
+      summary: { total: 0, valid: 0, invalid: 0, pending: 0 },
+      results: [],
+      status: 'failed_local',
+      message: err.response?.data?.error || 'Kesalahan koneksi saat memverifikasi range log.'
+    });
+  }
+}, [filterDateFrom, filterDateTo, selectedClient]);
 
   // Grouping inventory by table name
   const groupedInventory = useMemo(() => {
