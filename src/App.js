@@ -972,7 +972,7 @@ function Dashboard({ onLogout }) {
   const [recentLogs, setRecentLogs] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [verifyStatuses, setVerifyStatuses] = useState({});
-  const [inventoryStatuses] = useState({});
+  const [inventoryStatuses, setInventoryStatuses] = useState({});
   const [selectedVerifyResult, setSelectedVerifyResult] = useState(null);
   const [totalLogsCount, setTotalLogsCount] = useState(0);
   const [isServerPaginated, setIsServerPaginated] = useState(false);
@@ -1217,79 +1217,79 @@ const handleVerifyLog = useCallback((logId) => {
     ? filteredLogs.length
     : (isFiltered ? filteredLogs.length : totalLogsCount);
 
-  // // Background verify — individual logs (Nonaktifkan dulu sampai endpoint baru siap)
-  // useEffect(() => {
-  //   paginatedLogs.forEach(log => {
-  //     if (!log || !log.log_id) return;
-  //     const logId = log.log_id;
-  //     const currentStatus = verifyStatusesRef.current[logId]?.status;
+  // Background verify — individual logs
+  useEffect(() => {
+    paginatedLogs.forEach(log => {
+      if (!log || !log.log_id) return;
+      const logId = log.log_id;
+      const currentStatus = verifyStatusesRef.current[logId]?.status;
 
-  //     // Skip if already success, pending, or permanently failed
-  //     if (
-  //       currentStatus === 'success' ||
-  //       currentStatus === 'pending' ||
-  //       currentStatus === 'loading' ||
-  //       currentStatus === 'failed_local' ||
-  //       currentStatus === 'failed_kafka' ||
-  //       currentStatus === 'failed_onchain'
-  //     ) {
-  //       return;
-  //     }
+      // Skip if already success, pending, or permanently failed
+      if (
+        currentStatus === 'success' ||
+        currentStatus === 'pending' ||
+        currentStatus === 'loading' ||
+        currentStatus === 'failed_local' ||
+        currentStatus === 'failed_kafka' ||
+        currentStatus === 'failed_onchain'
+      ) {
+        return;
+      }
 
-  //     setVerifyStatuses(prev => ({
-  //       ...prev,
-  //       [logId]: { status: 'loading' }
-  //     }));
+      setVerifyStatuses(prev => ({
+        ...prev,
+        [logId]: { status: 'loading' }
+      }));
 
-  //     api.get(`/dashboard/verify/${logId}`)
-  //       .then(res => {
-  //         setVerifyStatuses(prev => ({ ...prev, [logId]: res.data }));
-  //       })
-  //       .catch(err => {
-  //         setVerifyStatuses(prev => ({
-  //           ...prev,
-  //           [logId]: err.response?.data || { status: 'failed' }
-  //         }));
-  //       });
-  //   });
-  // }, [paginatedLogs]);
+      api.get(`/dashboard/verify/${logId}`, { params: { client_id: selectedClient } })
+        .then(res => {
+          setVerifyStatuses(prev => ({ ...prev, [logId]: res.data }));
+        })
+        .catch(err => {
+          setVerifyStatuses(prev => ({
+            ...prev,
+            [logId]: { ...(err.response?.data || {}), status: 'failed' }
+          }));
+        });
+    });
+  }, [paginatedLogs, selectedClient]);
 
-  // // Background verify — inventory chain (Nonaktifkan dulu sampai endpoint baru siap)
-  // useEffect(() => {
-  //   inventory.forEach(item => {
-  //     const resource = item?.source_table || item?.resource;
-  //     if (!item || !resource) return;
-  //     const currentStatus = inventoryStatusesRef.current[resource]?.status;
+  // Background verify — inventory chain
+  useEffect(() => {
+    inventory.forEach(item => {
+      const resource = item?.source_table || item?.resource;
+      if (!item || !resource) return;
+      const currentStatus = inventoryStatusesRef.current[resource]?.status;
 
-  //     // Skip if already success, pending, or permanently failed
-  //     if (
-  //       currentStatus === 'success' ||
-  //       currentStatus === 'pending' ||
-  //       currentStatus === 'loading' ||
-  //       currentStatus === 'failed_local' ||
-  //       currentStatus === 'failed_kafka' ||
-  //       currentStatus === 'failed_onchain'
-  //     ) {
-  //       return;
-  //     }
+      // Skip if already success, pending, or permanently failed
+      if (
+        currentStatus === 'success' ||
+        currentStatus === 'pending' ||
+        currentStatus === 'loading' ||
+        currentStatus === 'failed_local' ||
+        currentStatus === 'failed_kafka' ||
+        currentStatus === 'failed_onchain'
+      ) {
+        return;
+      }
 
-  //     setInventoryStatuses(prev => ({
-  //       ...prev,
-  //       [resource]: { status: 'loading' }
-  //     }));
+      setInventoryStatuses(prev => ({
+        ...prev,
+        [resource]: { status: 'loading' }
+      }));
 
-  //     api.get(`/dashboard/verify-resource/${encodeURIComponent(resource)}`)
-  //       .then(res => {
-  //         setInventoryStatuses(prev => ({ ...prev, [resource]: res.data }));
-  //       })
-  //       .catch(err => {
-  //         setInventoryStatuses(prev => ({
-  //           ...prev,
-  //           [resource]: err.response?.data || { status: 'failed' }
-  //         }));
-  //       });
-  //   });
-  // }, [inventory]);
+      api.get(`/dashboard/verify-resource/${encodeURIComponent(resource)}`, { params: { client_id: selectedClient } })
+        .then(res => {
+          setInventoryStatuses(prev => ({ ...prev, [resource]: res.data }));
+        })
+        .catch(err => {
+          setInventoryStatuses(prev => ({
+            ...prev,
+            [resource]: { ...(err.response?.data || {}), status: 'failed' }
+          }));
+        });
+    });
+  }, [inventory, selectedClient]);
 
   // Status badge for transaction table
   const renderStatusBadge = (log) => {
@@ -1324,9 +1324,9 @@ const handleVerifyLog = useCallback((logId) => {
     const v = inventoryStatuses[resource];
     if (!v || v.status === 'loading')
       return <span className="ac-chain-badge ac-status--checking">⏳</span>;
-    if (v.status === 'success')
+    if (v.chain_status === 'valid' || v.status === 'success')
       return <span className="ac-chain-badge ac-status--valid" style={{ cursor: 'pointer' }} onClick={() => setSelectedVerifyResult(v)}>✅ Valid</span>;
-    if (v.status === 'pending')
+    if (v.chain_status === 'pending' || v.status === 'pending')
       return <span className="ac-chain-badge ac-status--pending" style={{ cursor: 'pointer' }} onClick={() => setSelectedVerifyResult(v)}>⏱️ Pending</span>;
     return <span className="ac-chain-badge ac-status--invalid" style={{ cursor: 'pointer' }} onClick={() => setSelectedVerifyResult(v)}>🚨 Invalid</span>;
   };
@@ -1720,23 +1720,23 @@ const handleVerifyLog = useCallback((logId) => {
                 paddingTop: '12px',
                 borderTop: '1px solid var(--color-outline-variant)'
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--color-on-surface-variant)' }}>📅 From:</span>
                   <input
                     type="datetime-local"
                     className="ac-select"
-                    style={{ padding: '6px 10px', height: '36px', minWidth: '180px' }}
-                    value={tempDateFrom}
+                    style={{ padding: '6px 10px', height: '36px', minWidth: '200px' }}
+                    value={tempDateFrom || ''}
                     onChange={e => setTempDateFrom(e.target.value)}
                   />
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--color-on-surface-variant)' }}>📅 To:</span>
                   <input
                     type="datetime-local"
                     className="ac-select"
-                    style={{ padding: '6px 10px', height: '36px', minWidth: '180px' }}
-                    value={tempDateTo}
+                    style={{ padding: '6px 10px', height: '36px', minWidth: '200px' }}
+                    value={tempDateTo || ''}
                     onChange={e => setTempDateTo(e.target.value)}
                   />
                 </div>
