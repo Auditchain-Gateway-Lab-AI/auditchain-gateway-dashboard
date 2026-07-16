@@ -1962,32 +1962,34 @@ const handleVerifyLog = useCallback((logId) => {
               <div className="ac-table-wrap">
                 <table className="ac-table">
                   <thead>
-  <tr>
-    <th>Resource ID</th>
-    <th>Last Action</th>
-    <th>Last Updated</th>
-  </tr>
-</thead>
-<tbody>
-  {groupedInventory[selectedTableModal].map(item => {
-    const resource = item.source_table || item.resource || '';
-    const resourceID = resource.includes(':') ? resource.split(':')[1] : resource;
-    return (
-      <tr
-        key={resource}
-        onClick={() => { setSelectedResource(resource); setSelectedTableModal(null); }}
-      >
-        <td>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600 }}>
-            🔍 {resourceID}
-          </span>
-        </td>
-        <td><ActionBadge action={item.action} /></td>
-        <td className="ac-table__time">{formatTimestamp(item.timestamp)}</td>
-      </tr>
-    );
-  })}
-</tbody>
+                    <tr>
+                      <th>Resource ID</th>
+                      <th>Last Action</th>
+                      <th>Last Updated</th>
+                      <th>Chain Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {groupedInventory[selectedTableModal].map(item => {
+                      const resource = item.source_table || item.resource || '';
+                      const resourceID = resource.includes(':') ? resource.split(':')[1] : resource;
+                      return (
+                        <tr
+                          key={resource}
+                          onClick={() => { setSelectedResource(resource); setSelectedTableModal(null); }}
+                        >
+                          <td>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600 }}>
+                              🔍 {resourceID}
+                            </span>
+                          </td>
+                          <td><ActionBadge action={item.action} /></td>
+                          <td className="ac-table__time">{formatTimestamp(item.timestamp)}</td>
+                          <td onClick={(e) => e.stopPropagation()}>{renderInventoryBadge(item)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
                 </table>
               </div>
             </div>
@@ -2024,6 +2026,15 @@ function AdminDashboard({ onLogout }) {
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [newApiKey, setNewApiKey] = useState('');
   const [apiKeyCopied, setApiKeyCopied] = useState(false);
+
+  // Manage client users state
+  const [manageUsersClient, setManageUsersClient] = useState(null);
+  const [clientUsers, setClientUsers] = useState([]);
+  const [newUserUsername, setNewUserUsername] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserConfirmPassword, setNewUserConfirmPassword] = useState('');
+  const [userActionLoading, setUserActionLoading] = useState(false);
+  const [userActionError, setUserActionError] = useState('');
 
   // Client form state
   const [clientForm, setClientForm] = useState({
@@ -2064,6 +2075,102 @@ function AdminDashboard({ onLogout }) {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const handleToggleClientStatus = useCallback(async (client) => {
+    const actionText = client.status === 'active' ? 'deactivate' : 'activate';
+    if (!window.confirm(`Are you sure you want to ${actionText} the client "${client.company_name}"?`)) {
+      return;
+    }
+    try {
+      await api.patch(`/admin/clients/${client.id}/toggle`);
+      fetchData();
+    } catch (err) {
+      console.error("Gagal mengubah status klien:", err);
+      alert(err.response?.data?.error || "Failed to update client status.");
+    }
+  }, [fetchData]);
+
+  const handleDeleteClient = useCallback(async (client) => {
+    if (!window.confirm(`Are you sure you want to permanently delete the client "${client.company_name}"? All associated users will also lose access.`)) {
+      return;
+    }
+    try {
+      await api.delete(`/admin/clients/${client.id}`);
+      fetchData();
+    } catch (err) {
+      console.error("Gagal menghapus klien:", err);
+      alert(err.response?.data?.error || "Failed to delete client.");
+    }
+  }, [fetchData]);
+
+  const fetchClientUsers = useCallback(async (clientId) => {
+    try {
+      setUserActionLoading(true);
+      setUserActionError('');
+      const res = await api.get(`/admin/clients/${clientId}/users`);
+      setClientUsers(res.data || []);
+    } catch (err) {
+      console.error("Gagal load user klien:", err);
+      setUserActionError(err.response?.data?.error || "Failed to load client users.");
+    } finally {
+      setUserActionLoading(false);
+    }
+  }, []);
+
+  const handleManageUsers = useCallback((client) => {
+    setManageUsersClient(client);
+    setClientUsers([]);
+    setNewUserUsername('');
+    setNewUserPassword('');
+    setNewUserConfirmPassword('');
+    setUserActionError('');
+    fetchClientUsers(client.id);
+  }, [fetchClientUsers]);
+
+  const handleAddClientUser = useCallback(async (e) => {
+    e.preventDefault();
+    if (!manageUsersClient) return;
+    if (newUserPassword !== newUserConfirmPassword) {
+      setUserActionError("Passwords do not match.");
+      return;
+    }
+    try {
+      setUserActionLoading(true);
+      setUserActionError('');
+      await api.post(`/admin/clients/${manageUsersClient.id}/users`, {
+        username: newUserUsername,
+        password: newUserPassword
+      });
+      setNewUserUsername('');
+      setNewUserPassword('');
+      setNewUserConfirmPassword('');
+      fetchClientUsers(manageUsersClient.id);
+    } catch (err) {
+      console.error("Gagal menambahkan user klien:", err);
+      setUserActionError(err.response?.data?.error || "Failed to create user account.");
+    } finally {
+      setUserActionLoading(false);
+    }
+  }, [manageUsersClient, newUserUsername, newUserPassword, newUserConfirmPassword, fetchClientUsers]);
+
+  const handleDeleteClientUser = useCallback(async (user) => {
+    if (!window.confirm(`Are you sure you want to delete the user account "${user.username}"?`)) {
+      return;
+    }
+    try {
+      setUserActionLoading(true);
+      setUserActionError('');
+      await api.delete(`/admin/users/${user.id}`);
+      if (manageUsersClient) {
+        fetchClientUsers(manageUsersClient.id);
+      }
+    } catch (err) {
+      console.error("Gagal menghapus user klien:", err);
+      setUserActionError(err.response?.data?.error || "Failed to delete user account.");
+    } finally {
+      setUserActionLoading(false);
+    }
+  }, [manageUsersClient, fetchClientUsers]);
 
   const handleSubmitClient = useCallback(async (e) => {
     e.preventDefault();
@@ -2282,11 +2389,12 @@ function AdminDashboard({ onLogout }) {
                       <th>Status</th>
                       <th>Field Mapping</th>
                       <th>Registration Date</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {clients.length === 0 && (
-                      <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--color-outline)', padding: '32px 0' }}>No registered clients found.</td></tr>
+                      <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--color-outline)', padding: '32px 0' }}>No registered clients found.</td></tr>
                     )}
                     {clients.map(client => (
                       <tr key={client.id}>
@@ -2307,6 +2415,31 @@ function AdminDashboard({ onLogout }) {
                           </div>
                         </td>
                         <td className="ac-table__time">{formatTimestamp(client.created_at)}</td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                              className={`ac-btn-primary ${client.status === 'active' ? 'ac-btn-primary--warning' : 'ac-btn-primary--success'}`}
+                              style={{ padding: '6px 12px', fontSize: '11px', minWidth: '96px', justifyContent: 'center' }}
+                              onClick={() => handleToggleClientStatus(client)}
+                            >
+                              {client.status === 'active' ? '🚫 Block' : '✅ Activate'}
+                            </button>
+                            <button
+                              className="ac-btn-primary ac-btn-primary--danger"
+                              style={{ padding: '6px 12px', fontSize: '11px' }}
+                              onClick={() => handleDeleteClient(client)}
+                            >
+                              🗑️ Delete
+                            </button>
+                            <button
+                              className="ac-btn-primary"
+                              style={{ padding: '6px 12px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                              onClick={() => handleManageUsers(client)}
+                            >
+                              👥 Users
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -2544,6 +2677,141 @@ function AdminDashboard({ onLogout }) {
                   <button type="submit" className="ac-btn-primary">Add Configuration</button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== MODAL: KELOLA USER KLIEN ===== */}
+      {manageUsersClient && (
+        <div className="ac-modal-overlay" onClick={() => setManageUsersClient(null)}>
+          <div className="ac-modal" style={{ maxWidth: '800px', width: '90%' }} onClick={e => e.stopPropagation()}>
+            <div className="ac-modal__header">
+              <div>
+                <div className="ac-modal__title">👥 Manage Users: {manageUsersClient.company_name}</div>
+                <div className="ac-modal__subtitle">Add or remove auditor accounts for this client to access the gateway dashboard</div>
+              </div>
+              <button className="ac-modal__close" onClick={() => setManageUsersClient(null)}>×</button>
+            </div>
+            
+            <div className="ac-modal__body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', padding: '20px 24px' }}>
+              {/* Form Add User */}
+              <div style={{ borderRight: '1px solid var(--color-outline-variant)', paddingRight: '24px' }}>
+                <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-primary)', marginBottom: '16px' }}>Create New User Account</div>
+                
+                {userActionError && (
+                  <div style={{ 
+                    padding: '10px 14px', 
+                    borderRadius: 'var(--radius-sm)', 
+                    backgroundColor: 'rgba(186, 26, 26, 0.1)', 
+                    color: 'var(--color-error)', 
+                    fontSize: '12px', 
+                    fontWeight: 600,
+                    marginBottom: '16px'
+                  }}>
+                    ⚠️ {userActionError}
+                  </div>
+                )}
+                
+                <form onSubmit={handleAddClientUser}>
+                  <div className="ac-form-field" style={{ marginBottom: '12px' }}>
+                    <label className="ac-form-label">Username <span style={{ color: 'var(--color-error)' }}>*</span></label>
+                    <input 
+                      className="ac-form-input" 
+                      required 
+                      minLength={4}
+                      placeholder="e.g. auditor_senior"
+                      value={newUserUsername}
+                      onChange={e => setNewUserUsername(e.target.value)}
+                      disabled={userActionLoading}
+                    />
+                  </div>
+                  <div className="ac-form-field" style={{ marginBottom: '12px' }}>
+                    <label className="ac-form-label">Password <span style={{ color: 'var(--color-error)' }}>*</span></label>
+                    <input 
+                      className="ac-form-input" 
+                      type="password"
+                      required 
+                      minLength={6}
+                      placeholder="••••••"
+                      value={newUserPassword}
+                      onChange={e => setNewUserPassword(e.target.value)}
+                      disabled={userActionLoading}
+                    />
+                  </div>
+                  <div className="ac-form-field" style={{ marginBottom: '20px' }}>
+                    <label className="ac-form-label">Confirm Password <span style={{ color: 'var(--color-error)' }}>*</span></label>
+                    <input 
+                      className="ac-form-input" 
+                      type="password"
+                      required 
+                      minLength={6}
+                      placeholder="••••••"
+                      value={newUserConfirmPassword}
+                      onChange={e => setNewUserConfirmPassword(e.target.value)}
+                      disabled={userActionLoading}
+                    />
+                  </div>
+                  <button 
+                    type="submit" 
+                    className="ac-btn-primary" 
+                    style={{ width: '100%', justifyContent: 'center' }}
+                    disabled={userActionLoading}
+                  >
+                    {userActionLoading ? 'Saving...' : 'Add Account'}
+                  </button>
+                </form>
+              </div>
+
+              {/* List Users */}
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-on-surface)', marginBottom: '16px' }}>Registered Accounts</div>
+                {userActionLoading && clientUsers.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--color-outline)' }}>Loading user accounts...</div>
+                ) : (
+                  <div className="ac-table-wrap" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                    <table className="ac-table">
+                      <thead>
+                        <tr>
+                          <th>Username</th>
+                          <th>Role</th>
+                          <th style={{ textAlign: 'center' }}>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {clientUsers.length === 0 && (
+                          <tr>
+                            <td colSpan={3} style={{ textAlign: 'center', color: 'var(--color-outline)', padding: '24px 0', fontSize: '12px' }}>
+                              No user accounts registered.
+                            </td>
+                          </tr>
+                        )}
+                        {clientUsers.map(user => (
+                          <tr key={user.id}>
+                            <td>
+                              <div style={{ fontWeight: 600, fontSize: '13px' }}>{user.username}</div>
+                              <div style={{ fontSize: '10px', color: 'var(--color-outline)' }}>ID: {user.id.substring(0, 8)}...</div>
+                            </td>
+                            <td>
+                              <span className="ac-status ac-status--pending" style={{ fontSize: '10px', padding: '2px 6px' }}>{user.role}</span>
+                            </td>
+                            <td style={{ textAlign: 'center' }}>
+                              <button 
+                                className="ac-btn-primary ac-btn-primary--danger"
+                                style={{ padding: '4px 8px', fontSize: '11px' }}
+                                onClick={() => handleDeleteClientUser(user)}
+                                disabled={userActionLoading}
+                              >
+                                ❌ Delete
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

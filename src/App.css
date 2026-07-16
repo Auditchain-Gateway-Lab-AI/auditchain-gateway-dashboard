@@ -2724,6 +2724,18 @@
   box-shadow: 0 2px 8px rgba(0, 104, 89, 0.25) !important;
 }
 
+.ac-btn-primary--danger {
+  background: var(--color-error, #ba1a1a) !important;
+  box-shadow: 0 2px 8px rgba(186, 26, 26, 0.25) !important;
+  color: #fff !important;
+}
+
+.ac-btn-primary--warning {
+  background: #e68a00 !important;
+  box-shadow: 0 2px 8px rgba(230, 138, 0, 0.25) !important;
+  color: #fff !important;
+}
+
 /* ===== BUTTON: GHOST ACTION ===== */
 .ac-btn-ghost-action {
   display: inline-flex;
