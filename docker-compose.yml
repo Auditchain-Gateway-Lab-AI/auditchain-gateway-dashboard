@@ -20,4 +20,4 @@ services:
     container_name: auditchain-dashboard
     restart: always
     ports:
-      - "3000:80"
+      - "3001:80"
