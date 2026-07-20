@@ -1,0 +1,119 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #3b82f6;
+  --color-primary-container: #1d4ed8;
+  --color-background: #030712;
+  --color-surface: #0b1329;
+  --color-surface-container: #111827;
+  --color-surface-container-low: #090d16;
+  --color-surface-container-high: #1f2937;
+  --color-surface-container-highest: #374151;
+  --color-on-background: #f9fafb;
+  --color-on-surface: #f3f4f6;
+  --color-on-surface-variant: #9ca3af;
+  --color-outline-variant: #374151;
+  --color-accent-blue: #3b82f6;
+  --color-accent-cyan: #06b6d4;
+  --color-accent-emerald: #10b981;
+  --color-accent-crimson: #ef4444;
+  
+  --font-geist: "Geist", sans-serif;
+}
+
+body {
+  font-family: var(--font-geist);
+  background-color: var(--color-background);
+  color: var(--color-on-background);
+  overflow-x: hidden;
+}
+
+/* Lightweight Cyber Background Grid */
+.cyber-grid {
+  background-image: 
+    linear-gradient(to right, rgba(59, 130, 246, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(59, 130, 246, 0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Premium Card Utility - Pure background without heavy backdrop-filter blur calculations */
+.glass-card {
+  background: #0b1329;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+/* Neon glow hover effect - Clean CSS transform without layer explosion */
+.glow-card-blue, .glow-card-cyan, .glow-card-emerald {
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.glow-card-blue:hover {
+  border-color: rgba(59, 130, 246, 0.5);
+  box-shadow: 0 4px 20px -2px rgba(59, 130, 246, 0.3);
+  transform: translateY(-2px);
+}
+
+.glow-card-cyan:hover {
+  border-color: rgba(6, 182, 212, 0.5);
+  box-shadow: 0 4px 20px -2px rgba(6, 182, 212, 0.3);
+  transform: translateY(-2px);
+}
+
+.glow-card-emerald:hover {
+  border-color: rgba(16, 185, 129, 0.5);
+  box-shadow: 0 4px 20px -2px rgba(16, 185, 129, 0.3);
+  transform: translateY(-2px);
+}
+
+/* Laser scan animation - Fast GPU transform */
+@keyframes scan-gpu {
+  0%, 100% {
+    transform: translateY(-100%);
+  }
+  50% {
+    transform: translateY(0);
+  }
+}
+
+.animate-scan {
+  animation: scan-gpu 3s ease-in-out infinite;
+}
+
+/* Pulse glow button - Opacity pulse instead of expensive box-shadow repaint */
+.pulse-glow-btn {
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+}
+
+/* Smooth scroll behavior */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Table responsive scroll indicator */
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Mobile menu animation */
+@keyframes slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Floating WA button pulse ring */
+@keyframes wa-ring {
+  0% { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.4); }
+  70% { box-shadow: 0 0 0 12px rgba(37, 211, 102, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0); }
+}
+
+.wa-float {
+  animation: wa-ring 2s infinite;
+}
+
