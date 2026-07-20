@@ -875,17 +875,25 @@ function Login({ onLogin }) {
           </svg>
         </div>
 
-        {/* Brand */}
-        <div className="ac-login-hero__brand">
-          <div className="ac-login-hero__brand-icon">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-              <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" fill="rgba(255,255,255,0.9)" />
-              <path d="M10 17l-3-3 1.4-1.4 1.6 1.6 4.6-4.6 1.4 1.4L10 17z" fill="#4f46e5" />
+        {/* Top Navigation / Back to Home & Brand */}
+        <div>
+          <a
+            href={process.env.REACT_APP_LANDING_URL || 'http://localhost:5173'}
+            className="ac-login-back-link"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>
-          </div>
-          <div>
-            <div className="ac-login-hero__brand-name">Auditchain Gateway</div>
-            <div className="ac-login-hero__brand-sub">Gateway Portal</div>
+            Back to Home Page
+          </a>
+
+          {/* Brand */}
+          <div className="ac-login-hero__brand">
+            <img src="/logo/Group 1000009984.png" alt="Auditchain Gateway Logo" style={{ height: 42, width: 'auto', display: 'block', flexShrink: 0 }} />
+            <div>
+              <div className="ac-login-hero__brand-name">Auditchain Gateway</div>
+              <div className="ac-login-hero__brand-sub">Gateway Portal</div>
+            </div>
           </div>
         </div>
 
@@ -917,17 +925,23 @@ function Login({ onLogin }) {
       <div className="ac-login-form-panel">
         <div className="ac-login-card">
 
+          {/* Back to Home Page link inside form card for mobile */}
+          <a
+            href={process.env.REACT_APP_LANDING_URL || 'http://localhost:5173'}
+            className="ac-login-card-back-link"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+            Back to Home Page
+          </a>
+
           {/* Mobile brand header */}
           <div className="ac-login-mobile-brand">
-            <div style={{ width: 40, height: 40, background: 'linear-gradient(135deg,#4f46e5,#06b6d4)', borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(79,70,229,.35)', flexShrink: 0 }}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" fill="rgba(255,255,255,.95)" />
-                <path d="M10 17l-3-3 1.4-1.4 1.6 1.6 4.6-4.6 1.4 1.4L10 17z" fill="#4f46e5" />
-              </svg>
-            </div>
+            <img src="/logo/Group 1000009984.png" alt="Auditchain Logo" style={{ height: 36, width: 'auto', display: 'block', flexShrink: 0 }} />
             <div>
               <div style={{ fontSize: 18, fontWeight: 800, color: '#0d1b2e', letterSpacing: '.02em' }}>Auditchain Gateway</div>
-              <div style={{ fontSize: 10, fontWeight: 600, color: '#4f46e5', letterSpacing: '.1em', textTransform: 'uppercase' }}>Gateway Portal</div>
+              <div style={{ fontSize: 10, fontWeight: 600, color: '#0077ce', letterSpacing: '.1em', textTransform: 'uppercase' }}>Gateway Portal</div>
             </div>
           </div>
 
@@ -1431,12 +1445,7 @@ function Dashboard({ onLogout }) {
           <button className="ac-topnav__menu-btn" onClick={() => setSidebarOpen(o => !o)}>
             <Icon name="menu" size={22} />
           </button>
-          <div className="ac-topnav__logo">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-              <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" fill="rgba(255,255,255,0.95)" />
-              <path d="M10 17l-3-3 1.4-1.4 1.6 1.6 4.6-4.6 1.4 1.4L10 17z" fill="#0077ce" />
-            </svg>
-          </div>
+          <img src="/logo/Group 1000009984.png" alt="Auditchain Logo" style={{ height: 36, width: 'auto', display: 'block', flexShrink: 0 }} />
           <div>
             <div className="ac-topnav__brand-name">Auditchain Gateway</div>
             <div className="ac-topnav__brand-sub">Gateway Portal</div>
@@ -2250,12 +2259,7 @@ function AdminDashboard({ onLogout }) {
           <button className="ac-topnav__menu-btn" onClick={() => setSidebarOpen(o => !o)}>
             <Icon name="menu" size={22} />
           </button>
-          <div className="ac-topnav__logo">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-              <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" fill="rgba(255,255,255,0.95)" />
-              <path d="M10 17l-3-3 1.4-1.4 1.6 1.6 4.6-4.6 1.4 1.4L10 17z" fill="#0077ce" />
-            </svg>
-          </div>
+          <img src="/logo/Group 1000009984.png" alt="Auditchain Logo" style={{ height: 36, width: 'auto', display: 'block', flexShrink: 0 }} />
           <div>
             <div className="ac-topnav__brand-name">Auditchain Gateway</div>
             <div className="ac-topnav__brand-sub ac-admin-portal-label">Admin Portal</div>

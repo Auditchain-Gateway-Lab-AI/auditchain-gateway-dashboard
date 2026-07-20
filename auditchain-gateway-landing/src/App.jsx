@@ -420,7 +420,7 @@ curl -X POST https://gateway.auditchain.io/v1/logs \\
             <img
               alt="Auditchain Logo"
               className="h-9 w-auto hover:scale-105 transition-transform"
-              src="/logo/Mask group.png"
+              src="/logo/Group 1000009984.png"
             />
             <div className="flex flex-col">
               <span className="text-lg font-bold tracking-tight text-white flex items-center gap-1.5">
@@ -997,7 +997,7 @@ curl -X POST https://gateway.auditchain.io/v1/logs \\
       <footer className="bg-surface-container-low border-t border-outline-variant py-10 md:py-12 px-5 md:px-12">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6 border-b border-outline-variant pb-8 mb-8">
           <div className="flex items-center gap-2.5">
-            <img alt="Auditchain Logo" className="h-8 w-auto" src="/logo/Mask group.png" />
+            <img alt="Auditchain Logo" className="h-8 w-auto" src="/logo/Group 1000009984.png" />
             <span className="font-bold text-white text-base tracking-tight">Auditchain Gateway</span>
           </div>
           <div className="flex flex-wrap justify-center gap-6 text-xs font-semibold text-on-surface-variant">
