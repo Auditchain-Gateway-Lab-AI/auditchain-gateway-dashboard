@@ -1,8 +1,9 @@
 // src/App.js
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, Link } from 'react-router-dom';
 import api from './api';
 import './App.css';
+import LandingPage from './LandingPage';
 
 // JWT payload parser helper
 const parseJwt = (token) => {
@@ -877,15 +878,15 @@ function Login({ onLogin }) {
 
         {/* Top Navigation / Back to Home & Brand */}
         <div>
-          <a
-            href={process.env.REACT_APP_LANDING_URL || 'http://localhost:5173'}
+          <Link
+            to="/"
             className="ac-login-back-link"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>
             Back to Home Page
-          </a>
+          </Link>
 
           {/* Brand */}
           <div className="ac-login-hero__brand">
@@ -926,15 +927,15 @@ function Login({ onLogin }) {
         <div className="ac-login-card">
 
           {/* Back to Home Page link inside form card for mobile */}
-          <a
-            href={process.env.REACT_APP_LANDING_URL || 'http://localhost:5173'}
+          <Link
+            to="/"
             className="ac-login-card-back-link"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>
             Back to Home Page
-          </a>
+          </Link>
 
           {/* Mobile brand header */}
           <div className="ac-login-mobile-brand">
@@ -2848,10 +2849,11 @@ function App() {
   return (
     <Router>
       <Routes>
+        <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={!isAuthenticated ? <Login onLogin={setIsAuthenticated} /> : <Navigate to={isAdmin ? "/admin" : "/dashboard"} />} />
         <Route path="/dashboard" element={isAuthenticated ? <Dashboard onLogout={handleLogout} /> : <Navigate to="/login" />} />
         <Route path="/admin" element={isAuthenticated && isAdmin ? <AdminDashboard onLogout={handleLogout} /> : <Navigate to="/dashboard" />} />
-        <Route path="*" element={<Navigate to={isAuthenticated ? (isAdmin ? "/admin" : "/dashboard") : "/login"} />} />
+        <Route path="*" element={<Navigate to={isAuthenticated ? (isAdmin ? "/admin" : "/dashboard") : "/"} />} />
       </Routes>
     </Router>
   );
