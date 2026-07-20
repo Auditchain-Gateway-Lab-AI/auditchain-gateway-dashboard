@@ -439,7 +439,7 @@ function VerificationDetail({ result, onClose }) {
           <div style={{ fontSize: '13px', fontWeight: '700', marginBottom: '8px', color: 'var(--color-on-surface)' }}>
             Log Items checked ({result.results?.length || 0}):
           </div>
-          
+
           <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--color-outline-variant)', borderRadius: 'var(--radius-sm)' }}>
             <table className="ac-table" style={{ fontSize: '12px' }}>
               <thead>
@@ -461,7 +461,7 @@ function VerificationDetail({ result, onClose }) {
                   result.results.map((item, idx) => {
                     const statusClass = item.verify_status === 'valid' ? 'ac-status--valid'
                       : item.verify_status === 'pending' ? 'ac-status--pending'
-                      : 'ac-status--invalid';
+                        : 'ac-status--invalid';
                     return (
                       <tr key={idx}>
                         <td style={{ padding: '6px 10px', fontSize: '11px' }}>{formatTimestamp(item.timestamp)}</td>
@@ -677,33 +677,33 @@ function ResourceDetailModal({ resource, onClose }) {
   });
 
   const chainChip = () => {
-  if (!chainStatus) return null;
-  const cls = chainStatus.chain_status === 'valid' ? 'ac-status--valid'
-    : chainStatus.chain_status === 'pending' ? 'ac-status--pending'
-      : chainStatus.chain_status === 'unreachable' ? 'ac-status--pending'
-        : 'ac-status--invalid';
-  const label = chainStatus.chain_status === 'valid' ? '✅ Valid Chain'
-    : chainStatus.chain_status === 'pending' ? '⏱️ Pending'
-      : chainStatus.chain_status === 'unreachable' ? '⚠️ Unreachable'
-        : '🚨 Tampered';
+    if (!chainStatus) return null;
+    const cls = chainStatus.chain_status === 'valid' ? 'ac-status--valid'
+      : chainStatus.chain_status === 'pending' ? 'ac-status--pending'
+        : chainStatus.chain_status === 'unreachable' ? 'ac-status--pending'
+          : 'ac-status--invalid';
+    const label = chainStatus.chain_status === 'valid' ? '✅ Valid Chain'
+      : chainStatus.chain_status === 'pending' ? '⏱️ Pending'
+        : chainStatus.chain_status === 'unreachable' ? '⚠️ Unreachable'
+          : '🚨 Tampered';
 
-  // chain_issues berisi "category:log_id" — ambil kategorinya saja untuk
-  // ringkasan tooltip, log_id sudah kelihatan di kartu log masing-masing.
-  const issueLabels = {
-    client_mismatch: 'Client data no longer matches latest log',
-    log_integrity_failed: 'One or more logs failed integrity check',
+    // chain_issues berisi "category:log_id" — ambil kategorinya saja untuk
+    // ringkasan tooltip, log_id sudah kelihatan di kartu log masing-masing.
+    const issueLabels = {
+      client_mismatch: 'Client data no longer matches latest log',
+      log_integrity_failed: 'One or more logs failed integrity check',
+    };
+    const uniqueCategories = [...new Set(
+      (chainStatus.chain_issues || []).map(issue => issue.split(':')[0])
+    )];
+    const tooltip = uniqueCategories.map(cat => issueLabels[cat] || cat).join(' • ');
+
+    return (
+      <span className={`ac-status ${cls}`} title={tooltip || undefined}>
+        {label}
+      </span>
+    );
   };
-  const uniqueCategories = [...new Set(
-    (chainStatus.chain_issues || []).map(issue => issue.split(':')[0])
-  )];
-  const tooltip = uniqueCategories.map(cat => issueLabels[cat] || cat).join(' • ');
-
-  return (
-    <span className={`ac-status ${cls}`} title={tooltip || undefined}>
-      {label}
-    </span>
-  );
-};
 
   return (
     <div className="ac-modal-overlay" onClick={onClose}>
@@ -740,68 +740,67 @@ function ResourceDetailModal({ resource, onClose }) {
             </div>
           ) : (
             resourceLogs.map((log, idx) => {
-  const ascIdx = sortedAsc.findIndex(l => l.log_id === log.log_id);
-  const prevLog = ascIdx > 0 ? sortedAsc[ascIdx - 1] : null;
-  const isFirst = idx === 0;
-  const logStatus = logStatusMap[log.log_id];
+              const ascIdx = sortedAsc.findIndex(l => l.log_id === log.log_id);
+              const prevLog = ascIdx > 0 ? sortedAsc[ascIdx - 1] : null;
+              const isFirst = idx === 0;
+              const logStatus = logStatusMap[log.log_id];
 
-  // Cek apakah log ini disebut spesifik di chain_issues (format "category:log_id")
-  const relatedIssues = (chainStatus?.chain_issues || [])
-    .filter(issue => issue.endsWith(`:${log.log_id}`))
-    .map(issue => issue.split(':')[0]);
+              // Cek apakah log ini disebut spesifik di chain_issues (format "category:log_id")
+              const relatedIssues = (chainStatus?.chain_issues || [])
+                .filter(issue => issue.endsWith(`:${log.log_id}`))
+                .map(issue => issue.split(':')[0]);
 
-  return (
-    <div
-      key={log.log_id}
-      className={`ac-log-card ${isFirst ? 'ac-log-card--latest' : ''}`}
-    >
-      <div className={`ac-log-card__header ${isFirst ? 'ac-log-card__header--latest' : 'ac-log-card__header--normal'}`}>
-        <span className="ac-log-card__time">
-          {formatTimestamp(log.timestamp)}
-        </span>
-        <ActionBadge action={log.action} />
-        <span className="ac-log-card__actor">👤 {log.actor}</span>
-        <span className="ac-log-card__source">📡 {log.source_system}</span>
-        {logStatus && (
-          <span
-            className={`ac-chain-badge ${
-              logStatus.integrity_status === 'valid' ? 'ac-status--valid'
-              : logStatus.integrity_status === 'pending' ? 'ac-status--pending'
-              : 'ac-status--invalid'
-            }`}
-            title={logStatus.is_latest ? `Agent: ${logStatus.agent_status}` : 'Riwayat historis — tidak dibandingkan ke Agent'}
-          >
-            {logStatus.integrity_status}
-          </span>
-        )}
-        {relatedIssues.includes('client_mismatch') && (
-          <span className="ac-chain-badge ac-status--invalid" title="Data live klien tidak cocok dengan log ini">
-            🔌 Client Mismatch
-          </span>
-        )}
-        {relatedIssues.includes('log_integrity_failed') && (
-          <span className="ac-chain-badge ac-status--invalid" title="Log ini gagal verifikasi integritas (rehash/Merkle)">
-            🔓 Integrity Failed
-          </span>
-        )}
-        {isFirst && <span className="ac-log-card__latest-chip">● Latest</span>}
-      </div>
+              return (
+                <div
+                  key={log.log_id}
+                  className={`ac-log-card ${isFirst ? 'ac-log-card--latest' : ''}`}
+                >
+                  <div className={`ac-log-card__header ${isFirst ? 'ac-log-card__header--latest' : 'ac-log-card__header--normal'}`}>
+                    <span className="ac-log-card__time">
+                      {formatTimestamp(log.timestamp)}
+                    </span>
+                    <ActionBadge action={log.action} />
+                    <span className="ac-log-card__actor">👤 {log.actor}</span>
+                    <span className="ac-log-card__source">📡 {log.source_system}</span>
+                    {logStatus && (
+                      <span
+                        className={`ac-chain-badge ${logStatus.integrity_status === 'valid' ? 'ac-status--valid'
+                            : logStatus.integrity_status === 'pending' ? 'ac-status--pending'
+                              : 'ac-status--invalid'
+                          }`}
+                        title={logStatus.is_latest ? `Agent: ${logStatus.agent_status}` : 'Riwayat historis — tidak dibandingkan ke Agent'}
+                      >
+                        {logStatus.integrity_status}
+                      </span>
+                    )}
+                    {relatedIssues.includes('client_mismatch') && (
+                      <span className="ac-chain-badge ac-status--invalid" title="Data live klien tidak cocok dengan log ini">
+                        🔌 Client Mismatch
+                      </span>
+                    )}
+                    {relatedIssues.includes('log_integrity_failed') && (
+                      <span className="ac-chain-badge ac-status--invalid" title="Log ini gagal verifikasi integritas (rehash/Merkle)">
+                        🔓 Integrity Failed
+                      </span>
+                    )}
+                    {isFirst && <span className="ac-log-card__latest-chip">● Latest</span>}
+                  </div>
 
-      <div className="ac-log-card__body">
-        <div className="ac-log-card__section-label">
-          {log.action === 'INSERT' ? 'New Data'
-            : log.action === 'DELETE' ? 'Deleted Data'
-              : 'Changes (compared to previous log)'}
-        </div>
-        <SnapshotViewer currentLog={log} previousLog={prevLog} />
-      </div>
+                  <div className="ac-log-card__body">
+                    <div className="ac-log-card__section-label">
+                      {log.action === 'INSERT' ? 'New Data'
+                        : log.action === 'DELETE' ? 'Deleted Data'
+                          : 'Changes (compared to previous log)'}
+                    </div>
+                    <SnapshotViewer currentLog={log} previousLog={prevLog} />
+                  </div>
 
-      <div className="ac-log-card__hash">
-        <code className="ac-log-card__hash-code">🔑 {log.hash_value}</code>
-      </div>
-    </div>
-  );
-})
+                  <div className="ac-log-card__hash">
+                    <code className="ac-log-card__hash-code">🔑 {log.hash_value}</code>
+                  </div>
+                </div>
+              );
+            })
           )}
         </div>
       </div>
@@ -878,7 +877,12 @@ function Login({ onLogin }) {
 
         {/* Brand */}
         <div className="ac-login-hero__brand">
-          <img src="/logo/Group 1000009984.png" alt="Auditchain Logo" style={{ height: 36, width: 'auto', display: 'block', marginRight: 10 }} />
+          <div className="ac-login-hero__brand-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+              <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" fill="rgba(255,255,255,0.9)" />
+              <path d="M10 17l-3-3 1.4-1.4 1.6 1.6 4.6-4.6 1.4 1.4L10 17z" fill="#4f46e5" />
+            </svg>
+          </div>
           <div>
             <div className="ac-login-hero__brand-name">Auditchain Gateway</div>
             <div className="ac-login-hero__brand-sub">Gateway Portal</div>
@@ -915,7 +919,12 @@ function Login({ onLogin }) {
 
           {/* Mobile brand header */}
           <div className="ac-login-mobile-brand">
-            <img src="/logo/Group 1000009984.png" alt="Auditchain Logo" style={{ height: 36, width: 'auto', display: 'block', marginRight: 10 }} />
+            <div style={{ width: 40, height: 40, background: 'linear-gradient(135deg,#4f46e5,#06b6d4)', borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(79,70,229,.35)', flexShrink: 0 }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" fill="rgba(255,255,255,.95)" />
+                <path d="M10 17l-3-3 1.4-1.4 1.6 1.6 4.6-4.6 1.4 1.4L10 17z" fill="#4f46e5" />
+              </svg>
+            </div>
             <div>
               <div style={{ fontSize: 18, fontWeight: 800, color: '#0d1b2e', letterSpacing: '.02em' }}>Auditchain Gateway</div>
               <div style={{ fontSize: 10, fontWeight: 600, color: '#4f46e5', letterSpacing: '.1em', textTransform: 'uppercase' }}>Gateway Portal</div>
@@ -1090,10 +1099,10 @@ function Dashboard({ onLogout }) {
         if (selectedClient) {
           params.client_id = selectedClient;
         }
-        
+
         // Hanya aktifkan jika kedua filter tanggal (From dan To) terisi
         const isDateFilterActive = !!(filterDateFrom && filterDateTo);
-        
+
         let statsRes, logsRes, invRes;
 
         if (isDateFilterActive) {
@@ -1114,13 +1123,13 @@ function Dashboard({ onLogout }) {
           ]);
           logsRes = { data: [] };
         }
-        
+
         setStats(statsRes.data);
-        
+
         let logsArray = [];
         let serverTotal = 0;
         let serverPaginated = false;
-        
+
         if (Array.isArray(logsRes.data)) {
           logsArray = logsRes.data;
           serverTotal = logsRes.data.length;
@@ -1130,7 +1139,7 @@ function Dashboard({ onLogout }) {
           serverTotal = logsRes.data.pagination?.total_items ?? logsRes.data.data.length;
           serverPaginated = true;
         }
-        
+
         setRecentLogs(logsArray);
         setTotalLogsCount(serverTotal);
         setIsServerPaginated(serverPaginated);
@@ -1145,80 +1154,80 @@ function Dashboard({ onLogout }) {
   }, [onLogout, currentPage, rowsPerPage, selectedClient, filterDateFrom, filterDateTo]);
 
   // Verifikasi satu log SECARA ON-DEMAND — dipicu klik tombol, bukan lagi
-// otomatis untuk setiap baris. Endpoint /dashboard/verify/:log_id melakukan
-// rehash + query Fabric, jadi sengaja hanya dijalankan saat user benar-benar
-// minta, bukan setiap 5 detik siklus polling tabel.
-const handleVerifyLog = useCallback((logId) => {
-  setVerifyStatuses(prev => ({
-    ...prev,
-    [logId]: { status: 'loading' }
-  }));
+  // otomatis untuk setiap baris. Endpoint /dashboard/verify/:log_id melakukan
+  // rehash + query Fabric, jadi sengaja hanya dijalankan saat user benar-benar
+  // minta, bukan setiap 5 detik siklus polling tabel.
+  const handleVerifyLog = useCallback((logId) => {
+    setVerifyStatuses(prev => ({
+      ...prev,
+      [logId]: { status: 'loading' }
+    }));
 
-  api.get(`/dashboard/verify/${logId}`)
-    .then(res => {
-      setVerifyStatuses(prev => ({ ...prev, [logId]: res.data }));
-      setSelectedVerifyResult(res.data);
-    })
-    .catch(err => {
-      const data = err.response?.data || { status: 'failed', message: 'Gagal menghubungi server verifikasi.' };
-      setVerifyStatuses(prev => ({ ...prev, [logId]: data }));
-      setSelectedVerifyResult(data);
-    });
-}, []);
+    api.get(`/dashboard/verify/${logId}`)
+      .then(res => {
+        setVerifyStatuses(prev => ({ ...prev, [logId]: res.data }));
+        setSelectedVerifyResult(res.data);
+      })
+      .catch(err => {
+        const data = err.response?.data || { status: 'failed', message: 'Gagal menghubungi server verifikasi.' };
+        setVerifyStatuses(prev => ({ ...prev, [logId]: data }));
+        setSelectedVerifyResult(data);
+      });
+  }, []);
   // Verify range using backend API
   const handleVerifyRange = useCallback(async () => {
-  if (!filterDateFrom || !filterDateTo) return;
-  try {
-    const fromISO = new Date(filterDateFrom).toISOString();
-    const toISO = new Date(filterDateTo).toISOString();
+    if (!filterDateFrom || !filterDateTo) return;
+    try {
+      const fromISO = new Date(filterDateFrom).toISOString();
+      const toISO = new Date(filterDateTo).toISOString();
 
-    setSelectedVerifyResult({ status: 'loading' });
+      setSelectedVerifyResult({ status: 'loading' });
 
-    const params = {
-      from: fromISO,
-      to: toISO
-    };
-    if (selectedClient) {
-      params.client_id = selectedClient;
-    }
+      const params = {
+        from: fromISO,
+        to: toISO
+      };
+      if (selectedClient) {
+        params.client_id = selectedClient;
+      }
 
-    const res = await api.get('/dashboard/verify-range', { params });
-    const results = res.data.results || [];
+      const res = await api.get('/dashboard/verify-range', { params });
+      const results = res.data.results || [];
 
-    // Tulis balik hasil per-log ke verifyStatuses supaya kolom Verification
-    // di tabel utama ikut ter-update — bukan cuma tampil di panel ringkasan
-    // range di atas. Ini yang membuat Verify Range terasa sebagai "verify
-    // banyak baris sekaligus", bukan laporan terpisah yang tidak nyambung
-    // ke tabel.
-    setVerifyStatuses(prev => {
-      const next = { ...prev };
-      results.forEach(item => {
-        next[item.log_id] = mapRangeItemToVerifyStatus(item);
+      // Tulis balik hasil per-log ke verifyStatuses supaya kolom Verification
+      // di tabel utama ikut ter-update — bukan cuma tampil di panel ringkasan
+      // range di atas. Ini yang membuat Verify Range terasa sebagai "verify
+      // banyak baris sekaligus", bukan laporan terpisah yang tidak nyambung
+      // ke tabel.
+      setVerifyStatuses(prev => {
+        const next = { ...prev };
+        results.forEach(item => {
+          next[item.log_id] = mapRangeItemToVerifyStatus(item);
+        });
+        return next;
       });
-      return next;
-    });
 
-    setSelectedVerifyResult({
-      range: { from: filterDateFrom, to: filterDateTo },
-      summary: res.data.summary || {
-        total: results.length,
-        valid: results.filter(r => r.verify_status === 'success').length,
-        invalid: results.filter(r => r.verify_status === 'tampered' || r.verify_status === 'failed_local' || r.verify_status === 'failed_onchain').length,
-        pending: results.filter(r => r.verify_status === 'pending').length
-      },
-      results
-    });
-  } catch (err) {
-    console.error("Gagal verifikasi range:", err);
-    setSelectedVerifyResult({
-      range: { from: filterDateFrom, to: filterDateTo },
-      summary: { total: 0, valid: 0, invalid: 0, pending: 0 },
-      results: [],
-      status: 'failed_local',
-      message: err.response?.data?.error || 'Kesalahan koneksi saat memverifikasi range log.'
-    });
-  }
-}, [filterDateFrom, filterDateTo, selectedClient]);
+      setSelectedVerifyResult({
+        range: { from: filterDateFrom, to: filterDateTo },
+        summary: res.data.summary || {
+          total: results.length,
+          valid: results.filter(r => r.verify_status === 'success').length,
+          invalid: results.filter(r => r.verify_status === 'tampered' || r.verify_status === 'failed_local' || r.verify_status === 'failed_onchain').length,
+          pending: results.filter(r => r.verify_status === 'pending').length
+        },
+        results
+      });
+    } catch (err) {
+      console.error("Gagal verifikasi range:", err);
+      setSelectedVerifyResult({
+        range: { from: filterDateFrom, to: filterDateTo },
+        summary: { total: 0, valid: 0, invalid: 0, pending: 0 },
+        results: [],
+        status: 'failed_local',
+        message: err.response?.data?.error || 'Kesalahan koneksi saat memverifikasi range log.'
+      });
+    }
+  }, [filterDateFrom, filterDateTo, selectedClient]);
 
   // Grouping inventory by table name
   const groupedInventory = useMemo(() => {
@@ -1242,7 +1251,7 @@ const handleVerifyLog = useCallback((logId) => {
       (log?.metadata?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
       (log?.hash_value?.toLowerCase() || '').includes(searchQuery.toLowerCase());
     const matchAction = filterAction === 'ALL' || log?.action === filterAction;
-    
+
     let matchDate = true;
     if (log?.timestamp) {
       const logTime = new Date(log.timestamp).getTime();
@@ -1357,30 +1366,30 @@ const handleVerifyLog = useCallback((logId) => {
 
   // Status badge for transaction table
   const renderStatusBadge = (log) => {
-  if (!log || !log.log_id || !log.hash_value) return <span className="ac-status ac-status--invalid">🚨 INVALID</span>;
-  const v = verifyStatuses[log.log_id];
+    if (!log || !log.log_id || !log.hash_value) return <span className="ac-status ac-status--invalid">🚨 INVALID</span>;
+    const v = verifyStatuses[log.log_id];
 
-  // Belum pernah diverifikasi sama sekali — tampilkan tombol, bukan status.
-  if (!v) {
-    return (
-      <button
-        className="ac-btn-ghost"
-        style={{ padding: '4px 10px', fontSize: '11px' }}
-        onClick={(e) => { e.stopPropagation(); handleVerifyLog(log.log_id); }}
-      >
-        🔍 Verify
-      </button>
-    );
-  }
+    // Belum pernah diverifikasi sama sekali — tampilkan tombol, bukan status.
+    if (!v) {
+      return (
+        <button
+          className="ac-btn-ghost"
+          style={{ padding: '4px 10px', fontSize: '11px' }}
+          onClick={(e) => { e.stopPropagation(); handleVerifyLog(log.log_id); }}
+        >
+          🔍 Verify
+        </button>
+      );
+    }
 
-  if (v.status === 'loading')
-    return <span className="ac-status ac-status--checking">⏳ Memeriksa...</span>;
-  if (v.status === 'success')
-    return <span className="ac-status ac-status--valid" onClick={() => setSelectedVerifyResult(v)}>✅ VALID</span>;
-  if (v.status === 'pending')
-    return <span className="ac-status ac-status--pending" onClick={() => setSelectedVerifyResult(v)}>⏱️ PENDING</span>;
-  return <span className="ac-status ac-status--invalid" onClick={() => setSelectedVerifyResult(v)}>🚨 INVALID</span>;
-};
+    if (v.status === 'loading')
+      return <span className="ac-status ac-status--checking">⏳ Memeriksa...</span>;
+    if (v.status === 'success')
+      return <span className="ac-status ac-status--valid" onClick={() => setSelectedVerifyResult(v)}>✅ VALID</span>;
+    if (v.status === 'pending')
+      return <span className="ac-status ac-status--pending" onClick={() => setSelectedVerifyResult(v)}>⏱️ PENDING</span>;
+    return <span className="ac-status ac-status--invalid" onClick={() => setSelectedVerifyResult(v)}>🚨 INVALID</span>;
+  };
 
   // Status badge for inventory
   const renderInventoryBadge = (item) => {
@@ -1422,7 +1431,12 @@ const handleVerifyLog = useCallback((logId) => {
           <button className="ac-topnav__menu-btn" onClick={() => setSidebarOpen(o => !o)}>
             <Icon name="menu" size={22} />
           </button>
-          <img src="/logo/Group 1000009984.png" alt="Auditchain Logo" style={{ height: 36, width: 'auto', display: 'block', marginRight: 10 }} />
+          <div className="ac-topnav__logo">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" fill="rgba(255,255,255,0.95)" />
+              <path d="M10 17l-3-3 1.4-1.4 1.6 1.6 4.6-4.6 1.4 1.4L10 17z" fill="#0077ce" />
+            </svg>
+          </div>
           <div>
             <div className="ac-topnav__brand-name">Auditchain Gateway</div>
             <div className="ac-topnav__brand-sub">Gateway Portal</div>
@@ -1617,320 +1631,320 @@ const handleVerifyLog = useCallback((logId) => {
           )}
 
           <>
-              {/* Hero Section */}
-              <section className="ac-hero">
-                <div className="ac-hero__pattern" />
-                <div className="ac-hero__content">
-                  <div className="ac-hero__left">
-                <h1 className="ac-hero__title">
-                  🛡️ Auditchain Gateway Dashboard
-                </h1>
-                <p className="ac-hero__subtitle">
-                  Monitor audit logs and verify blockchain transactions in real-time.
-                  Ensure the highest data integrity across the database infrastructure network.
-                </p>
-              </div>
-            </div>
-          </section>
-
-          {/* Stats Grid */}
-          <section className="ac-stats-grid">
-            <div className="ac-stat-card">
-              <div className="ac-stat-card__icon ac-stat-card__icon--blue">
-                <Icon name="list" size={26} />
-              </div>
-              <div>
-                <div className="ac-stat-card__label">Total Logs</div>
-                <div className="ac-stat-card__value">{stats.total_logs.toLocaleString()}</div>
-                <div className="ac-stat-card__sub ac-stat-card__sub--blue">All entries tracked</div>
-              </div>
-            </div>
-            <div className="ac-stat-card">
-              <div className="ac-stat-card__icon ac-stat-card__icon--amber">
-                <Icon name="clock" size={26} />
-              </div>
-              <div>
-                <div className="ac-stat-card__label">Pending Verification</div>
-                <div className="ac-stat-card__value">{stats.pending_logs.toLocaleString()}</div>
-                <div className="ac-stat-card__sub ac-stat-card__sub--amber">
-                  {stats.pending_logs > 0 ? 'Requires attention' : 'All clear'}
+            {/* Hero Section */}
+            <section className="ac-hero">
+              <div className="ac-hero__pattern" />
+              <div className="ac-hero__content">
+                <div className="ac-hero__left">
+                  <h1 className="ac-hero__title">
+                    🛡️ Auditchain Gateway Dashboard
+                  </h1>
+                  <p className="ac-hero__subtitle">
+                    Monitor audit logs and verify blockchain transactions in real-time.
+                    Ensure the highest data integrity across the database infrastructure network.
+                  </p>
                 </div>
               </div>
-            </div>
-            <div className="ac-stat-card">
-              <div className="ac-stat-card__icon ac-stat-card__icon--teal">
-                <Icon name="link" size={26} />
-              </div>
-              <div>
-                <div className="ac-stat-card__label">Anchored (Blockchain)</div>
-                <div className="ac-stat-card__value">{stats.anchored_logs.toLocaleString()}</div>
-                <div className="ac-stat-card__sub ac-stat-card__sub--teal">Successfully secured</div>
-              </div>
-            </div>
-          </section>
+            </section>
 
-          {/* Verification Detail (inline, dismissed by × button) */}
-          {selectedVerifyResult && (
-            <VerificationDetail
-              result={selectedVerifyResult}
-              onClose={() => setSelectedVerifyResult(null)}
-            />
-          )}
-
-          {/* ===== DATA INVENTORY ===== */}
-          <section className="ac-card">
-            <div className="ac-card__header">
-              <div className="ac-card__header-left">
-                <span className="ac-card__icon">🗄️</span>
-                <span className="ac-card__title">Data Inventory</span>
+            {/* Stats Grid */}
+            <section className="ac-stats-grid">
+              <div className="ac-stat-card">
+                <div className="ac-stat-card__icon ac-stat-card__icon--blue">
+                  <Icon name="list" size={26} />
+                </div>
+                <div>
+                  <div className="ac-stat-card__label">Total Logs</div>
+                  <div className="ac-stat-card__value">{stats.total_logs.toLocaleString()}</div>
+                  <div className="ac-stat-card__sub ac-stat-card__sub--blue">All entries tracked</div>
+                </div>
               </div>
-              <span className="ac-card__subtitle">{tableNames.length} tables monitored — click to view records</span>
-            </div>
-            <div className="ac-table-wrap">
-              <table className="ac-table">
-                <thead>
-                  <tr>
-                    <th>Table Name</th>
-                    <th>Total Monitored Records</th>
-                    <th style={{ textAlign: 'right' }}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tableNames.length === 0 ? (
-                    <tr>
-                      <td colSpan={3}>
-                        <div className="ac-empty">
-                          <div className="ac-empty__icon">📦</div>
-                          No inventory data available.
-                        </div>
-                      </td>
-                    </tr>
-                  ) : tableNames.map(tableName => (
-                    <tr key={tableName} onClick={() => setSelectedTableModal(tableName)}>
-                      <td>
-                        <div className="ac-table__icon-cell">
-                          <div className="ac-table__row-icon">
-                            <Icon name="database" size={14} />
-                          </div>
-                          <strong>{tableName}</strong>
-                        </div>
-                      </td>
-                      <td>{groupedInventory[tableName].length.toLocaleString()} Records</td>
-                      <td style={{ textAlign: 'right' }}>
-                        <button className="ac-btn-ghost" onClick={e => { e.stopPropagation(); setSelectedTableModal(tableName); }}>
-                          View Rows
-                          <Icon name="chevronRight" size={13} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
+              <div className="ac-stat-card">
+                <div className="ac-stat-card__icon ac-stat-card__icon--amber">
+                  <Icon name="clock" size={26} />
+                </div>
+                <div>
+                  <div className="ac-stat-card__label">Pending Verification</div>
+                  <div className="ac-stat-card__value">{stats.pending_logs.toLocaleString()}</div>
+                  <div className="ac-stat-card__sub ac-stat-card__sub--amber">
+                    {stats.pending_logs > 0 ? 'Requires attention' : 'All clear'}
+                  </div>
+                </div>
+              </div>
+              <div className="ac-stat-card">
+                <div className="ac-stat-card__icon ac-stat-card__icon--teal">
+                  <Icon name="link" size={26} />
+                </div>
+                <div>
+                  <div className="ac-stat-card__label">Anchored (Blockchain)</div>
+                  <div className="ac-stat-card__value">{stats.anchored_logs.toLocaleString()}</div>
+                  <div className="ac-stat-card__sub ac-stat-card__sub--teal">Successfully secured</div>
+                </div>
+              </div>
+            </section>
 
-          {/* ===== AUDIT TRANSACTIONS ===== */}
-          <section className="ac-card">
-            <div className="ac-card__header" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '12px' }}>
+            {/* Verification Detail (inline, dismissed by × button) */}
+            {selectedVerifyResult && (
+              <VerificationDetail
+                result={selectedVerifyResult}
+                onClose={() => setSelectedVerifyResult(null)}
+              />
+            )}
+
+            {/* ===== DATA INVENTORY ===== */}
+            <section className="ac-card">
+              <div className="ac-card__header">
                 <div className="ac-card__header-left">
-                  <span className="ac-card__icon">📜</span>
-                  <span className="ac-card__title">All Transaction History</span>
+                  <span className="ac-card__icon">🗄️</span>
+                  <span className="ac-card__title">Data Inventory</span>
                 </div>
-                <div className="ac-toolbar">
-                  <div className="ac-search">
-                    <span className="ac-search__icon">
-                      <Icon name="search" size={15} />
-                    </span>
+                <span className="ac-card__subtitle">{tableNames.length} tables monitored — click to view records</span>
+              </div>
+              <div className="ac-table-wrap">
+                <table className="ac-table">
+                  <thead>
+                    <tr>
+                      <th>Table Name</th>
+                      <th>Total Monitored Records</th>
+                      <th style={{ textAlign: 'right' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tableNames.length === 0 ? (
+                      <tr>
+                        <td colSpan={3}>
+                          <div className="ac-empty">
+                            <div className="ac-empty__icon">📦</div>
+                            No inventory data available.
+                          </div>
+                        </td>
+                      </tr>
+                    ) : tableNames.map(tableName => (
+                      <tr key={tableName} onClick={() => setSelectedTableModal(tableName)}>
+                        <td>
+                          <div className="ac-table__icon-cell">
+                            <div className="ac-table__row-icon">
+                              <Icon name="database" size={14} />
+                            </div>
+                            <strong>{tableName}</strong>
+                          </div>
+                        </td>
+                        <td>{groupedInventory[tableName].length.toLocaleString()} Records</td>
+                        <td style={{ textAlign: 'right' }}>
+                          <button className="ac-btn-ghost" onClick={e => { e.stopPropagation(); setSelectedTableModal(tableName); }}>
+                            View Rows
+                            <Icon name="chevronRight" size={13} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            {/* ===== AUDIT TRANSACTIONS ===== */}
+            <section className="ac-card">
+              <div className="ac-card__header" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '12px' }}>
+                  <div className="ac-card__header-left">
+                    <span className="ac-card__icon">📜</span>
+                    <span className="ac-card__title">All Transaction History</span>
+                  </div>
+                  <div className="ac-toolbar">
+                    <div className="ac-search">
+                      <span className="ac-search__icon">
+                        <Icon name="search" size={15} />
+                      </span>
+                      <input
+                        type="text"
+                        className="ac-search__input"
+                        placeholder="Search Actor, Resource, Hash..."
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                      />
+                    </div>
+                    <select className="ac-select" value={filterAction} onChange={e => setFilterAction(e.target.value)}>
+                      <option value="ALL">All Actions</option>
+                      <option value="INSERT">INSERT</option>
+                      <option value="UPDATE">UPDATE</option>
+                      <option value="DELETE">DELETE</option>
+                    </select>
+                    <select className="ac-select" value={filterVerification} onChange={e => setFilterVerification(e.target.value)}>
+                      <option value="ALL">All Status</option>
+                      <option value="VALID">VALID</option>
+                      <option value="INVALID">INVALID</option>
+                    </select>
+                    <select className="ac-select" value={rowsPerPage} onChange={e => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}>
+                      <option value={5}>5 Rows</option>
+                      <option value={10}>10 Rows</option>
+                      <option value={20}>20 Rows</option>
+                      <option value={50}>50 Rows</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Date Filter Range Toolbar */}
+                <div style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '12px',
+                  alignItems: 'center',
+                  paddingTop: '12px',
+                  borderTop: '1px solid var(--color-outline-variant)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--color-on-surface-variant)' }}>📅 From:</span>
                     <input
-                      type="text"
-                      className="ac-search__input"
-                      placeholder="Search Actor, Resource, Hash..."
-                      value={searchQuery}
-                      onChange={e => setSearchQuery(e.target.value)}
+                      type="datetime-local"
+                      className="ac-select"
+                      style={{ padding: '6px 10px', height: '36px', minWidth: '200px' }}
+                      value={tempDateFrom || ''}
+                      onChange={e => setTempDateFrom(e.target.value)}
                     />
                   </div>
-                  <select className="ac-select" value={filterAction} onChange={e => setFilterAction(e.target.value)}>
-                    <option value="ALL">All Actions</option>
-                    <option value="INSERT">INSERT</option>
-                    <option value="UPDATE">UPDATE</option>
-                    <option value="DELETE">DELETE</option>
-                  </select>
-                  <select className="ac-select" value={filterVerification} onChange={e => setFilterVerification(e.target.value)}>
-                    <option value="ALL">All Status</option>
-                    <option value="VALID">VALID</option>
-                    <option value="INVALID">INVALID</option>
-                  </select>
-                  <select className="ac-select" value={rowsPerPage} onChange={e => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}>
-                    <option value={5}>5 Rows</option>
-                    <option value={10}>10 Rows</option>
-                    <option value={20}>20 Rows</option>
-                    <option value={50}>50 Rows</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Date Filter Range Toolbar */}
-              <div style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: '12px',
-                alignItems: 'center',
-                paddingTop: '12px',
-                borderTop: '1px solid var(--color-outline-variant)'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--color-on-surface-variant)' }}>📅 From:</span>
-                  <input
-                    type="datetime-local"
-                    className="ac-select"
-                    style={{ padding: '6px 10px', height: '36px', minWidth: '200px' }}
-                    value={tempDateFrom || ''}
-                    onChange={e => setTempDateFrom(e.target.value)}
-                  />
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--color-on-surface-variant)' }}>📅 To:</span>
-                  <input
-                    type="datetime-local"
-                    className="ac-select"
-                    style={{ padding: '6px 10px', height: '36px', minWidth: '200px' }}
-                    value={tempDateTo || ''}
-                    onChange={e => setTempDateTo(e.target.value)}
-                  />
-                </div>
-                <button
-                  className="ac-btn-primary"
-                  style={{ padding: '0 16px', height: '36px', minWidth: 'auto', fontSize: '13px' }}
-                  disabled={!tempDateFrom || !tempDateTo}
-                  onClick={() => {
-                    setFilterDateFrom(tempDateFrom);
-                    setFilterDateTo(tempDateTo);
-                    setCurrentPage(1);
-                  }}
-                >
-                  Apply Range
-                </button>
-                {(tempDateFrom || tempDateTo || filterDateFrom || filterDateTo) && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--color-on-surface-variant)' }}>📅 To:</span>
+                    <input
+                      type="datetime-local"
+                      className="ac-select"
+                      style={{ padding: '6px 10px', height: '36px', minWidth: '200px' }}
+                      value={tempDateTo || ''}
+                      onChange={e => setTempDateTo(e.target.value)}
+                    />
+                  </div>
                   <button
-                    className="ac-btn-ghost-action"
-                    style={{ padding: '0 12px', height: '36px', minWidth: 'auto', fontSize: '13px' }}
+                    className="ac-btn-primary"
+                    style={{ padding: '0 16px', height: '36px', minWidth: 'auto', fontSize: '13px' }}
+                    disabled={!tempDateFrom || !tempDateTo}
                     onClick={() => {
-                      setTempDateFrom('');
-                      setTempDateTo('');
-                      setFilterDateFrom('');
-                      setFilterDateTo('');
+                      setFilterDateFrom(tempDateFrom);
+                      setFilterDateTo(tempDateTo);
                       setCurrentPage(1);
                     }}
                   >
-                    Clear Range
+                    Apply Range
                   </button>
-                )}
-                {filterDateFrom && filterDateTo && (
-                  <button
-                    className="ac-btn-primary"
-                    style={{
-                      padding: '0 16px',
-                      height: '36px',
-                      minWidth: 'auto',
-                      fontSize: '13px',
-                      backgroundColor: '#2c3e50',
-                      border: 'none',
-                      marginLeft: 'auto'
-                    }}
-                    onClick={handleVerifyRange}
-                  >
-                    ⚡ Verify Range
-                  </button>
-                )}
+                  {(tempDateFrom || tempDateTo || filterDateFrom || filterDateTo) && (
+                    <button
+                      className="ac-btn-ghost-action"
+                      style={{ padding: '0 12px', height: '36px', minWidth: 'auto', fontSize: '13px' }}
+                      onClick={() => {
+                        setTempDateFrom('');
+                        setTempDateTo('');
+                        setFilterDateFrom('');
+                        setFilterDateTo('');
+                        setCurrentPage(1);
+                      }}
+                    >
+                      Clear Range
+                    </button>
+                  )}
+                  {filterDateFrom && filterDateTo && (
+                    <button
+                      className="ac-btn-primary"
+                      style={{
+                        padding: '0 16px',
+                        height: '36px',
+                        minWidth: 'auto',
+                        fontSize: '13px',
+                        backgroundColor: '#2c3e50',
+                        border: 'none',
+                        marginLeft: 'auto'
+                      }}
+                      onClick={handleVerifyRange}
+                    >
+                      ⚡ Verify Range
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
 
-            <div className="ac-table-wrap">
-              <table className="ac-table">
-                <thead>
-                  <tr>
-                    <th>Timestamp</th>
-                    <th>Actor</th>
-                    <th>Action</th>
-                    <th>Resource</th>
-                    <th>Metadata</th>
-                    <th>Source System</th>
-                    <th>Verification</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedLogs.length === 0 ? (
+              <div className="ac-table-wrap">
+                <table className="ac-table">
+                  <thead>
                     <tr>
-                      <td colSpan={7}>
-                        <div className="ac-empty">
-                          <div className="ac-empty__icon">📅</div>
-                          {!filterDateFrom || !filterDateTo ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                              <span style={{ fontWeight: '600', color: 'var(--color-on-surface)' }}>
-                                Please select a date range (From & To) to view transaction history
-                              </span>
-                              <span style={{ fontSize: '13px', color: 'var(--color-on-surface-variant)' }}>
-                                Transactions are not loaded automatically to ensure optimal performance.
-                              </span>
-                            </div>
-                          ) : (
-                            "No transactions match the selected filter."
-                          )}
-                        </div>
-                      </td>
+                      <th>Timestamp</th>
+                      <th>Actor</th>
+                      <th>Action</th>
+                      <th>Resource</th>
+                      <th>Metadata</th>
+                      <th>Source System</th>
+                      <th>Verification</th>
                     </tr>
-                  ) : paginatedLogs.map(log => (
-                    <tr key={log.log_id} onClick={() => setSelectedResource(log.source_table || log.resource)}>
-                      <td className="ac-table__time">{formatTimestamp(log.timestamp)}</td>
-                      <td className="ac-table__actor">{log.actor}</td>
-                      <td><ActionBadge action={log.action} /></td>
-                      <td className="ac-table__mono">{log.source_table || log.resource || '—'}</td>
-                      <td onClick={e => e.stopPropagation()}>{renderMetadataCell(log.metadata)}</td>
-                      <td className="ac-table__source-system">{log.source_system || '—'}</td>
-                      <td onClick={e => e.stopPropagation()}>{renderStatusBadge(log)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination */}
-            <div className="ac-pagination">
-              <span className="ac-pagination__info">
-                Showing {paginatedLogs.length} of {displayTotal} results
-              </span>
-              <div className="ac-pagination__controls">
-                <button
-                  className="ac-pagination__btn"
-                  disabled={currentPage === 1}
-                  onClick={() => setCurrentPage(p => p - 1)}
-                >
-                  ← Prev
-                </button>
-                {renderPageNumbers().map((p, i) =>
-                  p === '...'
-                    ? <span key={`dots-${i}`} className="ac-pagination__dots">…</span>
-                    : <button
-                      key={p}
-                      className={`ac-pagination__page${currentPage === p ? ' ac-pagination__page--active' : ''}`}
-                      onClick={() => setCurrentPage(p)}
-                    >{p}</button>
-                )}
-                <button
-                  className="ac-pagination__btn"
-                  disabled={currentPage === totalPages}
-                  onClick={() => setCurrentPage(p => p + 1)}
-                >
-                  Next →
-                </button>
+                  </thead>
+                  <tbody>
+                    {paginatedLogs.length === 0 ? (
+                      <tr>
+                        <td colSpan={7}>
+                          <div className="ac-empty">
+                            <div className="ac-empty__icon">📅</div>
+                            {!filterDateFrom || !filterDateTo ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                                <span style={{ fontWeight: '600', color: 'var(--color-on-surface)' }}>
+                                  Please select a date range (From & To) to view transaction history
+                                </span>
+                                <span style={{ fontSize: '13px', color: 'var(--color-on-surface-variant)' }}>
+                                  Transactions are not loaded automatically to ensure optimal performance.
+                                </span>
+                              </div>
+                            ) : (
+                              "No transactions match the selected filter."
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ) : paginatedLogs.map(log => (
+                      <tr key={log.log_id} onClick={() => setSelectedResource(log.source_table || log.resource)}>
+                        <td className="ac-table__time">{formatTimestamp(log.timestamp)}</td>
+                        <td className="ac-table__actor">{log.actor}</td>
+                        <td><ActionBadge action={log.action} /></td>
+                        <td className="ac-table__mono">{log.source_table || log.resource || '—'}</td>
+                        <td onClick={e => e.stopPropagation()}>{renderMetadataCell(log.metadata)}</td>
+                        <td className="ac-table__source-system">{log.source_system || '—'}</td>
+                        <td onClick={e => e.stopPropagation()}>{renderStatusBadge(log)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            </div>
-          </section>
-        </>
 
-    </div>
-  </main>
+              {/* Pagination */}
+              <div className="ac-pagination">
+                <span className="ac-pagination__info">
+                  Showing {paginatedLogs.length} of {displayTotal} results
+                </span>
+                <div className="ac-pagination__controls">
+                  <button
+                    className="ac-pagination__btn"
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(p => p - 1)}
+                  >
+                    ← Prev
+                  </button>
+                  {renderPageNumbers().map((p, i) =>
+                    p === '...'
+                      ? <span key={`dots-${i}`} className="ac-pagination__dots">…</span>
+                      : <button
+                        key={p}
+                        className={`ac-pagination__page${currentPage === p ? ' ac-pagination__page--active' : ''}`}
+                        onClick={() => setCurrentPage(p)}
+                      >{p}</button>
+                  )}
+                  <button
+                    className="ac-pagination__btn"
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage(p => p + 1)}
+                  >
+                    Next →
+                  </button>
+                </div>
+              </div>
+            </section>
+          </>
+
+        </div>
+      </main>
 
       {/* ===== MODAL LEVEL 1: Table Records ===== */}
       {selectedTableModal && (
@@ -1984,11 +1998,11 @@ const handleVerifyLog = useCallback((logId) => {
 
       {/* ===== MODAL LEVEL 2: Resource Log Detail ===== */}
       {selectedResource && (
-  <ResourceDetailModal
-    resource={selectedResource}
-    onClose={() => setSelectedResource(null)}
-  />
-)}
+        <ResourceDetailModal
+          resource={selectedResource}
+          onClose={() => setSelectedResource(null)}
+        />
+      )}
     </div>
   );
 }
@@ -2236,7 +2250,12 @@ function AdminDashboard({ onLogout }) {
           <button className="ac-topnav__menu-btn" onClick={() => setSidebarOpen(o => !o)}>
             <Icon name="menu" size={22} />
           </button>
-          <img src="/logo/Group 1000009984.png" alt="Auditchain Logo" style={{ height: 36, width: 'auto', display: 'block', marginRight: 10 }} />
+          <div className="ac-topnav__logo">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" fill="rgba(255,255,255,0.95)" />
+              <path d="M10 17l-3-3 1.4-1.4 1.6 1.6 4.6-4.6 1.4 1.4L10 17z" fill="#0077ce" />
+            </svg>
+          </div>
           <div>
             <div className="ac-topnav__brand-name">Auditchain Gateway</div>
             <div className="ac-topnav__brand-sub ac-admin-portal-label">Admin Portal</div>
@@ -2673,32 +2692,32 @@ function AdminDashboard({ onLogout }) {
               </div>
               <button className="ac-modal__close" onClick={() => setManageUsersClient(null)}>×</button>
             </div>
-            
+
             <div className="ac-modal__body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', padding: '20px 24px' }}>
               {/* Form Add User */}
               <div style={{ borderRight: '1px solid var(--color-outline-variant)', paddingRight: '24px' }}>
                 <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-primary)', marginBottom: '16px' }}>Create New User Account</div>
-                
+
                 {userActionError && (
-                  <div style={{ 
-                    padding: '10px 14px', 
-                    borderRadius: 'var(--radius-sm)', 
-                    backgroundColor: 'rgba(186, 26, 26, 0.1)', 
-                    color: 'var(--color-error)', 
-                    fontSize: '12px', 
+                  <div style={{
+                    padding: '10px 14px',
+                    borderRadius: 'var(--radius-sm)',
+                    backgroundColor: 'rgba(186, 26, 26, 0.1)',
+                    color: 'var(--color-error)',
+                    fontSize: '12px',
                     fontWeight: 600,
                     marginBottom: '16px'
                   }}>
                     ⚠️ {userActionError}
                   </div>
                 )}
-                
+
                 <form onSubmit={handleAddClientUser}>
                   <div className="ac-form-field" style={{ marginBottom: '12px' }}>
                     <label className="ac-form-label">Username <span style={{ color: 'var(--color-error)' }}>*</span></label>
-                    <input 
-                      className="ac-form-input" 
-                      required 
+                    <input
+                      className="ac-form-input"
+                      required
                       minLength={4}
                       placeholder="e.g. auditor_senior"
                       value={newUserUsername}
@@ -2708,10 +2727,10 @@ function AdminDashboard({ onLogout }) {
                   </div>
                   <div className="ac-form-field" style={{ marginBottom: '12px' }}>
                     <label className="ac-form-label">Password <span style={{ color: 'var(--color-error)' }}>*</span></label>
-                    <input 
-                      className="ac-form-input" 
+                    <input
+                      className="ac-form-input"
                       type="password"
-                      required 
+                      required
                       minLength={6}
                       placeholder="••••••"
                       value={newUserPassword}
@@ -2721,10 +2740,10 @@ function AdminDashboard({ onLogout }) {
                   </div>
                   <div className="ac-form-field" style={{ marginBottom: '20px' }}>
                     <label className="ac-form-label">Confirm Password <span style={{ color: 'var(--color-error)' }}>*</span></label>
-                    <input 
-                      className="ac-form-input" 
+                    <input
+                      className="ac-form-input"
                       type="password"
-                      required 
+                      required
                       minLength={6}
                       placeholder="••••••"
                       value={newUserConfirmPassword}
@@ -2732,9 +2751,9 @@ function AdminDashboard({ onLogout }) {
                       disabled={userActionLoading}
                     />
                   </div>
-                  <button 
-                    type="submit" 
-                    className="ac-btn-primary" 
+                  <button
+                    type="submit"
+                    className="ac-btn-primary"
                     style={{ width: '100%', justifyContent: 'center' }}
                     disabled={userActionLoading}
                   >
@@ -2776,7 +2795,7 @@ function AdminDashboard({ onLogout }) {
                               <span className="ac-status ac-status--pending" style={{ fontSize: '10px', padding: '2px 6px' }}>{user.role}</span>
                             </td>
                             <td style={{ textAlign: 'center' }}>
-                              <button 
+                              <button
                                 className="ac-btn-primary ac-btn-primary--danger"
                                 style={{ padding: '4px 8px', fontSize: '11px' }}
                                 onClick={() => handleDeleteClientUser(user)}
