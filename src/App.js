@@ -878,12 +878,7 @@ function Login({ onLogin }) {
 
         {/* Brand */}
         <div className="ac-login-hero__brand">
-          <div className="ac-login-hero__brand-icon">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-              <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" fill="rgba(255,255,255,0.9)" />
-              <path d="M10 17l-3-3 1.4-1.4 1.6 1.6 4.6-4.6 1.4 1.4L10 17z" fill="#4f46e5" />
-            </svg>
-          </div>
+          <img src="/logo/Group 1000009984.png" alt="Auditchain Logo" style={{ height: 36, width: 'auto', display: 'block', marginRight: 10 }} />
           <div>
             <div className="ac-login-hero__brand-name">Auditchain Gateway</div>
             <div className="ac-login-hero__brand-sub">Gateway Portal</div>
@@ -920,12 +915,7 @@ function Login({ onLogin }) {
 
           {/* Mobile brand header */}
           <div className="ac-login-mobile-brand">
-            <div style={{ width: 40, height: 40, background: 'linear-gradient(135deg,#4f46e5,#06b6d4)', borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(79,70,229,.35)', flexShrink: 0 }}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" fill="rgba(255,255,255,.95)" />
-                <path d="M10 17l-3-3 1.4-1.4 1.6 1.6 4.6-4.6 1.4 1.4L10 17z" fill="#4f46e5" />
-              </svg>
-            </div>
+            <img src="/logo/Group 1000009984.png" alt="Auditchain Logo" style={{ height: 36, width: 'auto', display: 'block', marginRight: 10 }} />
             <div>
               <div style={{ fontSize: 18, fontWeight: 800, color: '#0d1b2e', letterSpacing: '.02em' }}>Auditchain Gateway</div>
               <div style={{ fontSize: 10, fontWeight: 600, color: '#4f46e5', letterSpacing: '.1em', textTransform: 'uppercase' }}>Gateway Portal</div>
@@ -1432,12 +1422,7 @@ const handleVerifyLog = useCallback((logId) => {
           <button className="ac-topnav__menu-btn" onClick={() => setSidebarOpen(o => !o)}>
             <Icon name="menu" size={22} />
           </button>
-          <div className="ac-topnav__logo">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-              <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" fill="rgba(255,255,255,0.95)" />
-              <path d="M10 17l-3-3 1.4-1.4 1.6 1.6 4.6-4.6 1.4 1.4L10 17z" fill="#0077ce" />
-            </svg>
-          </div>
+          <img src="/logo/Group 1000009984.png" alt="Auditchain Logo" style={{ height: 36, width: 'auto', display: 'block', marginRight: 10 }} />
           <div>
             <div className="ac-topnav__brand-name">Auditchain Gateway</div>
             <div className="ac-topnav__brand-sub">Gateway Portal</div>
@@ -2251,12 +2236,7 @@ function AdminDashboard({ onLogout }) {
           <button className="ac-topnav__menu-btn" onClick={() => setSidebarOpen(o => !o)}>
             <Icon name="menu" size={22} />
           </button>
-          <div className="ac-topnav__logo">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-              <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" fill="rgba(255,255,255,0.95)" />
-              <path d="M10 17l-3-3 1.4-1.4 1.6 1.6 4.6-4.6 1.4 1.4L10 17z" fill="#0077ce" />
-            </svg>
-          </div>
+          <img src="/logo/Group 1000009984.png" alt="Auditchain Logo" style={{ height: 36, width: 'auto', display: 'block', marginRight: 10 }} />
           <div>
             <div className="ac-topnav__brand-name">Auditchain Gateway</div>
             <div className="ac-topnav__brand-sub ac-admin-portal-label">Admin Portal</div>
