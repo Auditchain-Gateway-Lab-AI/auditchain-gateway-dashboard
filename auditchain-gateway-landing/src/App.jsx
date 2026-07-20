@@ -447,21 +447,21 @@ curl -X POST https://gateway.auditchain.io/v1/logs \\
           </div>
 
           {/* Right CTA Buttons + Lang Toggle */}
-          <div className="hidden lg:flex items-center gap-2">
+          <div className="hidden lg:flex items-center gap-2.5">
             {/* Language Toggle */}
             <button
               onClick={() => setLang(lang === 'id' ? 'en' : 'id')}
-              className="flex items-center gap-1.5 border border-outline-variant hover:border-accent-blue/50 text-on-surface-variant hover:text-white px-3 py-2 rounded-lg text-xs font-bold transition-all"
+              className="h-10 inline-flex items-center justify-center gap-2 border border-outline-variant hover:border-accent-blue/50 bg-surface-container/40 hover:bg-surface-container text-on-surface-variant hover:text-white px-3.5 rounded-xl text-sm font-semibold transition-all"
               title="Toggle Language"
             >
-              <span className="material-symbols-outlined text-sm">language</span>
-              {lang === 'id' ? 'EN' : 'ID'}
+              <span className="material-symbols-outlined text-lg text-accent-blue">language</span>
+              <span>{lang === 'id' ? 'EN' : 'ID'}</span>
             </button>
 
             {/* Sistem Login */}
             <a
               href="http://localhost:3000/login"
-              className="border border-outline-variant hover:border-accent-blue/50 text-on-surface-variant hover:text-white px-4 py-2 rounded-lg text-sm font-semibold transition-all"
+              className="h-10 inline-flex items-center justify-center border border-outline-variant hover:border-accent-blue/50 bg-surface-container/40 hover:bg-surface-container text-on-surface-variant hover:text-white px-4.5 rounded-xl text-sm font-semibold transition-all"
             >
               {t.navLogin}
             </a>
@@ -471,10 +471,10 @@ curl -X POST https://gateway.auditchain.io/v1/logs \\
               href={WA_LINK}
               target="_blank"
               rel="noopener noreferrer"
-              className="bg-primary hover:bg-primary-container text-white px-5 py-2 rounded-lg text-sm font-semibold transition-all border border-blue-500/30 pulse-glow-btn flex items-center gap-1.5"
+              className="h-10 inline-flex items-center justify-center gap-2 bg-primary hover:bg-primary-container text-white px-5 rounded-xl text-sm font-semibold transition-all border border-blue-500/30 pulse-glow-btn"
             >
-              <span className="material-symbols-outlined text-base">chat</span>
-              {t.navContact}
+              <span className="material-symbols-outlined text-lg">chat</span>
+              <span>{t.navContact}</span>
             </a>
           </div>
 
