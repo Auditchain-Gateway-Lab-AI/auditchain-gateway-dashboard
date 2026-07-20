@@ -22,7 +22,7 @@ const parseJwt = (token) => {
   }
 };
 
-// Formatter timestamp dengan milidetik (misal: 3/7/2026, 16.26.42.123)
+//Formatter timestamp dengan milidetik (misal: 3/7/2026, 16.26.42.123)
 const formatTimestamp = (dateString) => {
   if (!dateString) return '—';
   const d = new Date(dateString);
