@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import './App.css';
 
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
+import AdminPage from './pages/AdminPage';
+import { parseJwt } from './utils/formatters';
 
 function ProtectedRoute({ isAuthenticated, children }) {
   if (!isAuthenticated) {
@@ -24,6 +26,14 @@ function App() {
     setIsAuthenticated(false);
   };
 
+  const clientInfo = useMemo(() => {
+    if (!isAuthenticated) return null;
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    return token ? parseJwt(token) : null;
+  }, [isAuthenticated]);
+
+  const isAdmin = clientInfo?.role?.toLowerCase() === 'admin';
+
   return (
     <Router>
       <Routes>
@@ -31,10 +41,10 @@ function App() {
         <Route
           path="/login"
           element={
-            isAuthenticated ? (
-              <Navigate to="/dashboard" replace />
-            ) : (
+            !isAuthenticated ? (
               <LoginPage onLogin={() => setIsAuthenticated(true)} />
+            ) : (
+              <Navigate to={isAdmin ? "/admin" : "/dashboard"} replace />
             )
           }
         />
@@ -43,6 +53,18 @@ function App() {
           element={
             <ProtectedRoute isAuthenticated={isAuthenticated}>
               <DashboardPage onLogout={handleLogout} />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute isAuthenticated={isAuthenticated}>
+              {isAdmin ? (
+                <AdminPage onLogout={handleLogout} />
+              ) : (
+                <Navigate to="/dashboard" replace />
+              )}
             </ProtectedRoute>
           }
         />

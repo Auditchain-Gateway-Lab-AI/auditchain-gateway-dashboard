@@ -54,10 +54,15 @@
 }
 
 .ac-topnav__logo {
-  height: 36px;
-  width: auto;
-  display: block;
+  width: 38px;
+  height: 38px;
+  background: linear-gradient(135deg, #005ea4 0%, #0077ce 100%);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0,94,164,0.3);
 }
 
 .ac-topnav__brand-name {
@@ -1364,60 +1369,6 @@
   50% { opacity: 0.25; }
 }
 
-.ac-login-back-link {
-  position: relative;
-  z-index: 2;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: #ffffff;
-  font-size: 13px;
-  font-weight: 600;
-  text-decoration: none;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  margin-bottom: 24px;
-  backdrop-filter: blur(8px);
-}
-
-.ac-login-back-link:hover {
-  background: rgba(255, 255, 255, 0.18);
-  border-color: rgba(255, 255, 255, 0.3);
-  transform: translateX(-3px);
-  color: #ffffff;
-}
-
-.ac-login-card-back-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: 8px;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
-  color: #475569;
-  font-size: 12px;
-  font-weight: 600;
-  text-decoration: none;
-  margin-bottom: 20px;
-  transition: all 0.2s ease;
-}
-
-.ac-login-card-back-link:hover {
-  background: #e2e8f0;
-  color: #0f172a;
-  transform: translateX(-2px);
-}
-
-@media (min-width: 901px) {
-  .ac-login-card-back-link {
-    display: none;
-  }
-}
-
 .ac-login-hero__brand {
   position: relative;
   z-index: 2;
@@ -1427,7 +1378,15 @@
 }
 
 .ac-login-hero__brand-icon {
-  display: block;
+  width: 50px;
+  height: 50px;
+  background: rgba(99, 102, 241, 0.15);
+  backdrop-filter: blur(8px);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(99, 102, 241, 0.3);
 }
 
 .ac-login-hero__brand-name {
