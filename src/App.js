@@ -1046,7 +1046,7 @@ function Dashboard({ onLogout }) {
   const [recentLogs, setRecentLogs] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [verifyStatuses, setVerifyStatuses] = useState({});
-  const [inventoryStatuses, setInventoryStatuses] = useState({});
+  const [inventoryStatuses] = useState({});
   const [selectedVerifyResult, setSelectedVerifyResult] = useState(null);
   const [totalLogsCount, setTotalLogsCount] = useState(0);
   const [isServerPaginated, setIsServerPaginated] = useState(false);
