@@ -28,17 +28,19 @@ const translations = {
     simTitle: 'Live Cryptographic Integrity Simulator',
     simSubtitle:
       'Simulasikan bagaimana peretas mengubah database SIMRS lokal secara diam-diam dan bagaimana mesin verifikasi kriptografis Auditchain mendeteksinya.',
-    simTableTitle: 'Database SIMRS Klien (Tabel Billing)',
+    simTableTitle: 'Database SIMRS Klien (Tabel Audit Log)',
     simConnected: 'Connected via CDC',
-    simColId: 'Pasien ID',
-    simColName: 'Nama',
-    simColDiagnosis: 'Diagnosis',
-    simColBilling: 'Tagihan (IDR)',
-    simColHash: 'Row Hash',
+    simColTimestamp: 'Timestamp',
+    simColActor: 'Actor',
+    simColAction: 'Action',
+    simColResource: 'Resource',
+    simColMetadata: 'Metadata',
+    simColSourceSystem: 'Source System',
+    simColVerification: 'Verification',
     simDbLabel: 'Audit database lokal: PostgreSQL',
     simTamperBtn: 'Simulasikan Peretasan (Ubah Data)',
-    simRestoreBtn: 'Pulihkan Data Klien (Restore)',
-    simVerifyTitle: '3-Layer Verification Engine (Gateway Audit)',
+    simRestoreBtn: 'Reset Demo Simulasi',
+    simVerifyTitle: '2-Layer Verification Engine (Gateway Audit)',
     simVerifying: 'Memverifikasi Perubahan...',
     simIntact: '✓ SELURUH DATA TERVERIFIKASI',
     simBroken: '🚨 INTEGRITAS DATA RUSAK',
@@ -108,17 +110,19 @@ const translations = {
     simTitle: 'Live Cryptographic Integrity Simulator',
     simSubtitle:
       "Simulate how an attacker silently alters a local database and how Auditchain's cryptographic verification engine detects it in real-time.",
-    simTableTitle: 'Client SIMRS Database (Billing Table)',
+    simTableTitle: 'Client SIMRS Database (Audit Log Table)',
     simConnected: 'Connected via CDC',
-    simColId: 'Patient ID',
-    simColName: 'Name',
-    simColDiagnosis: 'Diagnosis',
-    simColBilling: 'Billing (IDR)',
-    simColHash: 'Row Hash',
+    simColTimestamp: 'Timestamp',
+    simColActor: 'Actor',
+    simColAction: 'Action',
+    simColResource: 'Resource',
+    simColMetadata: 'Metadata',
+    simColSourceSystem: 'Source System',
+    simColVerification: 'Verification',
     simDbLabel: 'Local audit database: PostgreSQL',
     simTamperBtn: 'Simulate Breach (Alter Data)',
-    simRestoreBtn: 'Restore Client Data',
-    simVerifyTitle: '3-Layer Verification Engine (Gateway Audit)',
+    simRestoreBtn: 'Reset Demo Simulation',
+    simVerifyTitle: '2-Layer Verification Engine (Gateway Audit)',
     simVerifying: 'Verifying Changes...',
     simIntact: '✓ ALL DATA VERIFIED',
     simBroken: '🚨 DATA INTEGRITY COMPROMISED',
@@ -174,22 +178,45 @@ const translations = {
 // ============================================================
 // Mock Data untuk Simulator SIMRS
 // ============================================================
-const INITIAL_PATIENTS = [
-  { id: 'P091', name: 'Budi Santoso', diagnosis: 'Stroke Iskemik', room: 'Melati 04', bill: 15450000, hash: 'a5c7f8...9e10' },
-  { id: 'P092', name: 'Siti Rahma', diagnosis: 'Apendisitis Akut', room: 'Dahlia 12', bill: 8750000, hash: '3e4f1a...c6b2' },
-  { id: 'P093', name: 'Rian Hidayat', diagnosis: 'Fraktur Femur', room: 'Flamboyan 02', bill: 22100000, hash: 'f2d3c4...7a8b' },
+const INITIAL_AUDIT_LOGS = [
+  { id: 'LOG001', timestamp: '21/7/2026, 08.12.04.311', actor: 'RSIA_BUNDA', action: 'INSERT', resource: 'BILLING_RECORD:7821', metadata: '{"TOTAL": "Rp5.200.000", "STATUS": "LUNAS"}', sourceSystem: 'SIMRS Morbis 2', verification: 'VALID', tampered: false },
+  { id: 'LOG002', timestamp: '21/7/2026, 08.15.22.887', actor: 'POLINEMA', action: 'UPDATE', resource: 'PASIEN_DATA:4491', metadata: '{"NAMA": "Dewi Kartika", "KELAS": "I"}', sourceSystem: 'SIMRS Morbis 2', verification: 'VALID', tampered: false },
+  { id: 'LOG003', timestamp: '21/7/2026, 08.27.45.132', actor: 'RSU_SAKIT_HATI', action: 'UPDATE', resource: 'TINDAKAN:9034', metadata: '{"KODE": "86.22", "BIAYA": "Rp750.000"}', sourceSystem: 'SIM-RS Vmedis', verification: 'VALID', tampered: false },
+  { id: 'LOG004', timestamp: '21/7/2026, 08.34.11.554', actor: 'RSIA_BUNDA', action: 'DELETE', resource: 'JADWAL_DOKTER:2201', metadata: '{"DOKTER_ID": "D042", "SLOT": "09:00"}', sourceSystem: 'SIMRS Morbis 2', verification: 'VALID', tampered: false },
+  { id: 'LOG005', timestamp: '21/7/2026, 08.41.59.003', actor: 'RS_PRIMA', action: 'INSERT', resource: 'RESEP:6612', metadata: '{"OBAT": "Amoxicillin", "DOSIS": "500mg"}', sourceSystem: 'SIM-RS Intrahealth', verification: 'VALID', tampered: false },
+  { id: 'LOG006', timestamp: '21/7/2026, 08.53.17.441', actor: 'RSUD_MALANG', action: 'INSERT', resource: 'DIAGNOSA:1104', metadata: '{"ICD10": "J18.9", "KETERANGAN": "Pneumonia"}', sourceSystem: 'SIMRS Morbis 2', verification: 'VALID', tampered: false },
+  { id: 'LOG007', timestamp: '21/7/2026, 09.02.38.799', actor: 'RS_PRIMA', action: 'UPDATE', resource: 'LAB_RESULT:8831', metadata: '{"HB": "12.4", "LEUKOSIT": "8200"}', sourceSystem: 'SIM-RS Intrahealth', verification: 'VALID', tampered: false },
+  { id: 'LOG008', timestamp: '21/7/2026, 09.11.05.224', actor: 'POLINEMA', action: 'INSERT', resource: 'RAWAT_JALAN:3375', metadata: '{"POLI": "Penyakit Dalam", "ANTRIAN": "A-017"}', sourceSystem: 'SIMRS Morbis 2', verification: 'VALID', tampered: false },
 ];
 
 const INTEGRITY_LAYERS = {
-  db: { title: 'Layer 1: Database Existence', desc: 'Memeriksa keberadaan log audit di PostgreSQL middleware.' },
-  hash: { title: 'Layer 2: Cryptographic Re-Hashing', desc: 'Kalkulasi ulang hash SHA3-256 payload log secara real-time.' },
-  blockchain: { title: 'Layer 3: Blockchain Consensus', desc: 'Mencocokkan Merkle Root lokal dengan ledger Hyperledger Fabric.' },
+  clientdb: {
+    title: 'Layer 1: Database Client (Gateway Middleware)',
+    desc: 'Memeriksa keberadaan & konsistensi log audit pada database PostgreSQL middleware Auditchain Gateway. Setiap event dari sistem klien divalidasi keberadaannya sebelum diproses lebih lanjut.',
+  },
+  localdb: {
+    title: 'Layer 2: Local Cryptographic Chain',
+    desc: 'Memverifikasi integritas rantai kriptografi lokal menggunakan SHA3-256 dan PreviousHash berantai. Setiap baris log dikunci satu sama lain — penghapusan atau perubahan satu baris akan langsung terdeteksi.',
+  },
+  blockchain: {
+    title: 'Anchor: Blockchain Consensus (Hyperledger Fabric)',
+    desc: 'Mencocokkan Merkle Root dari rantai lokal dengan ledger Hyperledger Fabric yang terdistribusi. Ini adalah jangkar final yang menjamin tidak ada manipulasi tersembunyi.',
+  },
 };
 
 const INTEGRITY_LAYERS_EN = {
-  db: { title: 'Layer 1: Database Existence', desc: 'Checks existence of audit logs in PostgreSQL middleware.' },
-  hash: { title: 'Layer 2: Cryptographic Re-Hashing', desc: 'Real-time SHA3-256 hash recalculation of log payload.' },
-  blockchain: { title: 'Layer 3: Blockchain Consensus', desc: 'Matches local Merkle Root against the Hyperledger Fabric ledger.' },
+  clientdb: {
+    title: 'Layer 1: Client Database (Gateway Middleware)',
+    desc: 'Checks the existence and consistency of audit logs in the Auditchain Gateway PostgreSQL middleware database. Every event from client systems is validated before further processing.',
+  },
+  localdb: {
+    title: 'Layer 2: Local Cryptographic Chain',
+    desc: 'Verifies the integrity of the local cryptographic chain using SHA3-256 and chained PreviousHash. Each log row is locked to the next — deletion or alteration of any single row is immediately detected.',
+  },
+  blockchain: {
+    title: 'Anchor: Blockchain Consensus (Hyperledger Fabric)',
+    desc: 'Matches the Merkle Root from the local chain against the distributed Hyperledger Fabric ledger. This is the final anchor guaranteeing no hidden manipulation.',
+  },
 };
 
 const DATA_FLOW_STEPS_ID = [
@@ -221,10 +248,10 @@ function LandingPage() {
   const INTEGRITY_LAYERS_CURRENT = lang === 'id' ? INTEGRITY_LAYERS : INTEGRITY_LAYERS_EN;
   const DATA_FLOW_STEPS = lang === 'id' ? DATA_FLOW_STEPS_ID : DATA_FLOW_STEPS_EN;
 
-  const [patients, setPatients] = useState(INITIAL_PATIENTS);
+  const [auditLogs, setAuditLogs] = useState(INITIAL_AUDIT_LOGS);
   const [isTampered, setIsTampered] = useState(false);
   const [verificationState, setVerificationState] = useState({
-    scanning: false, db: 'secured', hash: 'secured', blockchain: 'secured',
+    scanning: false, clientdb: 'secured', localdb: 'secured', blockchain: 'secured',
   });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeStep, setActiveStep] = useState(1);
@@ -250,36 +277,37 @@ function LandingPage() {
     return () => observers.forEach((o) => o.disconnect());
   }, []);
 
-  // Auto-verify on patient data change
+  // Auto-verify on audit log data change
   useEffect(() => {
     if (isTampered) {
-      setVerificationState({ scanning: true, db: 'secured', hash: 'scanning', blockchain: 'scanning' });
+      setVerificationState({ scanning: true, clientdb: 'secured', localdb: 'scanning', blockchain: 'scanning' });
       const timer = setTimeout(() => {
-        setVerificationState({ scanning: false, db: 'secured', hash: 'failed', blockchain: 'failed' });
+        setVerificationState({ scanning: false, clientdb: 'secured', localdb: 'failed', blockchain: 'failed' });
       }, 1200);
       return () => clearTimeout(timer);
     } else {
-      setVerificationState({ scanning: true, db: 'scanning', hash: 'scanning', blockchain: 'scanning' });
+      setVerificationState({ scanning: true, clientdb: 'scanning', localdb: 'scanning', blockchain: 'scanning' });
       const timer = setTimeout(() => {
-        setVerificationState({ scanning: false, db: 'secured', hash: 'secured', blockchain: 'secured' });
+        setVerificationState({ scanning: false, clientdb: 'secured', localdb: 'secured', blockchain: 'secured' });
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [patients, isTampered]);
+  }, [auditLogs, isTampered]);
 
   const handleTamper = () => {
     setIsTampered(true);
-    setPatients((prev) =>
-      prev.map((p, idx) => {
-        if (idx === 1) return { ...p, bill: 875000, hash: '9a2b1c...d8e3' };
-        return p;
+    setAuditLogs((prev) =>
+      prev.map((log, idx) => {
+        if (idx === 1) return { ...log, action: 'DELETE', metadata: '{"NAMA": "** DIHAPUS **", "KELAS": "??"}', verification: 'INVALID', tampered: true };
+        if (idx === 3) return { ...log, resource: 'JADWAL_DOKTER:0000', metadata: '{"DOKTER_ID": "D000", "SLOT": "??"}', verification: 'INVALID', tampered: true };
+        return log;
       })
     );
   };
 
   const handleRestore = () => {
     setIsTampered(false);
-    setPatients(INITIAL_PATIENTS);
+    setAuditLogs(INITIAL_AUDIT_LOGS);
   };
 
   const renderCodeSnippet = () => {
@@ -345,6 +373,22 @@ curl -X POST https://gateway.auditchain.io/v1/logs \\
     return snippets[activeTab];
   };
 
+  const handleNavClick = (e, id) => {
+    e.preventDefault();
+    setActiveSection(id);
+    const element = document.getElementById(id);
+    if (element) {
+      const navOffset = 85;
+      const elementPosition = element.getBoundingClientRect().top + window.pageYOffset;
+      const offsetPosition = elementPosition - navOffset;
+
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: 'smooth',
+      });
+    }
+  };
+
   const navLinks = [
     { href: '#features', label: t.navFeatures, id: 'features' },
     { href: '#simulator', label: t.navDemo, id: 'simulator' },
@@ -377,6 +421,7 @@ curl -X POST https://gateway.auditchain.io/v1/logs \\
               <a
                 key={link.id}
                 href={link.href}
+                onClick={(e) => handleNavClick(e, link.id)}
                 className={`lp-nav-link ${activeSection === link.id ? 'lp-nav-link--active' : ''}`}
               >
                 {link.label}
@@ -432,7 +477,10 @@ curl -X POST https://gateway.auditchain.io/v1/logs \\
               <a
                 key={link.id}
                 href={link.href}
-                onClick={() => setIsMobileMenuOpen(false)}
+                onClick={(e) => {
+                  setIsMobileMenuOpen(false);
+                  handleNavClick(e, link.id);
+                }}
                 className={`lp-nav-mobile-link ${activeSection === link.id ? 'lp-nav-mobile-link--active' : ''}`}
               >
                 {link.label}
@@ -487,8 +535,8 @@ curl -X POST https://gateway.auditchain.io/v1/logs \\
           </div>
 
           <div className="lp-hero-btns">
-            <a href="#simulator" className="lp-hero-btn-primary">{t.heroBtn1}</a>
-            <a href="#features" className="lp-hero-btn-secondary">{t.heroBtn2}</a>
+            <a href="#simulator" onClick={(e) => handleNavClick(e, 'simulator')} className="lp-hero-btn-primary">{t.heroBtn1}</a>
+            <a href="#features" onClick={(e) => handleNavClick(e, 'features')} className="lp-hero-btn-secondary">{t.heroBtn2}</a>
           </div>
         </div>
       </header>
@@ -503,7 +551,7 @@ curl -X POST https://gateway.auditchain.io/v1/logs \\
         </div>
 
         <div className="lp-sim-grid">
-          {/* Left: Database SIMRS */}
+          {/* Left: Audit Log Table */}
           <div className="lp-glass-card lp-sim-db-card">
             {verificationState.scanning && <div className="lp-scan-overlay" />}
 
@@ -520,24 +568,30 @@ curl -X POST https://gateway.auditchain.io/v1/logs \\
                 <table className="lp-sim-table">
                   <thead>
                     <tr>
-                      <th>{t.simColId}</th>
-                      <th>{t.simColName}</th>
-                      <th className="lp-th-hidden-sm">{t.simColDiagnosis}</th>
-                      <th>{t.simColBilling}</th>
-                      <th style={{ fontFamily: 'monospace' }}>{t.simColHash}</th>
+                      <th>{t.simColTimestamp}</th>
+                      <th>{t.simColActor}</th>
+                      <th>{t.simColAction}</th>
+                      <th className="lp-th-hidden-sm">{t.simColResource}</th>
+                      <th className="lp-th-hidden-sm">{t.simColMetadata}</th>
+                      <th className="lp-th-hidden-md">{t.simColSourceSystem}</th>
+                      <th>{t.simColVerification}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {patients.map((p, idx) => (
-                      <tr key={p.id} className={idx === 1 && isTampered ? 'lp-row-tampered' : ''}>
-                        <td className="lp-td-id">{p.id}</td>
-                        <td className="lp-td-name">{p.name}</td>
-                        <td className={`lp-td-diagnosis lp-td-hidden-sm`}>{p.diagnosis}</td>
-                        <td className={`lp-td-bill ${idx === 1 && isTampered ? 'lp-td-bill--tampered' : ''}`}>
-                          Rp{p.bill.toLocaleString('id-ID')}
+                    {auditLogs.map((log, idx) => (
+                      <tr key={log.id} className={log.tampered ? 'lp-row-tampered' : ''}>
+                        <td className="lp-td-timestamp">{log.timestamp}</td>
+                        <td className="lp-td-actor">{log.actor}</td>
+                        <td>
+                          <span className={`lp-action-badge lp-action-badge--${log.action.toLowerCase()}`}>{log.action}</span>
                         </td>
-                        <td className={`lp-td-hash ${idx === 1 && isTampered ? 'lp-td-hash--tampered' : ''}`}>
-                          {p.hash}
+                        <td className="lp-td-resource lp-td-hidden-sm">{log.resource}</td>
+                        <td className="lp-td-metadata lp-td-hidden-sm">{log.metadata}</td>
+                        <td className="lp-td-source lp-td-hidden-md">{log.sourceSystem}</td>
+                        <td>
+                          <span className={`lp-verify-badge ${log.tampered ? 'lp-verify-badge--invalid' : 'lp-verify-badge--valid'}`}>
+                            {log.tampered ? '✗ INVALID' : '✓ VALID'}
+                          </span>
                         </td>
                       </tr>
                     ))}
@@ -567,7 +621,7 @@ curl -X POST https://gateway.auditchain.io/v1/logs \\
             </div>
           </div>
 
-          {/* Right: 3-Layer Integrity Verification */}
+          {/* Right: 2-Layer Integrity Verification */}
           <div className="lp-glass-card lp-verify-card">
             <div>
               <div className="lp-verify-header">
@@ -576,29 +630,35 @@ curl -X POST https://gateway.auditchain.io/v1/logs \\
               </div>
 
               <div className="lp-verify-layers">
-                {['db', 'hash', 'blockchain'].map((layer) => {
+                {['clientdb', 'localdb', 'blockchain'].map((layer) => {
                   const state = verificationState[layer];
                   const layerInfo = INTEGRITY_LAYERS_CURRENT[layer];
-                  const scanLabel = layer === 'db' ? t.simScanLabel : layer === 'hash' ? t.simHashLabel : t.simSyncLabel;
+                  const scanLabel = layer === 'clientdb' ? t.simScanLabel : layer === 'localdb' ? t.simHashLabel : t.simSyncLabel;
+                  const isAnchor = layer === 'blockchain';
                   return (
                     <div
                       key={layer}
                       className={`lp-layer ${
+                        isAnchor ? 'lp-layer--anchor' : ''
+                      } ${
                         state === 'scanning' ? 'lp-layer--scanning' :
                         state === 'secured' ? 'lp-layer--secured' :
                         'lp-layer--failed'
                       }`}
                     >
                       <div className="lp-layer-head">
-                        <h4 className="lp-layer-title">{layerInfo.title}</h4>
+                        <h4 className="lp-layer-title">
+                          {isAnchor && <span className="lp-anchor-icon material-symbols-outlined">anchor</span>}
+                          {layerInfo.title}
+                        </h4>
                         <span className={`lp-layer-badge ${
                           state === 'scanning' ? 'lp-layer-badge--scanning' :
                           state === 'secured' ? 'lp-layer-badge--secured' :
                           'lp-layer-badge--failed'
                         }`}>
                           {state === 'scanning' ? scanLabel :
-                           state === 'secured' ? (layer === 'db' ? 'PASSED' : layer === 'hash' ? 'VERIFIED' : 'ANCHORED') :
-                           (layer === 'hash' ? 'TAMPER_DETECTED' : 'HASH_MISMATCH')}
+                           state === 'secured' ? (layer === 'clientdb' ? 'PASSED' : layer === 'localdb' ? 'VERIFIED' : 'ANCHORED') :
+                           (layer === 'localdb' ? 'TAMPER_DETECTED' : 'HASH_MISMATCH')}
                         </span>
                       </div>
                       <p className="lp-layer-desc">{layerInfo.desc}</p>

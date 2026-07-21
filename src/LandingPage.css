@@ -47,10 +47,12 @@
   position: sticky;
   top: 0;
   z-index: 50;
-  background: var(--lp-surface);
-  border: 1px solid rgba(59, 130, 246, 0.2);
-  border-bottom-color: var(--lp-outline-variant);
+  background: rgba(11, 19, 41, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(59, 130, 246, 0.2);
   padding: 1rem 1.25rem;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 @media (min-width: 768px) { .lp-nav { padding: 1rem 3rem; } }
 
@@ -72,7 +74,7 @@
 .lp-nav-logo-img {
   height: 2.25rem;
   width: auto;
-  transition: transform 0.2s;
+  transition: transform 0.2s ease;
 }
 .lp-nav-logo-img:hover { transform: scale(1.05); }
 
@@ -102,22 +104,48 @@
 .lp-nav-links {
   display: none;
   align-items: center;
-  gap: 1.5rem;
+  gap: 1.75rem;
   font-size: 0.875rem;
   font-weight: 500;
 }
 @media (min-width: 1024px) { .lp-nav-links { display: flex; } }
 
 .lp-nav-link {
-  transition: color 0.2s;
+  position: relative;
+  transition: color 0.25s ease;
   color: var(--lp-on-surface-variant);
   text-decoration: none;
+  padding: 0.375rem 0.125rem;
+  display: inline-block;
+  font-weight: 500;
 }
 .lp-nav-link:hover { color: #fff; }
+
+/* Garis di bawah hanya muncul saat kursor disentuhkan (HOVER) */
+.lp-nav-link::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, var(--lp-accent-blue), var(--lp-accent-cyan));
+  border-radius: 2px;
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+  opacity: 0;
+}
+
+.lp-nav-link:hover::after {
+  transform: scaleX(1);
+  opacity: 1;
+}
+
 .lp-nav-link--active {
   color: #fff;
-  border-bottom: 1px solid var(--lp-accent-blue);
-  padding-bottom: 0.125rem;
+  font-weight: 600;
 }
 
 /* Right CTA Buttons */
@@ -437,6 +465,10 @@
 /* ================================================================
    SIMULATOR SECTION
    ================================================================ */
+#features, #simulator, #architecture, #threat-model, #integration {
+  scroll-margin-top: 85px;
+}
+
 .lp-sim {
   padding: 4rem 1.25rem;
   max-width: 80rem;
@@ -575,19 +607,65 @@
   padding: 0.75rem;
   white-space: nowrap;
 }
-.lp-td-id { font-weight: 600; color: #fff; }
-.lp-td-name { font-weight: 500; color: #fff; }
-.lp-td-diagnosis { color: var(--lp-on-surface-variant); }
-.lp-td-bill { font-weight: 700; color: #fff; }
-.lp-td-bill--tampered { color: var(--lp-accent-crimson); }
-.lp-td-hash { font-family: monospace; font-size: 0.75rem; color: var(--lp-accent-blue); }
-.lp-td-hash--tampered { color: var(--lp-accent-crimson); }
+.lp-td-timestamp { font-size: 0.75rem; color: var(--lp-on-surface-variant); white-space: nowrap; }
+.lp-td-actor { font-weight: 600; color: #fff; }
+.lp-td-resource { font-family: monospace; font-size: 0.75rem; color: var(--lp-accent-blue); }
+.lp-td-metadata { font-family: monospace; font-size: 0.7rem; color: var(--lp-on-surface-variant); max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+.lp-td-source { font-size: 0.75rem; color: var(--lp-on-surface-variant); }
 
-.lp-th-hidden-sm { }
-.lp-td-hidden-sm { }
+/* Action badges */
+.lp-action-badge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.lp-action-badge--insert { background: rgba(16, 185, 129, 0.15); color: var(--lp-accent-emerald); border: 1px solid rgba(16, 185, 129, 0.3); }
+.lp-action-badge--update { background: rgba(59, 130, 246, 0.15); color: var(--lp-accent-blue); border: 1px solid rgba(59, 130, 246, 0.3); }
+.lp-action-badge--delete { background: rgba(239, 68, 68, 0.15); color: var(--lp-accent-crimson); border: 1px solid rgba(239, 68, 68, 0.3); }
+
+/* Verification badges */
+.lp-verify-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.lp-verify-badge--valid { background: rgba(16, 185, 129, 0.15); color: var(--lp-accent-emerald); border: 1px solid rgba(16, 185, 129, 0.3); }
+.lp-verify-badge--invalid { background: rgba(239, 68, 68, 0.15); color: var(--lp-accent-crimson); border: 1px solid rgba(239, 68, 68, 0.3); }
+
 @media (max-width: 639px) {
   .lp-th-hidden-sm, .lp-td-hidden-sm { display: none; }
 }
+@media (max-width: 899px) {
+  .lp-th-hidden-md, .lp-td-hidden-md { display: none; }
+}
+
+/* Anchor layer (blockchain) - slightly distinct styling */
+.lp-layer--anchor {
+  border-style: dashed !important;
+  opacity: 0.9;
+}
+.lp-layer--anchor.lp-layer--secured {
+  border-color: rgba(6, 182, 212, 0.3) !important;
+  background: rgba(6, 182, 212, 0.05) !important;
+}
+.lp-anchor-icon {
+  font-size: 0.875rem !important;
+  vertical-align: middle;
+  margin-right: 0.25rem;
+  color: var(--lp-accent-cyan);
+}
+
+
 
 /* Sim footer */
 .lp-sim-footer {
