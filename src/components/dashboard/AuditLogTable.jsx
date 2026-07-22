@@ -25,6 +25,11 @@ function AuditLogTable({
   handleClearRange,
   isLogsLoading = false,
   handleVerifyRange,
+  rangeVerifyResult = null,
+  setRangeVerifyResult,
+  isVerifyRangeLoading = false,
+  showOnlyIssues = false,
+  setShowOnlyIssues,
   onSelectResource,
   renderStatusBadge,
   displayTotal = 0,
@@ -33,6 +38,31 @@ function AuditLogTable({
   totalPages = 1,
   renderPageNumbers
 }) {
+  const [copyState, setCopyState] = React.useState('');
+
+  const handleCopyResults = async () => {
+    if (!rangeVerifyResult || !rangeVerifyResult.results) return;
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(rangeVerifyResult.results, null, 2));
+      setCopyState('Copied!');
+      setTimeout(() => setCopyState(''), 2000);
+    } catch {
+      setCopyState('Failed');
+      setTimeout(() => setCopyState(''), 2000);
+    }
+  };
+
+  // Range verify lookup map per log_id
+  const rangeVerifyMap = React.useMemo(() => {
+    const map = {};
+    if (rangeVerifyResult?.results) {
+      rangeVerifyResult.results.forEach(r => {
+        map[r.log_id] = r;
+      });
+    }
+    return map;
+  }, [rangeVerifyResult]);
+
   return (
     <section className="ac-card">
       <div className="ac-card__header" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '16px' }}>
@@ -150,12 +180,87 @@ function AuditLogTable({
                 border: 'none',
                 marginLeft: 'auto'
               }}
+              disabled={isVerifyRangeLoading}
               onClick={handleVerifyRange}
             >
-              ⚡ Verify Range
+              {isVerifyRangeLoading ? '⏳ Verifying...' : '⚡ Verify Range'}
             </button>
           )}
+          {rangeVerifyResult && (
+            <>
+              <button
+                type="button"
+                className={showOnlyIssues ? 'ac-btn-primary' : 'ac-btn-ghost-action'}
+                style={{ padding: '0 12px', height: '36px', minWidth: 'auto', fontSize: '12px', backgroundColor: showOnlyIssues ? '#dc2626' : undefined }}
+                onClick={() => setShowOnlyIssues(v => !v)}
+              >
+                ⚠️ Show Only Issues
+              </button>
+              <button
+                type="button"
+                className="ac-btn-ghost-action"
+                style={{ padding: '0 12px', height: '36px', minWidth: 'auto', fontSize: '12px' }}
+                onClick={handleCopyResults}
+              >
+                📋 Copy Results {copyState && `(${copyState})`}
+              </button>
+            </>
+          )}
         </div>
+
+        {/* Integrated Range Verification Summary Banner (Opsi A - Single View) */}
+        {rangeVerifyResult && rangeVerifyResult.summary && (
+          <div style={{
+            background: 'var(--color-surface-container-high, #f4f6f9)',
+            border: '1px solid var(--color-outline-variant, #e0e0e0)',
+            borderRadius: 'var(--radius-md, 8px)',
+            padding: '16px',
+            marginTop: '8px',
+            animation: 'fadeIn 0.3s ease'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '18px' }}>📊</span>
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: '700', color: 'var(--color-on-surface)' }}>
+                    Range Verification Inspection Summary
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
+                    Checked logs from {formatTimestamp(rangeVerifyResult.range.from)} to {formatTimestamp(rangeVerifyResult.range.to)}
+                  </div>
+                </div>
+              </div>
+              <button
+                className="ac-btn-ghost-action"
+                style={{ padding: '4px 8px', fontSize: '12px' }}
+                onClick={() => setRangeVerifyResult && setRangeVerifyResult(null)}
+                title="Dismiss Inspection Banner"
+              >
+                ✕ Close Inspection
+              </button>
+            </div>
+
+            {/* 4 Summary Metric Cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '12px', textAlign: 'center' }}>
+              <div style={{ background: '#fff', padding: '10px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#1e293b' }}>{rangeVerifyResult.summary.total}</div>
+                <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600' }}>Total Checked</div>
+              </div>
+              <div style={{ background: '#fff', padding: '10px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#16a34a' }}>{rangeVerifyResult.summary.valid}</div>
+                <div style={{ fontSize: '11px', color: '#16a34a', fontWeight: '600' }}>✅ Valid</div>
+              </div>
+              <div style={{ background: '#fff', padding: '10px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#dc2626' }}>{rangeVerifyResult.summary.invalid}</div>
+                <div style={{ fontSize: '11px', color: '#dc2626', fontWeight: '600' }}>🚨 Mismatch</div>
+              </div>
+              <div style={{ background: '#fff', padding: '10px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#d97706' }}>{rangeVerifyResult.summary.pending}</div>
+                <div style={{ fontSize: '11px', color: '#d97706', fontWeight: '600' }}>⏱️ Pending</div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="ac-table-wrap">
@@ -192,17 +297,32 @@ function AuditLogTable({
                   </div>
                 </td>
               </tr>
-            ) : paginatedLogs.map(log => (
-              <tr key={log.log_id} onClick={() => onSelectResource(log.source_table || log.resource)}>
-                <td className="ac-table__time">{formatTimestamp(log.timestamp)}</td>
-                <td className="ac-table__actor">{log.actor}</td>
-                <td><ActionBadge action={log.action} /></td>
-                <td className="ac-table__mono">{log.source_table || log.resource || '—'}</td>
-                <td onClick={e => e.stopPropagation()}>{renderMetadataCell(log.metadata)}</td>
-                <td className="ac-table__source-system">{log.source_system || '—'}</td>
-                <td onClick={e => e.stopPropagation()}>{renderStatusBadge(log)}</td>
-              </tr>
-            ))}
+            ) : paginatedLogs.map(log => {
+              const rangeMatch = rangeVerifyMap[log.log_id];
+              return (
+                <tr key={log.log_id} onClick={() => onSelectResource(log.source_table || log.resource)}>
+                  <td className="ac-table__time">{formatTimestamp(log.timestamp)}</td>
+                  <td className="ac-table__actor">{log.actor}</td>
+                  <td><ActionBadge action={log.action} /></td>
+                  <td className="ac-table__mono">{log.source_table || log.resource || '—'}</td>
+                  <td onClick={e => e.stopPropagation()}>{renderMetadataCell(log.metadata)}</td>
+                  <td className="ac-table__source-system">{log.source_system || '—'}</td>
+                  <td onClick={e => e.stopPropagation()}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {renderStatusBadge(log)}
+                      {rangeMatch && (
+                        <span
+                          className={`ac-chain-badge ${rangeMatch.hash_match ? 'ac-status--valid' : 'ac-status--invalid'}`}
+                          style={{ fontSize: '10px', padding: '2px 6px' }}
+                        >
+                          {rangeMatch.hash_match ? '✓ Match' : '✕ Mismatch'}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

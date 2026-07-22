@@ -149,6 +149,11 @@ function DashboardPage({ onLogout }) {
     }
   }, [tempDateFrom, tempDateTo, selectedClient, onLogout]);
 
+  const [rangeVerifyResult, setRangeVerifyResult] = useState(null);
+  const [isVerifyRangeLoading, setIsVerifyRangeLoading] = useState(false);
+
+  const [showOnlyIssues, setShowOnlyIssues] = useState(false);
+
   // Clear Range handler
   const handleClearRange = useCallback(() => {
     setTempDateFrom('');
@@ -157,6 +162,9 @@ function DashboardPage({ onLogout }) {
     setFilterDateTo('');
     setRecentLogs([]);
     setTotalLogsCount(0);
+    setRangeVerifyResult(null);
+    setShowOnlyIssues(false);
+    setFilterVerification('ALL');
     setCurrentPage(1);
   }, []);
 
@@ -179,14 +187,13 @@ function DashboardPage({ onLogout }) {
       });
   }, []);
 
-  // Verify range using backend API
+  // Verify range using backend API — Integrated into Main Table (Opsi A)
   const handleVerifyRange = useCallback(async () => {
     if (!filterDateFrom || !filterDateTo) return;
+    setIsVerifyRangeLoading(true);
     try {
       const fromISO = new Date(filterDateFrom).toISOString();
       const toISO = new Date(filterDateTo).toISOString();
-
-      setSelectedVerifyResult({ status: 'loading' });
 
       const params = {
         from: fromISO,
@@ -207,11 +214,11 @@ function DashboardPage({ onLogout }) {
         return next;
       });
 
-      setSelectedVerifyResult({
+      setRangeVerifyResult({
         range: { from: filterDateFrom, to: filterDateTo },
         summary: res.data.summary || {
           total: results.length,
-          valid: results.filter(r => r.verify_status === 'success').length,
+          valid: results.filter(r => r.verify_status === 'success' || r.verify_status === 'valid').length,
           invalid: results.filter(r => r.verify_status === 'tampered' || r.verify_status === 'failed_local' || r.verify_status === 'failed_onchain').length,
           pending: results.filter(r => r.verify_status === 'pending').length
         },
@@ -219,13 +226,15 @@ function DashboardPage({ onLogout }) {
       });
     } catch (err) {
       console.error("Gagal verifikasi range:", err);
-      setSelectedVerifyResult({
+      setRangeVerifyResult({
         range: { from: filterDateFrom, to: filterDateTo },
         summary: { total: 0, valid: 0, invalid: 0, pending: 0 },
         results: [],
         status: 'failed_local',
         message: err.response?.data?.error || 'Kesalahan koneksi saat memverifikasi range log.'
       });
+    } finally {
+      setIsVerifyRangeLoading(false);
     }
   }, [filterDateFrom, filterDateTo, selectedClient]);
 
@@ -243,32 +252,55 @@ function DashboardPage({ onLogout }) {
   const tableNames = Object.keys(groupedInventory).sort();
 
   // Filter & pagination
-  const filteredLogs = recentLogs.filter(log => {
-    const matchSearch =
-      (log?.source_table?.toLowerCase() || log?.resource?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-      (log?.actor?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-      (log?.source_system?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-      (log?.metadata?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-      (log?.hash_value?.toLowerCase() || '').includes(searchQuery.toLowerCase());
-    const matchAction = filterAction === 'ALL' || log?.action === filterAction;
+  const filteredLogs = useMemo(() => {
+    return recentLogs.filter(log => {
+      const matchSearch =
+        (log?.source_table?.toLowerCase() || log?.resource?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+        (log?.actor?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+        (log?.source_system?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+        (log?.metadata?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+        (log?.hash_value?.toLowerCase() || '').includes(searchQuery.toLowerCase());
 
-    let matchDate = true;
-    if (log?.timestamp) {
-      const logTime = new Date(log.timestamp).getTime();
-      if (filterDateFrom) {
-        const fromTime = new Date(filterDateFrom).getTime();
-        if (logTime < fromTime) matchDate = false;
-      }
-      if (filterDateTo) {
-        const toTime = new Date(filterDateTo).getTime();
-        if (logTime > toTime) matchDate = false;
-      }
-    } else if (filterDateFrom || filterDateTo) {
-      matchDate = false;
-    }
+      const matchAction = filterAction === 'ALL' || log?.action === filterAction;
 
-    return matchSearch && matchAction && matchDate;
-  });
+      let matchDate = true;
+      if (log?.timestamp) {
+        const logTime = new Date(log.timestamp).getTime();
+        if (filterDateFrom) {
+          const fromTime = new Date(filterDateFrom).getTime();
+          if (logTime < fromTime) matchDate = false;
+        }
+        if (filterDateTo) {
+          const toTime = new Date(filterDateTo).getTime();
+          if (logTime > toTime) matchDate = false;
+        }
+      } else if (filterDateFrom || filterDateTo) {
+        matchDate = false;
+      }
+
+      // Verification status filter (Dropdown: ALL | VALID | INVALID)
+      let matchVerification = true;
+      if (filterVerification !== 'ALL') {
+        const v = verifyStatuses[log.log_id];
+        const isValid = v && (v.status === 'success' || v.status === 'valid');
+        if (filterVerification === 'VALID') {
+          matchVerification = isValid;
+        } else if (filterVerification === 'INVALID') {
+          matchVerification = !isValid;
+        }
+      }
+
+      // Quick issue toggle filter (Show Only Issues button)
+      let matchIssues = true;
+      if (showOnlyIssues) {
+        const v = verifyStatuses[log.log_id];
+        const isValid = v && (v.status === 'success' || v.status === 'valid');
+        matchIssues = !isValid;
+      }
+
+      return matchSearch && matchAction && matchDate && matchVerification && matchIssues;
+    });
+  }, [recentLogs, searchQuery, filterAction, filterDateFrom, filterDateTo, filterVerification, showOnlyIssues, verifyStatuses]);
   const isLocalPaginated = !isServerPaginated || filterDateFrom || filterDateTo;
 
   const totalPages = isLocalPaginated
@@ -561,8 +593,8 @@ function DashboardPage({ onLogout }) {
             {/* Stats Grid */}
             <StatCards stats={stats} />
 
-            {/* Verification Detail (inline) */}
-            {selectedVerifyResult && (
+            {/* Verification Detail (Single log modal inspection) */}
+            {selectedVerifyResult && !selectedVerifyResult.range && (
               <VerificationModal
                 result={selectedVerifyResult}
                 onClose={() => setSelectedVerifyResult(null)}
@@ -644,6 +676,11 @@ function DashboardPage({ onLogout }) {
               handleClearRange={handleClearRange}
               isLogsLoading={isLogsLoading}
               handleVerifyRange={handleVerifyRange}
+              rangeVerifyResult={rangeVerifyResult}
+              setRangeVerifyResult={setRangeVerifyResult}
+              isVerifyRangeLoading={isVerifyRangeLoading}
+              showOnlyIssues={showOnlyIssues}
+              setShowOnlyIssues={setShowOnlyIssues}
               onSelectResource={setSelectedResource}
               renderStatusBadge={renderStatusBadge}
               displayTotal={displayTotal}
