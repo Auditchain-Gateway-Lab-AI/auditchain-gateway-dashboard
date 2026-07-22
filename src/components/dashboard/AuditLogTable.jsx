@@ -28,8 +28,6 @@ function AuditLogTable({
   rangeVerifyResult = null,
   setRangeVerifyResult,
   isVerifyRangeLoading = false,
-  showOnlyIssues = false,
-  setShowOnlyIssues,
   onSelectResource,
   renderStatusBadge,
   displayTotal = 0,
@@ -187,24 +185,14 @@ function AuditLogTable({
             </button>
           )}
           {rangeVerifyResult && (
-            <>
-              <button
-                type="button"
-                className={showOnlyIssues ? 'ac-btn-primary' : 'ac-btn-ghost-action'}
-                style={{ padding: '0 12px', height: '36px', minWidth: 'auto', fontSize: '12px', backgroundColor: showOnlyIssues ? '#dc2626' : undefined }}
-                onClick={() => setShowOnlyIssues(v => !v)}
-              >
-                ⚠️ Show Only Issues
-              </button>
-              <button
-                type="button"
-                className="ac-btn-ghost-action"
-                style={{ padding: '0 12px', height: '36px', minWidth: 'auto', fontSize: '12px' }}
-                onClick={handleCopyResults}
-              >
-                📋 Copy Results {copyState && `(${copyState})`}
-              </button>
-            </>
+            <button
+              type="button"
+              className="ac-btn-ghost-action"
+              style={{ padding: '0 12px', height: '36px', minWidth: 'auto', fontSize: '12px' }}
+              onClick={handleCopyResults}
+            >
+              📋 Copy Results {copyState && `(${copyState})`}
+            </button>
           )}
         </div>
 

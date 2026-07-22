@@ -152,8 +152,6 @@ function DashboardPage({ onLogout }) {
   const [rangeVerifyResult, setRangeVerifyResult] = useState(null);
   const [isVerifyRangeLoading, setIsVerifyRangeLoading] = useState(false);
 
-  const [showOnlyIssues, setShowOnlyIssues] = useState(false);
-
   // Clear Range handler
   const handleClearRange = useCallback(() => {
     setTempDateFrom('');
@@ -163,7 +161,6 @@ function DashboardPage({ onLogout }) {
     setRecentLogs([]);
     setTotalLogsCount(0);
     setRangeVerifyResult(null);
-    setShowOnlyIssues(false);
     setFilterVerification('ALL');
     setCurrentPage(1);
   }, []);
@@ -290,17 +287,9 @@ function DashboardPage({ onLogout }) {
         }
       }
 
-      // Quick issue toggle filter (Show Only Issues button)
-      let matchIssues = true;
-      if (showOnlyIssues) {
-        const v = verifyStatuses[log.log_id];
-        const isValid = v && (v.status === 'success' || v.status === 'valid');
-        matchIssues = !isValid;
-      }
-
-      return matchSearch && matchAction && matchDate && matchVerification && matchIssues;
+      return matchSearch && matchAction && matchDate && matchVerification;
     });
-  }, [recentLogs, searchQuery, filterAction, filterDateFrom, filterDateTo, filterVerification, showOnlyIssues, verifyStatuses]);
+  }, [recentLogs, searchQuery, filterAction, filterDateFrom, filterDateTo, filterVerification, verifyStatuses]);
   const isLocalPaginated = !isServerPaginated || filterDateFrom || filterDateTo;
 
   const totalPages = isLocalPaginated
@@ -679,8 +668,6 @@ function DashboardPage({ onLogout }) {
               rangeVerifyResult={rangeVerifyResult}
               setRangeVerifyResult={setRangeVerifyResult}
               isVerifyRangeLoading={isVerifyRangeLoading}
-              showOnlyIssues={showOnlyIssues}
-              setShowOnlyIssues={setShowOnlyIssues}
               onSelectResource={setSelectedResource}
               renderStatusBadge={renderStatusBadge}
               displayTotal={displayTotal}
