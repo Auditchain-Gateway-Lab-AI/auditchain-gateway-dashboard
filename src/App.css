@@ -1484,6 +1484,63 @@
   animation: fadeIn 0.4s ease;
 }
 
+.ac-login-card__topbar {
+  display: flex;
+  align-items: center;
+  margin-bottom: 28px;
+}
+
+.ac-login-card-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 7px 11px 7px 8px;
+  color: #334155;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+  transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ac-login-card-back-link__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: #4f46e5;
+  background: #eef2ff;
+  border-radius: 999px;
+  flex-shrink: 0;
+  transition: color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.ac-login-card-back-link:hover {
+  color: #1e293b;
+  background: #ffffff;
+  border-color: #c7d2fe;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+  transform: translateY(-1px);
+}
+
+.ac-login-card-back-link:hover .ac-login-card-back-link__icon {
+  color: #ffffff;
+  background: #4f46e5;
+  transform: translateX(-2px);
+}
+
+.ac-login-card-back-link:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.18);
+  border-color: #818cf8;
+}
+
 .ac-login-mobile-brand {
   display: none;
   align-items: center;
@@ -1741,7 +1798,11 @@
 
 @media (max-width: 480px) {
   .ac-login-form-panel { padding: 70px 12px 24px; }
-  .ac-login-card { padding: 24px 18px 20px; border-radius: var(--radius-xl); }
+  .ac-login-card { padding: 22px 18px 20px; border-radius: var(--radius-xl); }
+  .ac-login-card__topbar { margin-bottom: 22px; }
+  .ac-login-card-back-link { font-size: 12.5px; padding: 6px 10px 6px 7px; }
+  .ac-login-card-back-link__icon { width: 22px; height: 22px; }
+  .ac-login-mobile-brand { margin-bottom: 22px; }
 }
 
 @media (min-width: 1024px) {
