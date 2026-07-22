@@ -166,7 +166,7 @@ function ResourceDetailModal({ resource, onClose }) {
                   <div className="ac-log-card__body">
                     <div className="ac-log-card__section-label">
                       {log.action === 'INSERT' ? 'New Data'
-                        : log.action === 'DELETE' ? 'Deleted Data'
+                        : log.action === 'DELETE' ? 'Deleted Data (compared to previous log)'
                           : 'Changes (compared to previous log)'}
                     </div>
                     <SnapshotViewer currentLog={log} previousLog={prevLog} />

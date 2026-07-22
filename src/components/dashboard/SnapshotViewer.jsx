@@ -40,43 +40,44 @@ function SnapshotViewer({ currentLog, previousLog }) {
     );
   }
 
-  // DELETE — show last data with strikethrough
+  // DELETE — show before and after with strikethrough
   if (currentLog?.action === 'DELETE') {
+    const deleteSource = Object.keys(previousData).length > 0 ? previousData : currentData;
+    const deleteKeys = [...new Set([...Object.keys(deleteSource)])].filter(k => !SKIP.has(k));
+
     return (
       <table className="ac-diff">
+        <thead>
+          <tr>
+            <th>Column</th>
+            <th className="before">Before</th>
+            <th className="after">After</th>
+          </tr>
+        </thead>
         <tbody>
-          {allKeys.map(k => (
-            <tr key={k}>
-              <td className="field">{k}</td>
-              <td className="val-deleted">{String(previousData[k] ?? '—')}</td>
-            </tr>
-          ))}
+          {deleteKeys.map(k => {
+            const beforeVal = String(deleteSource[k] ?? '—');
+            return (
+              <tr key={k}>
+                <td className="field">{k}</td>
+                <td className="val-before">{beforeVal}</td>
+                <td className="val-after">
+                  <span style={{ textDecoration: 'line-through', color: 'var(--color-error)', fontWeight: 600 }}>
+                    {beforeVal}
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     );
   }
 
-  // UPDATE — only show changed fields
-  const changed = allKeys.filter(k => String(currentData[k] ?? '') !== String(previousData[k] ?? ''));
-  const unchanged = allKeys.filter(k => String(currentData[k] ?? '') === String(previousData[k] ?? ''));
-
-  if (changed.length === 0) {
-    return (
-      <div>
-        <span style={{ color: 'var(--color-on-surface-variant)', fontSize: '12px' }}>No column changes detected</span>
-        <table className="ac-diff" style={{ marginTop: '6px' }}>
-          <tbody>
-            {unchanged.map(k => (
-              <tr key={k}>
-                <td className="field" style={{ color: 'var(--color-outline)' }}>{k}</td>
-                <td className="val-unchanged">{String(currentData[k] ?? '—')}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  }
+  // UPDATE — show all columns directly (both changed and unchanged)
+  const changedKeysSet = new Set(
+    allKeys.filter(k => String(currentData[k] ?? '') !== String(previousData[k] ?? ''))
+  );
 
   return (
     <div>
@@ -89,32 +90,23 @@ function SnapshotViewer({ currentLog, previousLog }) {
           </tr>
         </thead>
         <tbody>
-          {changed.map(k => (
-            <tr key={k}>
-              <td className="field">{k}</td>
-              <td className="val-before">{String(previousData[k] ?? '—')}</td>
-              <td className="val-after">{String(currentData[k] ?? '—')}</td>
-            </tr>
-          ))}
+          {allKeys.map(k => {
+            const isChanged = changedKeysSet.has(k);
+            const beforeVal = String(previousData[k] ?? '—');
+            const afterVal = String(currentData[k] ?? '—');
+
+            return (
+              <tr key={k} style={!isChanged ? { opacity: 0.85 } : undefined}>
+                <td className="field" style={!isChanged ? { color: 'var(--color-outline)', fontWeight: 'normal' } : {}}>
+                  {k} {!isChanged && <span style={{ fontSize: '10px', color: 'var(--color-outline)', fontWeight: 'normal', marginLeft: '4px' }}>(unchanged)</span>}
+                </td>
+                <td className={isChanged ? 'val-before' : 'val-unchanged'}>{beforeVal}</td>
+                <td className={isChanged ? 'val-after' : 'val-unchanged'}>{afterVal}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
-      {unchanged.length > 0 && (
-        <details style={{ marginTop: '6px' }}>
-          <summary style={{ fontSize: '11px', color: 'var(--color-on-surface-variant)', cursor: 'pointer' }}>
-            {unchanged.length} columns unchanged
-          </summary>
-          <table className="ac-diff" style={{ marginTop: '4px' }}>
-            <tbody>
-              {unchanged.map(k => (
-                <tr key={k}>
-                  <td className="field" style={{ color: 'var(--color-outline)' }}>{k}</td>
-                  <td className="val-unchanged">{String(currentData[k] ?? '—')}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </details>
-      )}
     </div>
   );
 }

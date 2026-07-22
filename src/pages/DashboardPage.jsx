@@ -75,67 +75,90 @@ function DashboardPage({ onLogout }) {
     }
   }, [clientInfo]);
 
-  // Fetch data
+  const [isLogsLoading, setIsLogsLoading] = useState(false);
+
+  // Fetch summary stats & inventory (Ringan & Cepat, auto-refresh 5s)
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchSummary = async () => {
       try {
         const params = {};
         if (selectedClient) {
           params.client_id = selectedClient;
         }
 
-        // Hanya aktifkan jika kedua filter tanggal (From dan To) terisi
-        const isDateFilterActive = !!(filterDateFrom && filterDateTo);
-
-        let statsRes, logsRes, invRes;
-
-        if (isDateFilterActive) {
-          // Tarik data dalam jumlah besar (page_size: 1000) agar penyaringan frontend bekerja
-          const logsPage = 1;
-          const logsPageSize = 1000;
-
-          [statsRes, logsRes, invRes] = await Promise.all([
-            api.get('/dashboard/stats', { params }),
-            api.get('/dashboard/logs', { params: { ...params, page: logsPage, page_size: logsPageSize } }),
-            api.get('/dashboard/inventory', { params }),
-          ]);
-        } else {
-          // Jika filter tanggal tidak aktif, jangan panggil api logs untuk menghemat performa
-          [statsRes, invRes] = await Promise.all([
-            api.get('/dashboard/stats', { params }),
-            api.get('/dashboard/inventory', { params }),
-          ]);
-          logsRes = { data: [] };
-        }
+        const [statsRes, invRes] = await Promise.all([
+          api.get('/dashboard/stats', { params }),
+          api.get('/dashboard/inventory', { params }),
+        ]);
 
         setStats(statsRes.data);
-
-        let logsArray = [];
-        let serverTotal = 0;
-        let serverPaginated = false;
-
-        if (Array.isArray(logsRes.data)) {
-          logsArray = logsRes.data;
-          serverTotal = logsRes.data.length;
-          serverPaginated = false;
-        } else if (logsRes.data?.data) {
-          logsArray = logsRes.data.data;
-          serverTotal = logsRes.data.pagination?.total_items ?? logsRes.data.data.length;
-          serverPaginated = true;
-        }
-
-        setRecentLogs(logsArray);
-        setTotalLogsCount(serverTotal);
-        setIsServerPaginated(serverPaginated);
         setInventory(invRes.data || []);
       } catch (err) {
         if (err.response?.status === 401) onLogout();
       }
     };
-    fetchData();
-    const id = setInterval(fetchData, 5000);
+
+    fetchSummary();
+    const id = setInterval(fetchSummary, 5000);
     return () => clearInterval(id);
-  }, [onLogout, currentPage, rowsPerPage, selectedClient, filterDateFrom, filterDateTo]);
+  }, [onLogout, selectedClient]);
+
+  // Fetch logs transaksi SECARA ON-DEMAND saat tombol "Apply Range" diklik
+  const handleApplyLogsRange = useCallback(async (fromDate, toDate) => {
+    const fromVal = fromDate || tempDateFrom;
+    const toVal = toDate || tempDateTo;
+    if (!fromVal || !toVal) return;
+
+    setIsLogsLoading(true);
+    setFilterDateFrom(fromVal);
+    setFilterDateTo(toVal);
+    setCurrentPage(1);
+
+    try {
+      const params = {
+        page: 1,
+        page_size: 1000,
+      };
+      if (selectedClient) {
+        params.client_id = selectedClient;
+      }
+
+      const logsRes = await api.get('/dashboard/logs', { params });
+      let logsArray = [];
+      let serverTotal = 0;
+      let serverPaginated = false;
+
+      if (Array.isArray(logsRes.data)) {
+        logsArray = logsRes.data;
+        serverTotal = logsRes.data.length;
+        serverPaginated = false;
+      } else if (logsRes.data?.data) {
+        logsArray = logsRes.data.data;
+        serverTotal = logsRes.data.pagination?.total_items ?? logsRes.data.data.length;
+        serverPaginated = true;
+      }
+
+      setRecentLogs(logsArray);
+      setTotalLogsCount(serverTotal);
+      setIsServerPaginated(serverPaginated);
+    } catch (err) {
+      console.error("Gagal memuat log transaksi:", err);
+      if (err.response?.status === 401) onLogout();
+    } finally {
+      setIsLogsLoading(false);
+    }
+  }, [tempDateFrom, tempDateTo, selectedClient, onLogout]);
+
+  // Clear Range handler
+  const handleClearRange = useCallback(() => {
+    setTempDateFrom('');
+    setTempDateTo('');
+    setFilterDateFrom('');
+    setFilterDateTo('');
+    setRecentLogs([]);
+    setTotalLogsCount(0);
+    setCurrentPage(1);
+  }, []);
 
   // Verifikasi satu log SECARA ON-DEMAND
   const handleVerifyLog = useCallback((logId) => {
@@ -617,6 +640,9 @@ function DashboardPage({ onLogout }) {
               filterDateTo={filterDateTo}
               setFilterDateFrom={setFilterDateFrom}
               setFilterDateTo={setFilterDateTo}
+              handleApplyLogsRange={handleApplyLogsRange}
+              handleClearRange={handleClearRange}
+              isLogsLoading={isLogsLoading}
               handleVerifyRange={handleVerifyRange}
               onSelectResource={setSelectedResource}
               renderStatusBadge={renderStatusBadge}

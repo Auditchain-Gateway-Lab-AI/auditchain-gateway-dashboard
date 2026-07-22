@@ -21,6 +21,9 @@ function AuditLogTable({
   filterDateTo = '',
   setFilterDateFrom,
   setFilterDateTo,
+  handleApplyLogsRange,
+  handleClearRange,
+  isLogsLoading = false,
   handleVerifyRange,
   onSelectResource,
   renderStatusBadge,
@@ -103,25 +106,33 @@ function AuditLogTable({
           <button
             className="ac-btn-primary"
             style={{ padding: '0 16px', height: '36px', minWidth: 'auto', fontSize: '13px' }}
-            disabled={!tempDateFrom || !tempDateTo}
+            disabled={!tempDateFrom || !tempDateTo || isLogsLoading}
             onClick={() => {
-              setFilterDateFrom(tempDateFrom);
-              setFilterDateTo(tempDateTo);
-              setCurrentPage(1);
+              if (handleApplyLogsRange) {
+                handleApplyLogsRange(tempDateFrom, tempDateTo);
+              } else {
+                setFilterDateFrom(tempDateFrom);
+                setFilterDateTo(tempDateTo);
+                setCurrentPage(1);
+              }
             }}
           >
-            Apply Range
+            {isLogsLoading ? '⏳ Loading...' : 'Apply Range'}
           </button>
           {(tempDateFrom || tempDateTo || filterDateFrom || filterDateTo) && (
             <button
               className="ac-btn-ghost-action"
               style={{ padding: '0 12px', height: '36px', minWidth: 'auto', fontSize: '13px' }}
               onClick={() => {
-                setTempDateFrom('');
-                setTempDateTo('');
-                setFilterDateFrom('');
-                setFilterDateTo('');
-                setCurrentPage(1);
+                if (handleClearRange) {
+                  handleClearRange();
+                } else {
+                  setTempDateFrom('');
+                  setTempDateTo('');
+                  setFilterDateFrom('');
+                  setFilterDateTo('');
+                  setCurrentPage(1);
+                }
               }}
             >
               Clear Range
