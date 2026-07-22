@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import ActionBadge from '../common/ActionBadge';
 import { formatTimestamp } from '../../utils/formatters';
 
@@ -7,9 +7,30 @@ import { formatTimestamp } from '../../utils/formatters';
 // ================================================================
 function VerificationModal({ result, onClose }) {
   const [scanStep, setScanStep] = useState(0);
+  const [modalFilterStatus, setModalFilterStatus] = useState('ALL');
+  const [modalFilterAction, setModalFilterAction] = useState('ALL');
+  const [modalSortOrder, setModalSortOrder] = useState('NEWEST');
+  const [modalSearch, setModalSearch] = useState('');
+  const [showOnlyIssues, setShowOnlyIssues] = useState(false);
+  const [copyState, setCopyState] = useState('');
 
   useEffect(() => {
-    if (result && result.range) return;
+    // Each result is a fresh verification session. Keep modal controls local
+    // to that session so a previous search/filter cannot hide a new result.
+    setModalSearch('');
+    setModalFilterStatus('ALL');
+    setModalFilterAction('ALL');
+    setModalSortOrder('NEWEST');
+    setShowOnlyIssues(false);
+    setCopyState('');
+  }, [result]);
+
+  useEffect(() => {
+    if (!result || result.range) {
+      setScanStep(0);
+      return undefined;
+    }
+
     // Reset scan when result changes
     setScanStep(0);
 
@@ -26,6 +47,55 @@ function VerificationModal({ result, onClose }) {
       clearTimeout(t4);
     };
   }, [result]);
+
+  const rangeResults = useMemo(
+    () => (Array.isArray(result?.results) ? result.results : []),
+    [result]
+  );
+
+  const getVerificationCategory = (item) => {
+    const status = String(item?.verify_status || item?.status || '').toLowerCase();
+    if (status === 'success' || status === 'valid') return 'VALID';
+    if (status === 'pending') return 'PENDING';
+    return 'TAMPERED';
+  };
+
+  const filteredResults = useMemo(() => {
+    const query = modalSearch.trim().toLowerCase();
+
+    return [...rangeResults]
+      .filter((item) => {
+        if (!query) return true;
+        return [item.resource, item.actor]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(query));
+      })
+      .filter((item) => {
+        const category = getVerificationCategory(item);
+        return modalFilterStatus === 'ALL' || category === modalFilterStatus;
+      })
+      .filter((item) => modalFilterAction === 'ALL' || item.action === modalFilterAction)
+      .filter((item) => !showOnlyIssues || getVerificationCategory(item) === 'TAMPERED')
+      .sort((a, b) => {
+        const first = new Date(a.timestamp).getTime() || 0;
+        const second = new Date(b.timestamp).getTime() || 0;
+        return modalSortOrder === 'OLDEST' ? first - second : second - first;
+      });
+  }, [rangeResults, modalSearch, modalFilterStatus, modalFilterAction, modalSortOrder, showOnlyIssues]);
+
+  const handleCopyResults = async () => {
+    if (!navigator.clipboard) {
+      setCopyState('Clipboard unavailable');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(filteredResults, null, 2));
+      setCopyState('Copied');
+    } catch {
+      setCopyState('Copy failed');
+    }
+  };
 
   if (!result) return null;
 
@@ -65,8 +135,78 @@ function VerificationModal({ result, onClose }) {
             </div>
           </div>
 
-          <div style={{ fontSize: '13px', fontWeight: '700', marginBottom: '8px', color: 'var(--color-on-surface)' }}>
-            Log Items checked ({result.results?.length || 0}):
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
+            <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--color-on-surface)' }}>
+              Log Items checked
+            </div>
+            <span style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
+              Showing {filteredResults.length} of {rangeResults.length} logs
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
+            <input
+              type="search"
+              className="ac-select"
+              style={{ minWidth: '180px', flex: '1 1 180px' }}
+              placeholder="Search resource or actor..."
+              value={modalSearch}
+              onChange={(event) => setModalSearch(event.target.value)}
+              aria-label="Search verification results"
+            />
+            <select
+              className="ac-select"
+              value={modalFilterStatus}
+              onChange={(event) => setModalFilterStatus(event.target.value)}
+              aria-label="Filter verification status"
+            >
+              <option value="ALL">All Status</option>
+              <option value="VALID">Valid</option>
+              <option value="TAMPERED">Tampered / Invalid</option>
+              <option value="PENDING">Pending</option>
+            </select>
+            <select
+              className="ac-select"
+              value={modalFilterAction}
+              onChange={(event) => setModalFilterAction(event.target.value)}
+              aria-label="Filter transaction action"
+            >
+              <option value="ALL">All Actions</option>
+              <option value="INSERT">INSERT</option>
+              <option value="UPDATE">UPDATE</option>
+              <option value="DELETE">DELETE</option>
+            </select>
+            <select
+              className="ac-select"
+              value={modalSortOrder}
+              onChange={(event) => setModalSortOrder(event.target.value)}
+              aria-label="Sort verification results"
+            >
+              <option value="NEWEST">Newest First</option>
+              <option value="OLDEST">Oldest First</option>
+            </select>
+            <button
+              type="button"
+              className={showOnlyIssues ? 'ac-btn-primary' : 'ac-btn-ghost-action'}
+              style={{ padding: '7px 10px', minWidth: 'auto', fontSize: '12px' }}
+              onClick={() => setShowOnlyIssues((active) => !active)}
+              aria-pressed={showOnlyIssues}
+            >
+              ⚠️ Show Only Issues
+            </button>
+            <button
+              type="button"
+              className="ac-btn-ghost-action"
+              style={{ padding: '7px 10px', minWidth: 'auto', fontSize: '12px' }}
+              onClick={handleCopyResults}
+            >
+              📋 Copy Results
+            </button>
+            {copyState && (
+              <span role="status" style={{ fontSize: '11px', color: 'var(--color-on-surface-variant)' }}>
+                {copyState}
+              </span>
+            )}
           </div>
 
           <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--color-outline-variant)', borderRadius: 'var(--radius-sm)' }}>
@@ -77,29 +217,40 @@ function VerificationModal({ result, onClose }) {
                   <th style={{ padding: '6px 10px' }}>Resource</th>
                   <th style={{ padding: '6px 10px' }}>Action</th>
                   <th style={{ padding: '6px 10px' }}>Status</th>
+                  <th style={{ padding: '6px 10px' }}>Hash Match</th>
                 </tr>
               </thead>
               <tbody>
-                {(!result.results || result.results.length === 0) ? (
+                {rangeResults.length === 0 ? (
                   <tr>
-                    <td colSpan={4} style={{ textAlign: 'center', padding: '12px', color: 'var(--color-outline)' }}>
+                    <td colSpan={5} style={{ textAlign: 'center', padding: '12px', color: 'var(--color-outline)' }}>
                       No log entries found in this range.
                     </td>
                   </tr>
+                ) : filteredResults.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} style={{ textAlign: 'center', padding: '12px', color: 'var(--color-outline)' }}>
+                      No results match your filter. Try adjusting the filter above.
+                    </td>
+                  </tr>
                 ) : (
-                  result.results.map((item, idx) => {
-                    const statusClass = item.verify_status === 'valid' ? 'ac-status--valid'
-                      : item.verify_status === 'pending' ? 'ac-status--pending'
+                  filteredResults.map((item) => {
+                    const category = getVerificationCategory(item);
+                    const statusClass = category === 'VALID' ? 'ac-status--valid'
+                      : category === 'PENDING' ? 'ac-status--pending'
                         : 'ac-status--invalid';
                     return (
-                      <tr key={idx}>
+                      <tr key={item.log_id}>
                         <td style={{ padding: '6px 10px', fontSize: '11px' }}>{formatTimestamp(item.timestamp)}</td>
                         <td style={{ padding: '6px 10px', fontFamily: 'monospace' }}>{item.resource}</td>
                         <td style={{ padding: '6px 10px' }}><ActionBadge action={item.action} /></td>
                         <td style={{ padding: '6px 10px' }}>
                           <span className={`ac-status ${statusClass}`} style={{ fontSize: '10px', padding: '2px 6px' }}>
-                            {item.verify_status?.toUpperCase() || 'UNKNOWN'}
+                            {category}
                           </span>
+                        </td>
+                        <td style={{ padding: '6px 10px', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                          {item.hash_match ? '✅ Match' : '❌ Mismatch'}
                         </td>
                       </tr>
                     );
