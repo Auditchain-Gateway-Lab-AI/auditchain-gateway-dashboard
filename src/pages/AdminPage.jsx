@@ -19,6 +19,22 @@ function AdminPage({ onLogout }) {
   const [newApiKey, setNewApiKey] = useState('');
   const [apiKeyCopied, setApiKeyCopied] = useState(false);
 
+  // Agent Lapis 3 Modal states
+  const [showAgentModal, setShowAgentModal] = useState(false);
+  const [selectedAgentClient, setSelectedAgentClient] = useState(null);
+  const [agentConfig, setAgentConfig] = useState(null);
+  const [agentLoading, setAgentLoading] = useState(false);
+  const [agentActionLoading, setAgentActionLoading] = useState(false);
+  const [agentActionError, setAgentActionError] = useState('');
+  const [agentActionSuccess, setAgentActionSuccess] = useState('');
+  const [agentPingLoading, setAgentPingLoading] = useState(false);
+  const [agentPingResult, setAgentPingResult] = useState(null);
+  const [agentForm, setAgentForm] = useState({
+    agent_url: '',
+    verify_token: '',
+    timeout_seconds: 5,
+  });
+
   // Manage client users state
   const [manageUsersClient, setManageUsersClient] = useState(null);
   const [clientUsers, setClientUsers] = useState([]);
@@ -233,6 +249,117 @@ function AdminPage({ onLogout }) {
     });
   }, [newApiKey]);
 
+  // ======= AGENT LAPIS 3 HANDLERS =======
+  const fetchAgentConfig = useCallback(async (clientId) => {
+    try {
+      setAgentLoading(true);
+      setAgentActionError('');
+      const res = await api.get(`/admin/clients/${clientId}/agent-config`);
+      setAgentConfig(res.data);
+      setAgentForm({
+        agent_url: res.data.agent_url || '',
+        verify_token: '',
+        timeout_seconds: res.data.timeout_seconds || 5,
+      });
+    } catch (err) {
+      if (err.response?.status === 404) {
+        setAgentConfig(null);
+        setAgentForm({ agent_url: '', verify_token: '', timeout_seconds: 5 });
+      } else {
+        console.error("Gagal load agent config:", err);
+        setAgentActionError(err.response?.data?.error || "Gagal memuat konfigurasi Agent.");
+      }
+    } finally {
+      setAgentLoading(false);
+    }
+  }, []);
+
+  const handleOpenAgentModal = useCallback((client) => {
+    setSelectedAgentClient(client);
+    setShowAgentModal(true);
+    setAgentConfig(null);
+    setAgentPingResult(null);
+    setAgentActionError('');
+    setAgentActionSuccess('');
+    fetchAgentConfig(client.id);
+  }, [fetchAgentConfig]);
+
+  const handleSaveAgentConfig = useCallback(async (e) => {
+    e.preventDefault();
+    if (!selectedAgentClient) return;
+    try {
+      setAgentActionLoading(true);
+      setAgentActionError('');
+      setAgentActionSuccess('');
+      const res = await api.post(`/admin/clients/${selectedAgentClient.id}/agent-config`, {
+        agent_url: agentForm.agent_url,
+        verify_token: agentForm.verify_token,
+        timeout_seconds: parseInt(agentForm.timeout_seconds, 10) || 5,
+      });
+      setAgentActionSuccess(res.data.message || "Konfigurasi Agent berhasil disimpan!");
+      fetchAgentConfig(selectedAgentClient.id);
+    } catch (err) {
+      console.error("Gagal menyimpan agent config:", err);
+      setAgentActionError(err.response?.data?.error || "Gagal menyimpan konfigurasi Agent.");
+    } finally {
+      setAgentActionLoading(false);
+    }
+  }, [selectedAgentClient, agentForm, fetchAgentConfig]);
+
+  const handleDeleteAgentConfig = useCallback(async () => {
+    if (!selectedAgentClient) return;
+    if (!window.confirm(`Apakah Anda yakin ingin mencabut (revoke) akses Agent untuk klien "${selectedAgentClient.company_name}"?`)) {
+      return;
+    }
+    try {
+      setAgentActionLoading(true);
+      setAgentActionError('');
+      setAgentActionSuccess('');
+      const res = await api.delete(`/admin/clients/${selectedAgentClient.id}/agent-config`);
+      setAgentActionSuccess(res.data.message || "Konfigurasi Agent berhasil dihapus.");
+      setAgentConfig(null);
+      setAgentPingResult(null);
+      setAgentForm({ agent_url: '', verify_token: '', timeout_seconds: 5 });
+    } catch (err) {
+      console.error("Gagal menghapus agent config:", err);
+      setAgentActionError(err.response?.data?.error || "Gagal menghapus konfigurasi Agent.");
+    } finally {
+      setAgentActionLoading(false);
+    }
+  }, [selectedAgentClient]);
+
+  const handlePingAgent = useCallback(async () => {
+    if (!selectedAgentClient) return;
+    try {
+      setAgentPingLoading(true);
+      setAgentPingResult(null);
+      const res = await api.get(`/admin/clients/${selectedAgentClient.id}/agent-ping`);
+      setAgentPingResult(res.data);
+    } catch (err) {
+      console.error("Gagal ping agent:", err);
+      if (err.response?.data) {
+        setAgentPingResult(err.response.data);
+      } else {
+        setAgentPingResult({ reachable: false, error: err.message || "Gagal menghubungi server Agent." });
+      }
+    } finally {
+      setAgentPingLoading(false);
+    }
+  }, [selectedAgentClient]);
+
+  const handleDeleteKafkaConfig = useCallback(async (configId, companyName) => {
+    if (!window.confirm(`Apakah Anda yakin ingin menghapus konfigurasi Kafka untuk "${companyName || 'klien'}"?`)) {
+      return;
+    }
+    try {
+      await api.delete(`/admin/kafka-config/${configId}`);
+      fetchData();
+    } catch (err) {
+      console.error("Gagal menghapus konfigurasi Kafka:", err);
+      alert(err.response?.data?.error || "Gagal menghapus konfigurasi Kafka.");
+    }
+  }, [fetchData]);
+
   return (
     <div className="ac-shell">
 
@@ -423,6 +550,13 @@ function AdminPage({ onLogout }) {
                             >
                               👥 Users
                             </button>
+                            <button
+                              className="ac-btn-primary"
+                              style={{ padding: '6px 12px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: 'var(--color-tertiary, #388e3c)' }}
+                              onClick={() => handleOpenAgentModal(client)}
+                            >
+                              🤖 Agent
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -455,11 +589,12 @@ function AdminPage({ onLogout }) {
                       <th>Source System</th>
                       <th>PK Field</th>
                       <th>Status</th>
+                      <th style={{ textAlign: 'center' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {kafkaConfigs.length === 0 && (
-                      <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--color-outline)', padding: '32px 0' }}>No Kafka configurations found. Click "+ Add Configuration" to get started.</td></tr>
+                      <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--color-outline)', padding: '32px 0' }}>No Kafka configurations found. Click "+ Add Configuration" to get started.</td></tr>
                     )}
                     {kafkaConfigs.map(cfg => (
                       <tr key={cfg.id}>
@@ -484,6 +619,15 @@ function AdminPage({ onLogout }) {
                               {cfg.is_active ? 'Active' : 'Inactive'}
                             </span>
                           </label>
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <button
+                            className="ac-btn-primary ac-btn-primary--danger"
+                            style={{ padding: '4px 10px', fontSize: '11px' }}
+                            onClick={() => handleDeleteKafkaConfig(cfg.id, cfg.company_name)}
+                          >
+                            🗑️ Delete
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -797,6 +941,163 @@ function AdminPage({ onLogout }) {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== MODAL: KONFIGURASI AGENT LAPIS 3 ===== */}
+      {showAgentModal && selectedAgentClient && (
+        <div className="ac-modal-overlay" onClick={() => setShowAgentModal(false)}>
+          <div className="ac-modal" style={{ maxWidth: '650px', width: '90%' }} onClick={e => e.stopPropagation()}>
+            <div className="ac-modal__header">
+              <div>
+                <div className="ac-modal__title">🤖 Agent Lapis 3: {selectedAgentClient.company_name}</div>
+                <div className="ac-modal__subtitle">Konfigurasi Agent lokal milik perusahaan untuk verifikasi & integrasi Gateway</div>
+              </div>
+              <button className="ac-modal__close" onClick={() => setShowAgentModal(false)}>×</button>
+            </div>
+
+            <div className="ac-modal__body" style={{ padding: '20px 24px' }}>
+
+              {/* Status Bar */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '12px 16px',
+                borderRadius: 'var(--radius-sm, 8px)',
+                backgroundColor: agentConfig ? 'rgba(76, 175, 80, 0.1)' : 'rgba(255, 152, 0, 0.1)',
+                border: agentConfig ? '1px solid rgba(76, 175, 80, 0.3)' : '1px solid rgba(255, 152, 0, 0.3)',
+                marginBottom: '16px'
+              }}>
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
+                    {agentConfig ? '✅ Agent Terdaftar & Aktif' : '⚠️ Belum Ada Agent Terdaftar'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: 2 }}>
+                    {agentConfig ? `URL: ${agentConfig.agent_url} | Timeout: ${agentConfig.timeout_seconds}s` : 'Daftarkan URL Agent lokal di bawah ini.'}
+                  </div>
+                </div>
+
+                {agentConfig && (
+                  <button
+                    type="button"
+                    className="ac-btn-primary"
+                    style={{ padding: '6px 14px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                    onClick={handlePingAgent}
+                    disabled={agentPingLoading}
+                  >
+                    {agentPingLoading ? '📡 Testing Connection...' : '📡 Test Connection'}
+                  </button>
+                )}
+              </div>
+
+              {/* Ping Result Banner */}
+              {agentPingResult && (
+                <div style={{
+                  padding: '12px 16px',
+                  borderRadius: 'var(--radius-sm, 8px)',
+                  marginBottom: '16px',
+                  backgroundColor: agentPingResult.reachable ? 'rgba(46, 125, 50, 0.15)' : 'rgba(211, 47, 47, 0.15)',
+                  border: agentPingResult.reachable ? '1px solid #2e7d32' : '1px solid #d32f2f',
+                  color: agentPingResult.reachable ? '#1b5e20' : '#c62828',
+                  fontSize: '12px'
+                }}>
+                  <div style={{ fontWeight: 700, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {agentPingResult.reachable ? '🟢 Agent Connected Successfully!' : '🔴 Connection Failed / Unreachable'}
+                  </div>
+                  <div><strong>Target URL:</strong> {agentPingResult.agent_url}</div>
+                  {agentPingResult.http_status && <div><strong>HTTP Status:</strong> {agentPingResult.http_status}</div>}
+                  {agentPingResult.error && <div><strong>Error Details:</strong> {agentPingResult.error}</div>}
+                </div>
+              )}
+
+              {/* Action Alerts */}
+              {agentActionError && (
+                <div style={{ padding: '10px 14px', borderRadius: '6px', backgroundColor: 'rgba(186,26,26,0.1)', color: 'var(--color-error)', fontSize: '12px', fontWeight: 600, marginBottom: '16px' }}>
+                  ⚠️ {agentActionError}
+                </div>
+              )}
+              {agentActionSuccess && (
+                <div style={{ padding: '10px 14px', borderRadius: '6px', backgroundColor: 'rgba(76,175,80,0.1)', color: '#2e7d32', fontSize: '12px', fontWeight: 600, marginBottom: '16px' }}>
+                  ✅ {agentActionSuccess}
+                </div>
+              )}
+
+              {/* Agent Form */}
+              {agentLoading ? (
+                <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--color-outline)' }}>Loading Agent configuration...</div>
+              ) : (
+                <form onSubmit={handleSaveAgentConfig}>
+                  <div className="ac-form-grid">
+                    <div className="ac-form-field" style={{ gridColumn: '1 / -1' }}>
+                      <label className="ac-form-label">Agent Server URL <span style={{ color: 'var(--color-error)' }}>*</span></label>
+                      <input
+                        className="ac-form-input"
+                        required
+                        placeholder="http://192.168.11.50:9090"
+                        value={agentForm.agent_url}
+                        onChange={e => setAgentForm(f => ({ ...f, agent_url: e.target.value }))}
+                        disabled={agentActionLoading}
+                      />
+                      <div style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: 4 }}>
+                        Endpoint HTTP/HTTPS ke Agent Lapis 3 lokal perusahaan klien.
+                      </div>
+                    </div>
+
+                    <div className="ac-form-field">
+                      <label className="ac-form-label">Secret Verify Token <span style={{ color: 'var(--color-error)' }}>*</span></label>
+                      <input
+                        className="ac-form-input"
+                        type="password"
+                        required
+                        placeholder="Secret verification token"
+                        value={agentForm.verify_token}
+                        onChange={e => setAgentForm(f => ({ ...f, verify_token: e.target.value }))}
+                        disabled={agentActionLoading}
+                      />
+                    </div>
+
+                    <div className="ac-form-field">
+                      <label className="ac-form-label">Timeout (Seconds)</label>
+                      <input
+                        className="ac-form-input"
+                        type="number"
+                        min={1}
+                        max={30}
+                        placeholder="5"
+                        value={agentForm.timeout_seconds}
+                        onChange={e => setAgentForm(f => ({ ...f, timeout_seconds: e.target.value }))}
+                        disabled={agentActionLoading}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="ac-form-actions" style={{ marginTop: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      {agentConfig && (
+                        <button
+                          type="button"
+                          className="ac-btn-primary ac-btn-primary--danger"
+                          style={{ padding: '8px 14px', fontSize: '12px' }}
+                          onClick={handleDeleteAgentConfig}
+                          disabled={agentActionLoading}
+                        >
+                          🗑️ Revoke Agent
+                        </button>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button type="button" className="ac-btn-ghost-action" onClick={() => setShowAgentModal(false)}>Cancel</button>
+                      <button type="submit" className="ac-btn-primary" disabled={agentActionLoading}>
+                        {agentActionLoading ? 'Saving...' : (agentConfig ? 'Update Agent Config' : 'Register Agent')}
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              )}
+
             </div>
           </div>
         </div>
