@@ -7,7 +7,7 @@ import { formatTimestamp } from '../../utils/formatters';
 // ================================================================
 // KOMPONEN: Modal Detail Log per Resource (LEVEL 2)
 // ================================================================
-function ResourceDetailModal({ resource, onClose }) {
+function ResourceDetailModal({ resource, selectedClient, onClose }) {
   const [logs, setLogs] = useState([]);
   const [chainStatus, setChainStatus] = useState(null); // hasil verify-resource
   const [loading, setLoading] = useState(true);
@@ -22,10 +22,11 @@ function ResourceDetailModal({ resource, onClose }) {
     setChainStatus(null);
 
     const encoded = encodeURIComponent(resource);
+    const clientParam = selectedClient ? `?client_id=${encodeURIComponent(selectedClient)}` : '';
 
     Promise.all([
-      api.get(`/dashboard/logs/by-resource/${encoded}`),
-      api.get(`/dashboard/verify-resource/${encoded}`).catch(err => err.response), // 409/202 tetap punya body valid
+      api.get(`/dashboard/logs/by-resource/${encoded}${clientParam}`),
+      api.get(`/dashboard/verify-resource/${encoded}${clientParam}`).catch(err => err.response), // 409/202 tetap punya body valid
     ])
       .then(([logsRes, verifyRes]) => {
         if (cancelled) return;
@@ -41,7 +42,7 @@ function ResourceDetailModal({ resource, onClose }) {
       });
 
     return () => { cancelled = true; };
-  }, [resource]);
+  }, [resource, selectedClient]);
 
   const sortedAsc = [...logs].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   const resourceLogs = [...sortedAsc].reverse();

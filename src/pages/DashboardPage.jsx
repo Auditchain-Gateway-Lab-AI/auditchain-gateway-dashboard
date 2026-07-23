@@ -172,7 +172,9 @@ function DashboardPage({ onLogout }) {
       [logId]: { status: 'loading' }
     }));
 
-    api.get(`/dashboard/verify/${logId}`)
+    const params = selectedClient ? { client_id: selectedClient } : {};
+
+    api.get(`/dashboard/verify/${logId}`, { params })
       .then(res => {
         setVerifyStatuses(prev => ({ ...prev, [logId]: res.data }));
         setSelectedVerifyResult(res.data);
@@ -182,7 +184,7 @@ function DashboardPage({ onLogout }) {
         setVerifyStatuses(prev => ({ ...prev, [logId]: data }));
         setSelectedVerifyResult(data);
       });
-  }, []);
+  }, [selectedClient]);
 
   // Verify range using backend API — Integrated into Main Table (Opsi A)
   const handleVerifyRange = useCallback(async () => {
@@ -735,6 +737,7 @@ function DashboardPage({ onLogout }) {
       {selectedResource && (
         <ResourceDetailModal
           resource={selectedResource}
+          selectedClient={selectedClient}
           onClose={() => setSelectedResource(null)}
         />
       )}
