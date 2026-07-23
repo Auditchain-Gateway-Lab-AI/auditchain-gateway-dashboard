@@ -50,17 +50,6 @@ function AuditLogTable({
     }
   };
 
-  // Range verify lookup map per log_id
-  const rangeVerifyMap = React.useMemo(() => {
-    const map = {};
-    if (rangeVerifyResult?.results) {
-      rangeVerifyResult.results.forEach(r => {
-        map[r.log_id] = r;
-      });
-    }
-    return map;
-  }, [rangeVerifyResult]);
-
   return (
     <section className="ac-card">
       <div className="ac-card__header" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '16px' }}>
@@ -240,7 +229,7 @@ function AuditLogTable({
               </div>
               <div style={{ background: '#fff', padding: '10px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
                 <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#dc2626' }}>{rangeVerifyResult.summary.invalid}</div>
-                <div style={{ fontSize: '11px', color: '#dc2626', fontWeight: '600' }}>🚨 Mismatch</div>
+                <div style={{ fontSize: '11px', color: '#dc2626', fontWeight: '600' }}>🚨 Invalid</div>
               </div>
               <div style={{ background: '#fff', padding: '10px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
                 <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#d97706' }}>{rangeVerifyResult.summary.pending}</div>
@@ -286,7 +275,6 @@ function AuditLogTable({
                 </td>
               </tr>
             ) : paginatedLogs.map(log => {
-              const rangeMatch = rangeVerifyMap[log.log_id];
               return (
                 <tr key={log.log_id} onClick={() => onSelectResource(log.source_table || log.resource)}>
                   <td className="ac-table__time">{formatTimestamp(log.timestamp)}</td>
@@ -298,14 +286,6 @@ function AuditLogTable({
                   <td onClick={e => e.stopPropagation()}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       {renderStatusBadge(log)}
-                      {rangeMatch && (
-                        <span
-                          className={`ac-chain-badge ${rangeMatch.hash_match ? 'ac-status--valid' : 'ac-status--invalid'}`}
-                          style={{ fontSize: '10px', padding: '2px 6px' }}
-                        >
-                          {rangeMatch.hash_match ? '✓ Match' : '✕ Mismatch'}
-                        </span>
-                      )}
                     </div>
                   </td>
                 </tr>
