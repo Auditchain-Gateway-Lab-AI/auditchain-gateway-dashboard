@@ -1,6 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import ActionBadge from '../common/ActionBadge';
-import { formatTimestamp } from '../../utils/formatters';
 
 // ================================================================
 // KOMPONEN: Detail Verifikasi — 3-layer indicator
@@ -9,7 +7,11 @@ function VerificationModal({ result, onClose }) {
   const [scanStep, setScanStep] = useState(0);
 
   useEffect(() => {
-    if (result && result.range) return;
+    if (!result) {
+      setScanStep(0);
+      return undefined;
+    }
+
     // Reset scan when result changes
     setScanStep(0);
 
@@ -28,90 +30,6 @@ function VerificationModal({ result, onClose }) {
   }, [result]);
 
   if (!result) return null;
-
-  if (result.range) {
-    return (
-      <div className="ac-verify ac-verify__scanning-container" style={{ maxHeight: '550px', overflowY: 'auto' }}>
-        <div className="ac-verify__header ac-verify__header--info" style={{ backgroundColor: 'var(--color-primary, #005ea4)' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center' }}>
-              <span className="ac-verify__header-icon">📊</span>
-              <span className="ac-verify__header-title" style={{ color: '#fff' }}>Range Verification Results</span>
-            </div>
-            <div className="ac-verify__header-msg" style={{ color: 'rgba(255,255,255,0.9)' }}>
-              Checked logs from {formatTimestamp(result.range.from)} to {formatTimestamp(result.range.to)}
-            </div>
-          </div>
-          <button className="ac-verify__header-close" onClick={onClose}>×</button>
-        </div>
-
-        <div className="ac-verify__details" style={{ padding: '20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-around', textAlign: 'center', marginBottom: '20px', backgroundColor: 'var(--color-surface-container-high)', padding: '12px', borderRadius: 'var(--radius-md)' }}>
-            <div>
-              <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{result.summary.total}</div>
-              <div style={{ fontSize: '11px', color: 'var(--color-outline)' }}>Total Checked</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#2e7d32' }}>{result.summary.valid}</div>
-              <div style={{ fontSize: '11px', color: 'var(--color-outline)' }}>✅ Valid</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#c62828' }}>{result.summary.invalid}</div>
-              <div style={{ fontSize: '11px', color: 'var(--color-outline)' }}>🚨 Mismatch</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#f57f17' }}>{result.summary.pending}</div>
-              <div style={{ fontSize: '11px', color: 'var(--color-outline)' }}>⏱️ Pending</div>
-            </div>
-          </div>
-
-          <div style={{ fontSize: '13px', fontWeight: '700', marginBottom: '8px', color: 'var(--color-on-surface)' }}>
-            Log Items checked ({result.results?.length || 0}):
-          </div>
-
-          <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--color-outline-variant)', borderRadius: 'var(--radius-sm)' }}>
-            <table className="ac-table" style={{ fontSize: '12px' }}>
-              <thead>
-                <tr>
-                  <th style={{ padding: '6px 10px' }}>Timestamp</th>
-                  <th style={{ padding: '6px 10px' }}>Resource</th>
-                  <th style={{ padding: '6px 10px' }}>Action</th>
-                  <th style={{ padding: '6px 10px' }}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(!result.results || result.results.length === 0) ? (
-                  <tr>
-                    <td colSpan={4} style={{ textAlign: 'center', padding: '12px', color: 'var(--color-outline)' }}>
-                      No log entries found in this range.
-                    </td>
-                  </tr>
-                ) : (
-                  result.results.map((item, idx) => {
-                    const statusClass = item.verify_status === 'valid' ? 'ac-status--valid'
-                      : item.verify_status === 'pending' ? 'ac-status--pending'
-                        : 'ac-status--invalid';
-                    return (
-                      <tr key={idx}>
-                        <td style={{ padding: '6px 10px', fontSize: '11px' }}>{formatTimestamp(item.timestamp)}</td>
-                        <td style={{ padding: '6px 10px', fontFamily: 'monospace' }}>{item.resource}</td>
-                        <td style={{ padding: '6px 10px' }}><ActionBadge action={item.action} /></td>
-                        <td style={{ padding: '6px 10px' }}>
-                          <span className={`ac-status ${statusClass}`} style={{ fontSize: '10px', padding: '2px 6px' }}>
-                            {item.verify_status?.toUpperCase() || 'UNKNOWN'}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   const isScanning = scanStep < 4;
   const isSuccess = result.status === 'success' || result.data?.is_valid;

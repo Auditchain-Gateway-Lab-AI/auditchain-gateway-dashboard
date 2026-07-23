@@ -67,19 +67,8 @@ function LoginPage({ onLogin }) {
           </svg>
         </div>
 
-        {/* Top Navigation / Back to Home & Brand */}
+        {/* Brand */}
         <div>
-          <Link
-            to="/"
-            className="ac-login-back-link"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M19 12H5M12 19l-7-7 7-7"/>
-            </svg>
-            Back to Home Page
-          </Link>
-
-          {/* Brand */}
           <div className="ac-login-hero__brand">
             <img src="/logo/Group 1000009984.png" alt="Auditchain Gateway Logo" style={{ height: 42, width: 'auto', display: 'block', flexShrink: 0 }} />
             <div>
@@ -116,17 +105,20 @@ function LoginPage({ onLogin }) {
       {/* ===== FORM PANEL ===== */}
       <div className="ac-login-form-panel">
         <div className="ac-login-card">
-
-          {/* Back to Home Page link inside form card for mobile */}
-          <Link
-            to="/"
-            className="ac-login-card-back-link"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M19 12H5M12 19l-7-7 7-7"/>
-            </svg>
-            Back to Home Page
-          </Link>
+          <div className="ac-login-card__topbar">
+            <Link
+              to="/"
+              className="ac-login-card-back-link"
+              aria-label="Back to home page"
+            >
+              <span className="ac-login-card-back-link__icon" aria-hidden="true">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+              </span>
+              <span>Back home</span>
+            </Link>
+          </div>
 
           {/* Mobile brand header */}
           <div className="ac-login-mobile-brand">
