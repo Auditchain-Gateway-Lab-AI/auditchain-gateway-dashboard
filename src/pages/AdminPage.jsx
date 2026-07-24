@@ -18,6 +18,47 @@ function AdminPage({ onLogout }) {
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [newApiKey, setNewApiKey] = useState('');
   const [apiKeyCopied, setApiKeyCopied] = useState(false);
+  const [customTailscaleKey, setCustomTailscaleKey] = useState('');
+  const [setupCmdCopied, setSetupCmdCopied] = useState(false);
+
+  // Quick Setup Modal states (for existing clients)
+  const [showQuickSetupModal, setShowQuickSetupModal] = useState(false);
+  const [selectedQuickSetupClient, setSelectedQuickSetupClient] = useState(null);
+
+  // Installer Script Helpers
+  const getInstallerScriptUrl = useCallback(() => {
+    const baseURL = api.defaults.baseURL || 'http://localhost:8080/api';
+    const cleanBase = baseURL.replace(/\/$/, '');
+    return `${cleanBase}/install.sh`;
+  }, []);
+
+  const buildInstallCommand = useCallback((apiKey, tailscaleKey) => {
+    const baseURL = api.defaults.baseURL || 'http://localhost:8080/api';
+    const cleanBase = baseURL.replace(/\/$/, '');
+    const scriptUrl = `${cleanBase}/install.sh`;
+    let cmd = `GATEWAY_URL="${cleanBase}" CLIENT_KEY="${apiKey || '<YOUR_CLIENT_API_KEY>'}"`;
+    if (tailscaleKey && tailscaleKey.trim()) {
+      cmd += ` TAILSCALE_AUTHKEY="${tailscaleKey.trim()}"`;
+    }
+    cmd += ` sudo -E bash -c "$(curl -fsSL ${scriptUrl})"`;
+    return cmd;
+  }, []);
+
+  const handleCopySetupCmd = useCallback((cmdText) => {
+    navigator.clipboard.writeText(cmdText).then(() => {
+      setSetupCmdCopied(true);
+      setTimeout(() => setSetupCmdCopied(false), 2000);
+    }).catch(() => {
+      const el = document.createElement('textarea');
+      el.value = cmdText;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+      setSetupCmdCopied(true);
+      setTimeout(() => setSetupCmdCopied(false), 2000);
+    });
+  }, []);
 
   // Agent Lapis 3 Modal states
   const [showAgentModal, setShowAgentModal] = useState(false);
@@ -85,8 +126,12 @@ function AdminPage({ onLogout }) {
   }, [fetchData]);
 
   const handleToggleClientStatus = useCallback(async (client) => {
-    const actionText = client.status === 'active' ? 'deactivate' : 'activate';
-    if (!window.confirm(`Are you sure you want to ${actionText} the client "${client.company_name}"?`)) {
+    let actionText = client.status === 'active' ? 'deactivate' : 'activate';
+    let confirmMsg = `Are you sure you want to ${actionText} the client "${client.company_name}"?`;
+    if (client.status === 'pending_setup') {
+      confirmMsg = `Verify & activate client "${client.company_name}"? Client status will be changed to Active.`;
+    }
+    if (!window.confirm(confirmMsg)) {
       return;
     }
     try {
@@ -333,14 +378,17 @@ function AdminPage({ onLogout }) {
     try {
       setAgentPingLoading(true);
       setAgentPingResult(null);
+      const startTime = performance.now();
       const res = await api.get(`/admin/clients/${selectedAgentClient.id}/agent-ping`);
-      setAgentPingResult(res.data);
+      const endTime = performance.now();
+      const latency = Math.round(endTime - startTime);
+      setAgentPingResult({ ...res.data, latency });
     } catch (err) {
       console.error("Gagal ping agent:", err);
       if (err.response?.data) {
-        setAgentPingResult(err.response.data);
+        setAgentPingResult({ ...err.response.data, latency: null });
       } else {
-        setAgentPingResult({ reachable: false, error: err.message || "Gagal menghubungi server Agent." });
+        setAgentPingResult({ reachable: false, error: err.message || "Gagal menghubungi server Agent.", latency: null });
       }
     } finally {
       setAgentPingLoading(false);
@@ -508,59 +556,78 @@ function AdminPage({ onLogout }) {
                     {clients.length === 0 && (
                       <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--color-outline)', padding: '32px 0' }}>No registered clients found.</td></tr>
                     )}
-                    {clients.map(client => (
-                      <tr key={client.id}>
-                        <td>
-                          <div style={{ fontWeight: 600, color: 'var(--color-on-surface)' }}>{client.company_name}</div>
-                          <div style={{ fontSize: 11, color: 'var(--color-outline)', fontFamily: 'var(--font-mono)', marginTop: 2 }}>{client.id}</div>
-                        </td>
-                        <td>
-                          <span className={`ac-dot-status${client.status === 'active' ? ' ac-dot-status--active' : ' ac-dot-status--inactive'}`}>
-                            {client.status === 'active' ? 'Active' : 'Inactive'}
-                          </span>
-                        </td>
-                        <td>
-                          <div className="ac-field-map">
-                            <div className="ac-field-map__item"><span className="ac-field-map__key">actor</span> {client.actor_field || '—'}</div>
-                            <div className="ac-field-map__item"><span className="ac-field-map__key">action</span> {client.action_field || '—'}</div>
-                            <div className="ac-field-map__item"><span className="ac-field-map__key">resource</span> {client.resource_field || '—'}</div>
-                          </div>
-                        </td>
-                        <td className="ac-table__time">{formatTimestamp(client.created_at)}</td>
-                        <td>
-                          <div style={{ display: 'flex', gap: '8px' }}>
-                            <button
-                              className={`ac-btn-primary ${client.status === 'active' ? 'ac-btn-primary--warning' : 'ac-btn-primary--success'}`}
-                              style={{ padding: '6px 12px', fontSize: '11px', minWidth: '96px', justifyContent: 'center' }}
-                              onClick={() => handleToggleClientStatus(client)}
-                            >
-                              {client.status === 'active' ? '🚫 Block' : '✅ Activate'}
-                            </button>
-                            <button
-                              className="ac-btn-primary ac-btn-primary--danger"
-                              style={{ padding: '6px 12px', fontSize: '11px' }}
-                              onClick={() => handleDeleteClient(client)}
-                            >
-                              🗑️ Delete
-                            </button>
-                            <button
-                              className="ac-btn-primary"
-                              style={{ padding: '6px 12px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
-                              onClick={() => handleManageUsers(client)}
-                            >
-                              👥 Users
-                            </button>
-                            <button
-                              className="ac-btn-primary"
-                              style={{ padding: '6px 12px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: 'var(--color-tertiary, #388e3c)' }}
-                              onClick={() => handleOpenAgentModal(client)}
-                            >
-                              🤖 Agent
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                    {clients.map(client => {
+                      const matchingKafka = kafkaConfigs.find(k => k.client_id === client.id);
+                      return (
+                        <tr key={client.id}>
+                          <td>
+                            <div style={{ fontWeight: 600, color: 'var(--color-on-surface)' }}>{client.company_name}</div>
+                            <div style={{ fontSize: 11, color: 'var(--color-outline)', fontFamily: 'var(--font-mono)', marginTop: 2 }}>{client.id}</div>
+                            {matchingKafka && (
+                              <div style={{ fontSize: 10, color: 'var(--color-outline)', marginTop: 3, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                🖥️ <span>{matchingKafka.source_system}</span> <code className="ac-code-chip" style={{ fontSize: '9px', padding: '1px 4px' }}>{matchingKafka.kafka_brokers}</code>
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            <span className={`ac-dot-status${client.status === 'active' ? ' ac-dot-status--active' : client.status === 'pending_setup' ? ' ac-dot-status--pending' : ' ac-dot-status--inactive'}`}>
+                              {client.status === 'active' ? 'Active' : client.status === 'pending_setup' ? 'Pending Setup 🟡' : 'Inactive'}
+                            </span>
+                          </td>
+                          <td>
+                            <div className="ac-field-map">
+                              <div className="ac-field-map__item"><span className="ac-field-map__key">actor</span> {client.actor_field || '—'}</div>
+                              <div className="ac-field-map__item"><span className="ac-field-map__key">action</span> {client.action_field || '—'}</div>
+                              <div className="ac-field-map__item"><span className="ac-field-map__key">resource</span> {client.resource_field || '—'}</div>
+                            </div>
+                          </td>
+                          <td className="ac-table__time">{formatTimestamp(client.created_at)}</td>
+                          <td>
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                              <button
+                                className={`ac-btn-primary ${client.status === 'active' ? 'ac-btn-primary--warning' : 'ac-btn-primary--success'}`}
+                                style={{ padding: '6px 10px', fontSize: '11px', minWidth: '96px', justifyContent: 'center' }}
+                                onClick={() => handleToggleClientStatus(client)}
+                              >
+                                {client.status === 'active' ? '🚫 Block' : client.status === 'pending_setup' ? '✅ Verify & Activate' : '✅ Activate'}
+                              </button>
+                              <button
+                                className="ac-btn-primary"
+                                style={{ padding: '6px 10px', fontSize: '11px', backgroundColor: '#455a64' }}
+                                onClick={() => {
+                                  setSelectedQuickSetupClient(client);
+                                  setShowQuickSetupModal(true);
+                                }}
+                                title="View 1-Command Setup Guide"
+                              >
+                                ⚡ Setup
+                              </button>
+                              <button
+                                className="ac-btn-primary"
+                                style={{ padding: '6px 10px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: 'var(--color-tertiary, #388e3c)' }}
+                                onClick={() => handleOpenAgentModal(client)}
+                              >
+                                🤖 Agent
+                              </button>
+                              <button
+                                className="ac-btn-primary"
+                                style={{ padding: '6px 10px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                onClick={() => handleManageUsers(client)}
+                              >
+                                👥 Users
+                              </button>
+                              <button
+                                className="ac-btn-primary ac-btn-primary--danger"
+                                style={{ padding: '6px 10px', fontSize: '11px' }}
+                                onClick={() => handleDeleteClient(client)}
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -707,41 +774,166 @@ function AdminPage({ onLogout }) {
         </div>
       )}
 
-      {/* ===== MODAL: API KEY REVEAL ===== */}
+      {/* ===== MODAL: API KEY REVEAL & 1-COMMAND INSTALLER ===== */}
       {showApiKeyModal && (
         <div className="ac-modal-overlay">
-          <div className="ac-modal ac-modal--sm" onClick={e => e.stopPropagation()}>
+          <div className="ac-modal" style={{ maxWidth: '680px', width: '92%' }} onClick={e => e.stopPropagation()}>
             <div className="ac-modal__header">
               <div>
-                <div className="ac-modal__title">✅ Client Successfully Registered!</div>
-                <div className="ac-modal__subtitle">Make sure to copy and save the API Key below before closing this window</div>
+                <div className="ac-modal__title">🎉 Client Successfully Registered!</div>
+                <div className="ac-modal__subtitle">Save credentials & copy the 1-command installer script for client server setup</div>
               </div>
             </div>
-            <div className="ac-modal__body">
+            <div className="ac-modal__body" style={{ maxHeight: '80vh', overflowY: 'auto' }}>
+              
+              {/* API Key Box */}
               <div className="ac-api-key-box">
-                <div className="ac-api-key-box__label">🔑 API Key</div>
+                <div className="ac-api-key-box__label">🔑 Client API Key</div>
                 <div className="ac-api-key-box__key">{newApiKey}</div>
                 <button
                   className={`ac-btn-primary${apiKeyCopied ? ' ac-btn-primary--success' : ''}`}
-                  style={{ marginTop: 14, width: '100%' }}
+                  style={{ marginTop: 12, width: '100%' }}
                   onClick={handleCopyApiKey}
                 >
-                  {apiKeyCopied ? '✅ Copied to Clipboard!' : '📋 Copy API Key'}
+                  {apiKeyCopied ? '✅ API Key Copied!' : '📋 Copy API Key'}
                 </button>
               </div>
+
               <div className="ac-api-key-box__warning">
-                ⚠️ <strong>Attention:</strong> This API Key is generated and displayed only once.
-                After closing this dialog, the key cannot be retrieved.
-                Ensure it is stored securely before proceeding.
+                ⚠️ <strong>Security Note:</strong> This API Key is displayed <strong>ONLY ONCE</strong>. After closing this dialog, the full key cannot be retrieved again.
               </div>
-              <div style={{ marginTop: 16 }}>
+
+              {/* 1-Command Installer Script Box */}
+              <div style={{ marginTop: '20px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-on-surface)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  🚀 1-Command Automated Agent & CDC Installer
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: '2px' }}>
+                  Run this command on the Client's Linux VPS/Server terminal as Root/Sudo:
+                </div>
+
+                <div className="ac-terminal-box">
+                  <div className="ac-terminal-box__header">
+                    <div className="ac-terminal-box__title">
+                      <span>💻 BASH ONE-LINER</span>
+                    </div>
+                    <span style={{ fontSize: '10px', color: '#8b949e' }}>Auto-Configured</span>
+                  </div>
+                  <div className="ac-terminal-box__code">
+                    {buildInstallCommand(newApiKey, customTailscaleKey)}
+                  </div>
+                  <div className="ac-terminal-box__actions">
+                    <button
+                      type="button"
+                      className={`ac-btn-primary ${setupCmdCopied ? 'ac-btn-primary--success' : ''}`}
+                      style={{ padding: '6px 12px', fontSize: '11px' }}
+                      onClick={() => handleCopySetupCmd(buildInstallCommand(newApiKey, customTailscaleKey))}
+                    >
+                      {setupCmdCopied ? '✅ Command Copied!' : '📋 Copy Setup Command'}
+                    </button>
+                    <a
+                      href={getInstallerScriptUrl()}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ac-btn-ghost-action"
+                      style={{ padding: '6px 12px', fontSize: '11px', textDecoration: 'none', color: '#79c0ff', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                    >
+                      📥 Download install.sh
+                    </a>
+                  </div>
+                </div>
+
+                {/* Advanced Customization (Custom Tailscale Auth Key) */}
+                <details className="ac-adv-customization">
+                  <summary>⚙️ Advanced Customization (Custom Tailscale Auth Key)</summary>
+                  <div style={{ marginTop: '10px' }}>
+                    <label className="ac-form-label" style={{ fontSize: '11px' }}>Custom Tailscale Auth Key (Optional)</label>
+                    <input
+                      className="ac-form-input"
+                      style={{ fontSize: '12px', padding: '6px 10px' }}
+                      placeholder="tskey-auth-xxxx"
+                      value={customTailscaleKey}
+                      onChange={e => setCustomTailscaleKey(e.target.value)}
+                    />
+                    <div className="ac-security-warning">
+                      ⚠️ <strong>Network Security Warning:</strong> Leaving this field empty uses the default VPN mesh authkey in <code>install.sh</code>. For production deployments, inject your organization's custom Tailscale Auth Key.
+                    </div>
+                  </div>
+                </details>
+
+              </div>
+
+              <div style={{ marginTop: 20 }}>
                 <button
                   className="ac-btn-primary"
-                  style={{ width: '100%' }}
-                  onClick={() => { setShowApiKeyModal(false); setNewApiKey(''); }}
+                  style={{ width: '100%', justifyContent: 'center' }}
+                  onClick={() => {
+                    setShowApiKeyModal(false);
+                    setNewApiKey('');
+                    setCustomTailscaleKey('');
+                  }}
                 >
-                  I Have Saved the API Key — Close
+                  I Have Saved & Copied — Close
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== MODAL: QUICK SETUP GUIDE (FOR EXISTING CLIENTS) ===== */}
+      {showQuickSetupModal && selectedQuickSetupClient && (
+        <div className="ac-modal-overlay" onClick={() => setShowQuickSetupModal(false)}>
+          <div className="ac-modal" style={{ maxWidth: '640px', width: '90%' }} onClick={e => e.stopPropagation()}>
+            <div className="ac-modal__header">
+              <div>
+                <div className="ac-modal__title">⚡ Installer Command — {selectedQuickSetupClient.company_name}</div>
+                <div className="ac-modal__subtitle">Client ID: {selectedQuickSetupClient.id} | Prefix: {selectedQuickSetupClient.api_key_prefix}</div>
+              </div>
+              <button className="ac-modal__close" onClick={() => setShowQuickSetupModal(false)}>×</button>
+            </div>
+            <div className="ac-modal__body" style={{ padding: '20px 24px' }}>
+              
+              <div style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)', lineHeight: 1.6, marginBottom: '14px' }}>
+                Run the 1-command installer script below on the client server terminal. Replace <code>&lt;YOUR_CLIENT_API_KEY&gt;</code> with the original API Key generated during client creation.
+              </div>
+
+              <div className="ac-terminal-box">
+                <div className="ac-terminal-box__header">
+                  <div className="ac-terminal-box__title">
+                    <span>💻 BASH INSTALLER COMMAND</span>
+                  </div>
+                </div>
+                <div className="ac-terminal-box__code">
+                  {buildInstallCommand('<YOUR_CLIENT_API_KEY>', customTailscaleKey)}
+                </div>
+                <div className="ac-terminal-box__actions">
+                  <button
+                    type="button"
+                    className={`ac-btn-primary ${setupCmdCopied ? 'ac-btn-primary--success' : ''}`}
+                    style={{ padding: '6px 12px', fontSize: '11px' }}
+                    onClick={() => handleCopySetupCmd(buildInstallCommand('<YOUR_CLIENT_API_KEY>', customTailscaleKey))}
+                  >
+                    {setupCmdCopied ? '✅ Command Copied!' : '📋 Copy Command Template'}
+                  </button>
+                  <a
+                    href={getInstallerScriptUrl()}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ac-btn-ghost-action"
+                    style={{ padding: '6px 12px', fontSize: '11px', textDecoration: 'none', color: '#79c0ff', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    📥 Download install.sh
+                  </a>
+                </div>
+              </div>
+
+              <div className="ac-api-key-box__warning" style={{ marginTop: '14px' }}>
+                ℹ️ <strong>Note:</strong> API Keys are single-use credentials displayed only once at registration. For security, full keys cannot be retrieved later.
+              </div>
+
+              <div style={{ marginTop: '20px', textAlign: 'right' }}>
+                <button className="ac-btn-ghost-action" onClick={() => setShowQuickSetupModal(false)}>Close</button>
               </div>
             </div>
           </div>
@@ -1009,6 +1201,9 @@ function AdminPage({ onLogout }) {
                   </div>
                   <div><strong>Target URL:</strong> {agentPingResult.agent_url}</div>
                   {agentPingResult.http_status && <div><strong>HTTP Status:</strong> {agentPingResult.http_status}</div>}
+                  {agentPingResult.latency !== null && agentPingResult.latency !== undefined && (
+                    <div><strong>Latency (RTT):</strong> {agentPingResult.latency} ms</div>
+                  )}
                   {agentPingResult.error && <div><strong>Error Details:</strong> {agentPingResult.error}</div>}
                 </div>
               )}
