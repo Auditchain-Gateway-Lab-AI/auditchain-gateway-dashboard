@@ -40,7 +40,7 @@ function SnapshotViewer({ currentLog, previousLog }) {
     );
   }
 
-  // DELETE — show before and after with strikethrough
+  // DELETE — show before (green, normal) and after (red, strikethrough)
   if (currentLog?.action === 'DELETE') {
     const deleteSource = Object.keys(previousData).length > 0 ? previousData : currentData;
     const deleteKeys = [...new Set([...Object.keys(deleteSource)])].filter(k => !SKIP.has(k));
@@ -50,8 +50,8 @@ function SnapshotViewer({ currentLog, previousLog }) {
         <thead>
           <tr>
             <th>Column</th>
-            <th className="before">Before</th>
-            <th className="after">After</th>
+            <th className="after">Before</th>
+            <th className="before">After</th>
           </tr>
         </thead>
         <tbody>
@@ -60,12 +60,8 @@ function SnapshotViewer({ currentLog, previousLog }) {
             return (
               <tr key={k}>
                 <td className="field">{k}</td>
-                <td className="val-before">{beforeVal}</td>
-                <td className="val-after">
-                  <span style={{ textDecoration: 'line-through', color: 'var(--color-error)', fontWeight: 600 }}>
-                    {beforeVal}
-                  </span>
-                </td>
+                <td className="val-after">{beforeVal}</td>
+                <td className="val-deleted">{beforeVal}</td>
               </tr>
             );
           })}

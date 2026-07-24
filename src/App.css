@@ -1298,6 +1298,8 @@
   background: rgba(186,26,26,0.08);
   border-radius: 3px;
   text-decoration: line-through;
+  color: var(--color-error);
+  font-weight: 600;
 }
 
 .ac-diff td.val-unchanged {
