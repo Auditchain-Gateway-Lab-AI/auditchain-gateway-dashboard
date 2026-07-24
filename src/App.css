@@ -2931,3 +2931,98 @@
   }
 }
 
+/* ===== STATUS BADGE PENDING SETUP ===== */
+.ac-dot-status--pending {
+  background: rgba(255, 179, 0, 0.15);
+  color: #b78103;
+  border: 1px solid rgba(255, 179, 0, 0.4);
+}
+.ac-dot-status--pending::before {
+  background: #ffb300;
+  box-shadow: 0 0 6px #ffb300;
+}
+
+/* ===== TERMINAL BOX STYLING ===== */
+.ac-terminal-box {
+  margin-top: 14px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: var(--radius-md, 8px);
+  overflow: hidden;
+  font-family: 'Fira Code', 'Roboto Mono', Monaco, Consolas, monospace;
+}
+
+.ac-terminal-box__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+}
+
+.ac-terminal-box__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ac-terminal-box__code {
+  padding: 14px;
+  color: #e6edf3;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow-x: auto;
+  user-select: all;
+  background: #0d1117;
+}
+
+.ac-terminal-box__code .cmd-env { color: #79c0ff; font-weight: 600; }
+.ac-terminal-box__code .cmd-val { color: #a5d6ff; }
+.ac-terminal-box__code .cmd-sudo { color: #ff7b72; font-weight: 700; }
+.ac-terminal-box__code .cmd-url { color: #56d364; text-decoration: underline; }
+
+.ac-terminal-box__actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #161b22;
+  border-top: 1px solid #30363d;
+}
+
+/* ===== SECURITY WARNING & ADVANCED OPTIONS ===== */
+.ac-security-warning {
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: rgba(255, 152, 0, 0.08);
+  border: 1px solid rgba(255, 152, 0, 0.3);
+  border-radius: 6px;
+  font-size: 12px;
+  color: #b76e00;
+  line-height: 1.5;
+}
+
+.ac-adv-customization {
+  margin-top: 14px;
+  border: 1px solid var(--color-outline-variant, #e0e0e0);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: var(--color-surface-container-low, #fcfcfc);
+}
+
+.ac-adv-customization summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-primary);
+  user-select: none;
+}
+
+
