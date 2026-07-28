@@ -76,54 +76,32 @@ function DashboardPage({ onLogout }) {
   }, [clientInfo]);
 
   const [isLogsLoading, setIsLogsLoading] = useState(false);
-  const [inventoryLoaded, setInventoryLoaded] = useState(false);
-  const [isInventoryLoading, setIsInventoryLoading] = useState(false);
 
-  // Reset state inventory ketika selectedClient berubah
+  // Fetch summary stats & inventory (Otomatis & Cepat menggunakan tabel client_tables baru, auto-refresh 5s)
   useEffect(() => {
-    setInventory([]);
-    setInventoryLoaded(false);
-  }, [selectedClient]);
-
-  // Fetch summary stats SAJA (Ringan & Cepat, auto-refresh 5s)
-  useEffect(() => {
-    const fetchSummary = async () => {
+    const fetchSummaryAndInventory = async () => {
       try {
         const params = {};
         if (selectedClient) {
           params.client_id = selectedClient;
         }
 
-        const statsRes = await api.get('/dashboard/stats', { params });
+        const [statsRes, invRes] = await Promise.all([
+          api.get('/dashboard/stats', { params }),
+          api.get('/dashboard/inventory', { params }),
+        ]);
+
         setStats(statsRes.data);
+        setInventory(invRes.data || []);
       } catch (err) {
         if (err.response?.status === 401) onLogout();
       }
     };
 
-    fetchSummary();
-    const id = setInterval(fetchSummary, 5000);
+    fetchSummaryAndInventory();
+    const id = setInterval(fetchSummaryAndInventory, 5000);
     return () => clearInterval(id);
   }, [onLogout, selectedClient]);
-
-  // Fetch data inventory SECARA MANUAL ON-DEMAND
-  const handleLoadInventory = useCallback(async () => {
-    setIsInventoryLoading(true);
-    try {
-      const params = {};
-      if (selectedClient) {
-        params.client_id = selectedClient;
-      }
-      const invRes = await api.get('/dashboard/inventory', { params });
-      setInventory(invRes.data || []);
-      setInventoryLoaded(true);
-    } catch (err) {
-      console.error("Gagal memuat inventory:", err);
-      if (err.response?.status === 401) onLogout();
-    } finally {
-      setIsInventoryLoading(false);
-    }
-  }, [selectedClient, onLogout]);
 
   // Fetch logs transaksi SECARA ON-DEMAND saat rentang tanggal ditentukan
   const handleApplyLogsRange = useCallback(async (fromDate, toDate) => {
@@ -623,97 +601,61 @@ function DashboardPage({ onLogout }) {
 
             {/* DATA INVENTORY */}
             <section className="ac-card">
-              <div className="ac-card__header" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div className="ac-card__header-left">
-                    <span className="ac-card__icon">🗄️</span>
-                    <span className="ac-card__title">Data Inventory</span>
-                  </div>
-                  <span className="ac-card__subtitle">
-                    {inventoryLoaded ? `${tableNames.length} tables monitored — click to view records` : 'On-demand inventory status'}
-                  </span>
+              <div className="ac-card__header">
+                <div className="ac-card__header-left">
+                  <span className="ac-card__icon">🗄️</span>
+                  <span className="ac-card__title">Data Inventory</span>
                 </div>
-                {inventoryLoaded && (
-                  <button
-                    className="ac-btn-ghost-action"
-                    style={{ padding: '6px 12px', fontSize: '12px' }}
-                    onClick={handleLoadInventory}
-                    disabled={isInventoryLoading}
-                  >
-                    {isInventoryLoading ? '⏳ Refreshing...' : '🔄 Refresh Inventory'}
-                  </button>
-                )}
+                <span className="ac-card__subtitle">{tableNames.length} tables monitored — click to view records</span>
               </div>
               <div className="ac-table-wrap">
-                {!inventoryLoaded ? (
-                  <div className="ac-empty" style={{ padding: '32px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-                    <div className="ac-empty__icon">🗄️</div>
-                    <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--color-on-surface)', marginBottom: '4px' }}>
-                        Data Inventory On-Demand
-                      </div>
-                      <div style={{ fontSize: '13px', color: 'var(--color-on-surface-variant)', maxWidth: '440px' }}>
-                        Daftar tabel inventory tidak dimuat otomatis untuk menghemat resource sistem. Klik tombol di bawah untuk memuat data.
-                      </div>
-                    </div>
-                    <button
-                      className="ac-btn-primary"
-                      style={{ marginTop: '8px', padding: '8px 20px', fontSize: '13px' }}
-                      onClick={handleLoadInventory}
-                      disabled={isInventoryLoading}
-                    >
-                      {isInventoryLoading ? '⏳ Memuat Data Inventory...' : '🔄 Load Inventory Data'}
-                    </button>
-                  </div>
-                ) : (
-                  <table className="ac-table">
-                    <thead>
+                <table className="ac-table">
+                  <thead>
+                    <tr>
+                      <th>Table Name</th>
+                      <th>Total Monitored Records</th>
+                      <th style={{ textAlign: 'right' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tableNames.length === 0 ? (
                       <tr>
-                        <th>Table Name</th>
-                        <th>Total Monitored Records</th>
-                        <th style={{ textAlign: 'right' }}>Action</th>
+                        <td colSpan={3}>
+                          <div className="ac-empty">
+                            <div className="ac-empty__icon">📦</div>
+                            No inventory data available.
+                          </div>
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {tableNames.length === 0 ? (
-                        <tr>
-                          <td colSpan={3}>
-                            <div className="ac-empty">
-                              <div className="ac-empty__icon">📦</div>
-                              No inventory data available.
+                    ) : tableNames.map(tableName => {
+                      const tableItems = groupedInventory[tableName] || [];
+                      const firstItem = tableItems[0] || {};
+                      const recordCount = firstItem.row_count !== undefined
+                        ? firstItem.row_count
+                        : tableItems.length;
+
+                      return (
+                        <tr key={tableName} onClick={() => setSelectedTableModal(tableName)}>
+                          <td>
+                            <div className="ac-table__icon-cell">
+                              <div className="ac-table__row-icon">
+                                <Icon name="database" size={14} />
+                              </div>
+                              <strong>{tableName}</strong>
                             </div>
                           </td>
+                          <td>{Number(recordCount).toLocaleString()} Records</td>
+                          <td style={{ textAlign: 'right' }}>
+                            <button className="ac-btn-ghost" onClick={e => { e.stopPropagation(); setSelectedTableModal(tableName); }}>
+                              View Rows
+                              <Icon name="chevronRight" size={13} />
+                            </button>
+                          </td>
                         </tr>
-                      ) : tableNames.map(tableName => {
-                        const tableItems = groupedInventory[tableName] || [];
-                        const firstItem = tableItems[0] || {};
-                        const recordCount = firstItem.row_count !== undefined
-                          ? firstItem.row_count
-                          : tableItems.length;
-
-                        return (
-                          <tr key={tableName} onClick={() => setSelectedTableModal(tableName)}>
-                            <td>
-                              <div className="ac-table__icon-cell">
-                                <div className="ac-table__row-icon">
-                                  <Icon name="database" size={14} />
-                                </div>
-                                <strong>{tableName}</strong>
-                              </div>
-                            </td>
-                            <td>{Number(recordCount).toLocaleString()} Records</td>
-                            <td style={{ textAlign: 'right' }}>
-                              <button className="ac-btn-ghost" onClick={e => { e.stopPropagation(); setSelectedTableModal(tableName); }}>
-                                View Rows
-                                <Icon name="chevronRight" size={13} />
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                )}
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </section>
 
