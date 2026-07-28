@@ -684,25 +684,33 @@ function DashboardPage({ onLogout }) {
                             </div>
                           </td>
                         </tr>
-                      ) : tableNames.map(tableName => (
-                        <tr key={tableName} onClick={() => setSelectedTableModal(tableName)}>
-                          <td>
-                            <div className="ac-table__icon-cell">
-                              <div className="ac-table__row-icon">
-                                <Icon name="database" size={14} />
+                      ) : tableNames.map(tableName => {
+                        const tableItems = groupedInventory[tableName] || [];
+                        const firstItem = tableItems[0] || {};
+                        const recordCount = firstItem.row_count !== undefined
+                          ? firstItem.row_count
+                          : tableItems.length;
+
+                        return (
+                          <tr key={tableName} onClick={() => setSelectedTableModal(tableName)}>
+                            <td>
+                              <div className="ac-table__icon-cell">
+                                <div className="ac-table__row-icon">
+                                  <Icon name="database" size={14} />
+                                </div>
+                                <strong>{tableName}</strong>
                               </div>
-                              <strong>{tableName}</strong>
-                            </div>
-                          </td>
-                          <td>{groupedInventory[tableName].length.toLocaleString()} Records</td>
-                          <td style={{ textAlign: 'right' }}>
-                            <button className="ac-btn-ghost" onClick={e => { e.stopPropagation(); setSelectedTableModal(tableName); }}>
-                              View Rows
-                              <Icon name="chevronRight" size={13} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                            <td>{Number(recordCount).toLocaleString()} Records</td>
+                            <td style={{ textAlign: 'right' }}>
+                              <button className="ac-btn-ghost" onClick={e => { e.stopPropagation(); setSelectedTableModal(tableName); }}>
+                                View Rows
+                                <Icon name="chevronRight" size={13} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}
