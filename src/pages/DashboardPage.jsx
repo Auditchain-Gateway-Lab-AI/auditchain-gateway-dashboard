@@ -76,8 +76,16 @@ function DashboardPage({ onLogout }) {
   }, [clientInfo]);
 
   const [isLogsLoading, setIsLogsLoading] = useState(false);
+  const [inventoryLoaded, setInventoryLoaded] = useState(false);
+  const [isInventoryLoading, setIsInventoryLoading] = useState(false);
 
-  // Fetch summary stats & inventory (Ringan & Cepat, auto-refresh 5s)
+  // Reset state inventory ketika selectedClient berubah
+  useEffect(() => {
+    setInventory([]);
+    setInventoryLoaded(false);
+  }, [selectedClient]);
+
+  // Fetch summary stats SAJA (Ringan & Cepat, auto-refresh 5s)
   useEffect(() => {
     const fetchSummary = async () => {
       try {
@@ -86,13 +94,8 @@ function DashboardPage({ onLogout }) {
           params.client_id = selectedClient;
         }
 
-        const [statsRes, invRes] = await Promise.all([
-          api.get('/dashboard/stats', { params }),
-          api.get('/dashboard/inventory', { params }),
-        ]);
-
+        const statsRes = await api.get('/dashboard/stats', { params });
         setStats(statsRes.data);
-        setInventory(invRes.data || []);
       } catch (err) {
         if (err.response?.status === 401) onLogout();
       }
@@ -103,7 +106,26 @@ function DashboardPage({ onLogout }) {
     return () => clearInterval(id);
   }, [onLogout, selectedClient]);
 
-  // Fetch logs transaksi SECARA ON-DEMAND saat tombol "Apply Range" diklik
+  // Fetch data inventory SECARA MANUAL ON-DEMAND
+  const handleLoadInventory = useCallback(async () => {
+    setIsInventoryLoading(true);
+    try {
+      const params = {};
+      if (selectedClient) {
+        params.client_id = selectedClient;
+      }
+      const invRes = await api.get('/dashboard/inventory', { params });
+      setInventory(invRes.data || []);
+      setInventoryLoaded(true);
+    } catch (err) {
+      console.error("Gagal memuat inventory:", err);
+      if (err.response?.status === 401) onLogout();
+    } finally {
+      setIsInventoryLoading(false);
+    }
+  }, [selectedClient, onLogout]);
+
+  // Fetch logs transaksi SECARA ON-DEMAND saat rentang tanggal ditentukan
   const handleApplyLogsRange = useCallback(async (fromDate, toDate) => {
     const fromVal = fromDate || tempDateFrom;
     const toVal = toDate || tempDateTo;
@@ -148,6 +170,13 @@ function DashboardPage({ onLogout }) {
       setIsLogsLoading(false);
     }
   }, [tempDateFrom, tempDateTo, selectedClient, onLogout]);
+
+  // Auto-trigger logs fetch ketika kedua tanggal (From & To) dipilih
+  useEffect(() => {
+    if (tempDateFrom && tempDateTo) {
+      handleApplyLogsRange(tempDateFrom, tempDateTo);
+    }
+  }, [tempDateFrom, tempDateTo, handleApplyLogsRange]);
 
   const [rangeVerifyResult, setRangeVerifyResult] = useState(null);
   const [isVerifyRangeLoading, setIsVerifyRangeLoading] = useState(false);
@@ -594,53 +623,89 @@ function DashboardPage({ onLogout }) {
 
             {/* DATA INVENTORY */}
             <section className="ac-card">
-              <div className="ac-card__header">
-                <div className="ac-card__header-left">
-                  <span className="ac-card__icon">🗄️</span>
-                  <span className="ac-card__title">Data Inventory</span>
+              <div className="ac-card__header" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div className="ac-card__header-left">
+                    <span className="ac-card__icon">🗄️</span>
+                    <span className="ac-card__title">Data Inventory</span>
+                  </div>
+                  <span className="ac-card__subtitle">
+                    {inventoryLoaded ? `${tableNames.length} tables monitored — click to view records` : 'On-demand inventory status'}
+                  </span>
                 </div>
-                <span className="ac-card__subtitle">{tableNames.length} tables monitored — click to view records</span>
+                {inventoryLoaded && (
+                  <button
+                    className="ac-btn-ghost-action"
+                    style={{ padding: '6px 12px', fontSize: '12px' }}
+                    onClick={handleLoadInventory}
+                    disabled={isInventoryLoading}
+                  >
+                    {isInventoryLoading ? '⏳ Refreshing...' : '🔄 Refresh Inventory'}
+                  </button>
+                )}
               </div>
               <div className="ac-table-wrap">
-                <table className="ac-table">
-                  <thead>
-                    <tr>
-                      <th>Table Name</th>
-                      <th>Total Monitored Records</th>
-                      <th style={{ textAlign: 'right' }}>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tableNames.length === 0 ? (
+                {!inventoryLoaded ? (
+                  <div className="ac-empty" style={{ padding: '32px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                    <div className="ac-empty__icon">🗄️</div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--color-on-surface)', marginBottom: '4px' }}>
+                        Data Inventory On-Demand
+                      </div>
+                      <div style={{ fontSize: '13px', color: 'var(--color-on-surface-variant)', maxWidth: '440px' }}>
+                        Daftar tabel inventory tidak dimuat otomatis untuk menghemat resource sistem. Klik tombol di bawah untuk memuat data.
+                      </div>
+                    </div>
+                    <button
+                      className="ac-btn-primary"
+                      style={{ marginTop: '8px', padding: '8px 20px', fontSize: '13px' }}
+                      onClick={handleLoadInventory}
+                      disabled={isInventoryLoading}
+                    >
+                      {isInventoryLoading ? '⏳ Memuat Data Inventory...' : '🔄 Load Inventory Data'}
+                    </button>
+                  </div>
+                ) : (
+                  <table className="ac-table">
+                    <thead>
                       <tr>
-                        <td colSpan={3}>
-                          <div className="ac-empty">
-                            <div className="ac-empty__icon">📦</div>
-                            No inventory data available.
-                          </div>
-                        </td>
+                        <th>Table Name</th>
+                        <th>Total Monitored Records</th>
+                        <th style={{ textAlign: 'right' }}>Action</th>
                       </tr>
-                    ) : tableNames.map(tableName => (
-                      <tr key={tableName} onClick={() => setSelectedTableModal(tableName)}>
-                        <td>
-                          <div className="ac-table__icon-cell">
-                            <div className="ac-table__row-icon">
-                              <Icon name="database" size={14} />
+                    </thead>
+                    <tbody>
+                      {tableNames.length === 0 ? (
+                        <tr>
+                          <td colSpan={3}>
+                            <div className="ac-empty">
+                              <div className="ac-empty__icon">📦</div>
+                              No inventory data available.
                             </div>
-                            <strong>{tableName}</strong>
-                          </div>
-                        </td>
-                        <td>{groupedInventory[tableName].length.toLocaleString()} Records</td>
-                        <td style={{ textAlign: 'right' }}>
-                          <button className="ac-btn-ghost" onClick={e => { e.stopPropagation(); setSelectedTableModal(tableName); }}>
-                            View Rows
-                            <Icon name="chevronRight" size={13} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          </td>
+                        </tr>
+                      ) : tableNames.map(tableName => (
+                        <tr key={tableName} onClick={() => setSelectedTableModal(tableName)}>
+                          <td>
+                            <div className="ac-table__icon-cell">
+                              <div className="ac-table__row-icon">
+                                <Icon name="database" size={14} />
+                              </div>
+                              <strong>{tableName}</strong>
+                            </div>
+                          </td>
+                          <td>{groupedInventory[tableName].length.toLocaleString()} Records</td>
+                          <td style={{ textAlign: 'right' }}>
+                            <button className="ac-btn-ghost" onClick={e => { e.stopPropagation(); setSelectedTableModal(tableName); }}>
+                              View Rows
+                              <Icon name="chevronRight" size={13} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </section>
 
