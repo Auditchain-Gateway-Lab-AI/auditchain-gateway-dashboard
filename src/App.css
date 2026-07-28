@@ -3031,4 +3031,44 @@
   user-select: none;
 }
 
+/* ===== PENDING SETUP BADGE & STYLES ===== */
+.ac-pending-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #e65100;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 999px;
+  margin-left: auto;
+  line-height: 1;
+  box-shadow: 0 2px 6px rgba(230, 81, 0, 0.3);
+}
+
+.ac-badge-pending-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 152, 0, 0.15);
+  color: #e65100;
+  border: 1px solid rgba(255, 152, 0, 0.4);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.ac-pending-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.ac-pending-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(255, 179, 0, 0.15) !important;
+  border-color: rgba(255, 179, 0, 0.7) !important;
+}
+
+
 

@@ -33,15 +33,16 @@ function AdminPage({ onLogout }) {
   }, []);
 
   const buildInstallCommand = useCallback((apiKey, tailscaleKey) => {
-    const baseURL = api.defaults.baseURL || 'http://localhost:8080/api';
+    const baseURL = api.defaults.baseURL || 'http://localhost:8081/api';
     const cleanBase = baseURL.replace(/\/$/, '');
+    const gatewayHost = cleanBase.replace(/\/api\/?$/, '');
     const scriptUrl = `${cleanBase}/install.sh`;
-    let cmd = `GATEWAY_URL="${cleanBase}" CLIENT_KEY="${apiKey || '<YOUR_CLIENT_API_KEY>'}"`;
+    const key = apiKey || '<YOUR_CLIENT_API_KEY>';
+
     if (tailscaleKey && tailscaleKey.trim()) {
-      cmd += ` TAILSCALE_AUTHKEY="${tailscaleKey.trim()}"`;
+      return `GATEWAY_URL="${gatewayHost}" CLIENT_KEY="${key}" TAILSCALE_AUTHKEY="${tailscaleKey.trim()}" sudo -E bash -c "$(curl -fsSL ${scriptUrl})"`;
     }
-    cmd += ` sudo -E bash -c "$(curl -fsSL ${scriptUrl})"`;
-    return cmd;
+    return `curl -fsSL ${scriptUrl} | sudo bash -s -- ${gatewayHost} ${key}`;
   }, []);
 
   const handleCopySetupCmd = useCallback((cmdText) => {
@@ -98,6 +99,54 @@ function AdminPage({ onLogout }) {
     source_system: '', pk_field: 'ID', actor_field: '__user_name',
   });
 
+  // Pending Setup Verification Modal states
+  const [showSetupModal, setShowSetupModal] = useState(false);
+  const [selectedPendingClient, setSelectedPendingClient] = useState(null);
+  const [setupDetail, setSetupDetail] = useState(null);
+  const [setupLoading, setSetupLoading] = useState(false);
+  const [setupActionLoading, setSetupActionLoading] = useState(false);
+  const [setupError, setSetupError] = useState('');
+  const [setupForm, setSetupForm] = useState({
+    company_name: '',
+    topic_prefix: '',
+    actor_field: 'app_user',
+    fallback_actor_field: 'db_user',
+    action_field: 'operasi',
+    resource_field: 'tabel',
+  });
+
+  const pendingClients = useMemo(() => {
+    return clients.filter(c => c.status === 'pending_setup');
+  }, [clients]);
+
+  const handleOpenSetupModal = useCallback(async (client) => {
+    setSelectedPendingClient(client);
+    setShowSetupModal(true);
+    setSetupLoading(true);
+    setSetupError('');
+    setSetupDetail(null);
+    try {
+      const res = await api.get(`/admin/clients/${client.id}/detail`);
+      const detail = res.data;
+      setSetupDetail(detail);
+      setSetupForm({
+        company_name: detail.client?.company_name?.startsWith('Auto Registered')
+          ? ''
+          : (detail.client?.company_name || ''),
+        topic_prefix: detail.kafka_config?.topic_prefix || `morbis_simrs.${client.id.substring(0, 8)}`,
+        actor_field: detail.client?.actor_field || 'app_user',
+        fallback_actor_field: detail.client?.fallback_actor_field || 'db_user',
+        action_field: detail.client?.action_field || 'operasi',
+        resource_field: detail.client?.resource_field || 'tabel',
+      });
+    } catch (err) {
+      console.error("Gagal load detail client:", err);
+      setSetupError(err.response?.data?.error || "Gagal mengambil detail node klien.");
+    } finally {
+      setSetupLoading(false);
+    }
+  }, []);
+
   const clientInfo = useMemo(() => {
     const token = localStorage.getItem('token') || sessionStorage.getItem('token');
     return parseJwt(token);
@@ -120,6 +169,36 @@ function AdminPage({ onLogout }) {
       }
     }
   }, [onLogout]);
+
+  const handleSaveAndApproveClient = useCallback(async (e, shouldApprove) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!selectedPendingClient) return;
+    const finalCompanyName = setupForm.company_name.trim();
+    if (!finalCompanyName) {
+      setSetupError("Nama Resmi Rumah Sakit / Tenant wajib diisi!");
+      return;
+    }
+    try {
+      setSetupActionLoading(true);
+      setSetupError('');
+      await api.put(`/admin/clients/${selectedPendingClient.id}`, {
+        company_name: finalCompanyName,
+        topic_prefix: setupForm.topic_prefix,
+        actor_field: setupForm.actor_field,
+        fallback_actor_field: setupForm.fallback_actor_field,
+        action_field: setupForm.action_field,
+        resource_field: setupForm.resource_field,
+        status: shouldApprove ? 'active' : 'pending_setup',
+      });
+      setShowSetupModal(false);
+      fetchData();
+    } catch (err) {
+      console.error("Gagal menyimpan / approve client:", err);
+      setSetupError(err.response?.data?.error || "Gagal memperbarui & menyetujui node klien.");
+    } finally {
+      setSetupActionLoading(false);
+    }
+  }, [selectedPendingClient, setupForm, fetchData]);
 
   useEffect(() => {
     fetchData();
@@ -459,6 +538,17 @@ function AdminPage({ onLogout }) {
             Client Registry
           </button>
           <button
+            className={`ac-sidebar__nav-item${activeTab === 'pending' ? ' ac-sidebar__nav-item--active' : ''}`}
+            onClick={() => { setActiveTab('pending'); setSidebarOpen(false); }}
+            style={{ position: 'relative' }}
+          >
+            <Icon name="bell" size={18} />
+            Pending Setup
+            {pendingClients.length > 0 && (
+              <span className="ac-pending-count-badge">{pendingClients.length}</span>
+            )}
+          </button>
+          <button
             className={`ac-sidebar__nav-item${activeTab === 'kafka' ? ' ac-sidebar__nav-item--active' : ''}`}
             onClick={() => { setActiveTab('kafka'); setSidebarOpen(false); }}
           >
@@ -584,13 +674,23 @@ function AdminPage({ onLogout }) {
                           <td className="ac-table__time">{formatTimestamp(client.created_at)}</td>
                           <td>
                             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                              <button
-                                className={`ac-btn-primary ${client.status === 'active' ? 'ac-btn-primary--warning' : 'ac-btn-primary--success'}`}
-                                style={{ padding: '6px 10px', fontSize: '11px', minWidth: '96px', justifyContent: 'center' }}
-                                onClick={() => handleToggleClientStatus(client)}
-                              >
-                                {client.status === 'active' ? '🚫 Block' : client.status === 'pending_setup' ? '✅ Verify & Activate' : '✅ Activate'}
-                              </button>
+                              {client.status === 'pending_setup' ? (
+                                <button
+                                  className="ac-btn-primary ac-btn-primary--success"
+                                  style={{ padding: '6px 10px', fontSize: '11px', minWidth: '96px', justifyContent: 'center' }}
+                                  onClick={() => handleOpenSetupModal(client)}
+                                >
+                                  🔍 Review & Setup 🟢
+                                </button>
+                              ) : (
+                                <button
+                                  className={`ac-btn-primary ${client.status === 'active' ? 'ac-btn-primary--warning' : 'ac-btn-primary--success'}`}
+                                  style={{ padding: '6px 10px', fontSize: '11px', minWidth: '96px', justifyContent: 'center' }}
+                                  onClick={() => handleToggleClientStatus(client)}
+                                >
+                                  {client.status === 'active' ? '🚫 Block' : '✅ Activate'}
+                                </button>
+                              )}
                               <button
                                 className="ac-btn-primary"
                                 style={{ padding: '6px 10px', fontSize: '11px', backgroundColor: '#455a64' }}
@@ -631,6 +731,103 @@ function AdminPage({ onLogout }) {
                   </tbody>
                 </table>
               </div>
+            </section>
+          )}
+
+          {/* ===== TAB: PENDING SETUP (AUTO REGISTERED) ===== */}
+          {activeTab === 'pending' && (
+            <section className="ac-card" style={{ animation: 'fadeIn 0.3s ease' }}>
+              <div className="ac-card__header">
+                <div>
+                  <div className="ac-card__title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    🟡 Pending Setup Requests
+                    {pendingClients.length > 0 && (
+                      <span className="ac-pending-count-badge">{pendingClients.length} new</span>
+                    )}
+                  </div>
+                  <div className="ac-admin-card-sub">
+                    Daftar node VPS Rumah Sakit yang baru saja menjalankan skrip instalasi (install.sh) dan menunggu verifikasi Admin.
+                  </div>
+                </div>
+              </div>
+
+              {pendingClients.length === 0 ? (
+                <div style={{ textAlign: 'center', color: 'var(--color-outline)', padding: '48px 16px' }}>
+                  <div style={{ fontSize: '36px', marginBottom: '8px' }}>🎉</div>
+                  <div style={{ fontWeight: 600, color: 'var(--color-on-surface)', fontSize: '15px' }}>Tidak ada pendaftaran pending!</div>
+                  <div style={{ fontSize: '12px', marginTop: 4 }}>Semua node VPS Rumah Sakit telah terverifikasi dan aktif.</div>
+                </div>
+              ) : (
+                <div className="ac-pending-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '16px', padding: '16px 0' }}>
+                  {pendingClients.map(client => {
+                    const matchingKafka = kafkaConfigs.find(k => k.client_id === client.id);
+                    return (
+                      <div key={client.id} className="ac-pending-card" style={{
+                        borderRadius: '12px',
+                        border: '1px solid rgba(255, 179, 0, 0.4)',
+                        backgroundColor: 'rgba(255, 179, 0, 0.04)',
+                        padding: '18px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        boxShadow: '0 4px 12px rgba(255, 179, 0, 0.06)'
+                      }}>
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                            <div>
+                              <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--color-on-surface)' }}>
+                                {client.company_name}
+                              </div>
+                              <div style={{ fontSize: '11px', color: 'var(--color-outline)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
+                                ID: {client.id}
+                              </div>
+                            </div>
+                            <span className="ac-dot-status ac-dot-status--pending" style={{ fontSize: '11px', padding: '3px 8px' }}>
+                              🟡 Pending Setup
+                            </span>
+                          </div>
+
+                          <div style={{
+                            backgroundColor: 'var(--color-surface-variant, rgba(0,0,0,0.03))',
+                            borderRadius: '8px',
+                            padding: '12px 14px',
+                            fontSize: '12px',
+                            marginBottom: '14px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ color: 'var(--color-outline)' }}>🌐 Hostname VPS:</span>
+                              <strong style={{ fontFamily: 'var(--font-mono)' }}>{matchingKafka?.source_system || client.company_name.replace('Auto Registered (', '').replace(')', '') || 'N/A'}</strong>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ color: 'var(--color-outline)' }}>🔌 Kafka Broker:</span>
+                              <code className="ac-code-chip" style={{ fontSize: '11px' }}>{matchingKafka?.kafka_brokers || 'Auto-Detected'}</code>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ color: 'var(--color-outline)' }}>🔑 API Prefix:</span>
+                              <code className="ac-code-chip" style={{ fontSize: '11px' }}>{client.api_key_prefix}</code>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ color: 'var(--color-outline)' }}>⏱️ Registered At:</span>
+                              <span>{formatTimestamp(client.created_at)}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          className="ac-btn-primary ac-btn-primary--success"
+                          style={{ width: '100%', padding: '10px 14px', fontSize: '12px', justifyContent: 'center', fontWeight: 700 }}
+                          onClick={() => handleOpenSetupModal(client)}
+                        >
+                          🔍 Review & Verify (Approve) 🟢
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </section>
           )}
 
@@ -774,59 +971,42 @@ function AdminPage({ onLogout }) {
         </div>
       )}
 
-      {/* ===== MODAL: API KEY REVEAL & 1-COMMAND INSTALLER ===== */}
+      {/* ======= MODAL: API KEY & 1-COMMAND INSTALLER ======= */}
       {showApiKeyModal && (
         <div className="ac-modal-overlay">
           <div className="ac-modal" style={{ maxWidth: '680px', width: '92%' }} onClick={e => e.stopPropagation()}>
             <div className="ac-modal__header">
               <div>
                 <div className="ac-modal__title">🎉 Client Successfully Registered!</div>
-                <div className="ac-modal__subtitle">Save credentials & copy the 1-command installer script for client server setup</div>
+                <div className="ac-modal__subtitle">Copy and run the 1-command installer script on the client server</div>
               </div>
             </div>
             <div className="ac-modal__body" style={{ maxHeight: '80vh', overflowY: 'auto' }}>
               
-              {/* API Key Box */}
-              <div className="ac-api-key-box">
-                <div className="ac-api-key-box__label">🔑 Client API Key</div>
-                <div className="ac-api-key-box__key">{newApiKey}</div>
-                <button
-                  className={`ac-btn-primary${apiKeyCopied ? ' ac-btn-primary--success' : ''}`}
-                  style={{ marginTop: 12, width: '100%' }}
-                  onClick={handleCopyApiKey}
-                >
-                  {apiKeyCopied ? '✅ API Key Copied!' : '📋 Copy API Key'}
-                </button>
-              </div>
-
-              <div className="ac-api-key-box__warning">
-                ⚠️ <strong>Security Note:</strong> This API Key is displayed <strong>ONLY ONCE</strong>. After closing this dialog, the full key cannot be retrieved again.
-              </div>
-
-              {/* 1-Command Installer Script Box */}
-              <div style={{ marginTop: '20px' }}>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-on-surface)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {/* 1-Command Installer Script Box (PRIMARY) */}
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-on-surface)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
                   🚀 1-Command Automated Agent & CDC Installer
                 </div>
-                <div style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: '2px' }}>
-                  Run this command on the Client's Linux VPS/Server terminal as Root/Sudo:
+                <div style={{ fontSize: '11px', color: 'var(--color-outline)', marginBottom: '12px' }}>
+                  Copy and run this command on the Client's Linux VPS/Server terminal as Root/Sudo:
                 </div>
 
                 <div className="ac-terminal-box">
                   <div className="ac-terminal-box__header">
                     <div className="ac-terminal-box__title">
-                      <span>💻 BASH ONE-LINER</span>
+                      <span>💻 BASH ONE-LINER (AUTO-CONFIGURED)</span>
                     </div>
-                    <span style={{ fontSize: '10px', color: '#8b949e' }}>Auto-Configured</span>
+                    <span style={{ fontSize: '10px', color: '#8b949e', fontFamily: 'var(--font-mono)' }}>Ready to paste</span>
                   </div>
-                  <div className="ac-terminal-box__code">
+                  <div className="ac-terminal-box__code" style={{ fontSize: '12px', lineHeight: 1.5, wordBreak: 'break-all' }}>
                     {buildInstallCommand(newApiKey, customTailscaleKey)}
                   </div>
-                  <div className="ac-terminal-box__actions">
+                  <div className="ac-terminal-box__actions" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <button
                       type="button"
                       className={`ac-btn-primary ${setupCmdCopied ? 'ac-btn-primary--success' : ''}`}
-                      style={{ padding: '6px 12px', fontSize: '11px' }}
+                      style={{ padding: '8px 16px', fontSize: '12px', fontWeight: 700 }}
                       onClick={() => handleCopySetupCmd(buildInstallCommand(newApiKey, customTailscaleKey))}
                     >
                       {setupCmdCopied ? '✅ Command Copied!' : '📋 Copy Setup Command'}
@@ -843,8 +1023,39 @@ function AdminPage({ onLogout }) {
                   </div>
                 </div>
 
+                {/* Compact API Key reference for record */}
+                <div style={{
+                  marginTop: '16px',
+                  padding: '10px 14px',
+                  backgroundColor: 'var(--color-surface-variant, rgba(0,0,0,0.03))',
+                  borderRadius: '8px',
+                  border: '1px solid var(--color-outline-variant, #e0e0e0)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px'
+                }}>
+                  <div style={{ overflow: 'hidden' }}>
+                    <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-outline)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                      🔑 Generated API Key Reference
+                    </div>
+                    <div style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--color-on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {newApiKey}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="ac-btn-ghost-action"
+                    style={{ padding: '4px 8px', fontSize: '11px', flexShrink: 0 }}
+                    onClick={handleCopyApiKey}
+                    title="Copy Raw API Key"
+                  >
+                    {apiKeyCopied ? '✅ Copied' : '📋 Copy Key'}
+                  </button>
+                </div>
+
                 {/* Advanced Customization (Custom Tailscale Auth Key) */}
-                <details className="ac-adv-customization">
+                <details className="ac-adv-customization" style={{ marginTop: '14px' }}>
                   <summary>⚙️ Advanced Customization (Custom Tailscale Auth Key)</summary>
                   <div style={{ marginTop: '10px' }}>
                     <label className="ac-form-label" style={{ fontSize: '11px' }}>Custom Tailscale Auth Key (Optional)</label>
@@ -873,7 +1084,7 @@ function AdminPage({ onLogout }) {
                     setCustomTailscaleKey('');
                   }}
                 >
-                  I Have Saved & Copied — Close
+                  I Have Copied — Close
                 </button>
               </div>
             </div>
@@ -1293,6 +1504,175 @@ function AdminPage({ onLogout }) {
                 </form>
               )}
 
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======= MODAL: VERIFY & SETUP CLIENT (PENDING ONBOARDING) ======= */}
+      {showSetupModal && (
+        <div className="ac-modal-overlay" onClick={() => setShowSetupModal(false)}>
+          <div className="ac-modal" style={{ maxWidth: '640px' }} onClick={e => e.stopPropagation()}>
+            <div className="ac-modal__header">
+              <div>
+                <h3 className="ac-modal__title">🔍 Verify & Approve Hospital Node</h3>
+                <div className="ac-modal__subtitle">Lengkapi nama resmi Rumah Sakit & verifikasi parameter koneksi sebelum diaktifkan</div>
+              </div>
+              <button className="ac-modal__close" onClick={() => setShowSetupModal(false)}>×</button>
+            </div>
+
+            <div className="ac-modal__body" style={{ padding: '20px 24px' }}>
+              {setupError && (
+                <div style={{ padding: '10px 14px', borderRadius: '6px', backgroundColor: 'rgba(186,26,26,0.1)', color: 'var(--color-error)', fontSize: '12px', fontWeight: 600, marginBottom: '16px' }}>
+                  ⚠️ {setupError}
+                </div>
+              )}
+
+              {setupLoading ? (
+                <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--color-outline)' }}>Memuat detail telemetri node...</div>
+              ) : (
+                <form onSubmit={e => handleSaveAndApproveClient(e, true)}>
+
+                  {/* Auto-Detected Connection Details Callout */}
+                  <div style={{
+                    backgroundColor: 'rgba(33, 150, 243, 0.08)',
+                    border: '1px solid rgba(33, 150, 243, 0.3)',
+                    borderRadius: '8px',
+                    padding: '14px 16px',
+                    marginBottom: '18px'
+                  }}>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: '#1565c0', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      ⚡ Parameter Terdeteksi Otomatis (Dari Telemetri VPS RS)
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '12px' }}>
+                      <div>
+                        <span style={{ color: 'var(--color-outline)', display: 'block', fontSize: '11px' }}>🔒 IP Tailscale VPN:</span>
+                        <strong style={{ fontFamily: 'var(--font-mono)' }}>
+                          {setupDetail?.agent_config?.tailscale_ip || setupDetail?.agent_config?.agent_url?.replace('http://', '')?.split(':')[0] || 'Auto-Detected'}
+                        </strong>
+                      </div>
+                      <div>
+                        <span style={{ color: 'var(--color-outline)', display: 'block', fontSize: '11px' }}>🔒 Hostname VPS:</span>
+                        <strong style={{ fontFamily: 'var(--font-mono)' }}>
+                          {setupDetail?.agent_config?.hostname || setupDetail?.kafka_config?.source_system || 'N/A'}
+                        </strong>
+                      </div>
+                      <div>
+                        <span style={{ color: 'var(--color-outline)', display: 'block', fontSize: '11px' }}>🔒 Agent Server URL:</span>
+                        <code className="ac-code-chip" style={{ fontSize: '11px' }}>
+                          {setupDetail?.agent_config?.agent_url || 'N/A'}
+                        </code>
+                      </div>
+                      <div>
+                        <span style={{ color: 'var(--color-outline)', display: 'block', fontSize: '11px' }}>🔒 Kafka Broker Address:</span>
+                        <code className="ac-code-chip" style={{ fontSize: '11px' }}>
+                          {setupDetail?.kafka_config?.kafka_brokers || 'N/A'}
+                        </code>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Form Editable Fields */}
+                  <div className="ac-form-grid">
+                    <div className="ac-form-field" style={{ gridColumn: '1 / -1' }}>
+                      <label className="ac-form-label">
+                        Nama Resmi Rumah Sakit / Tenant <span style={{ color: 'var(--color-error)' }}>*</span>
+                      </label>
+                      <input
+                        className="ac-form-input"
+                        required
+                        placeholder="Contoh: RSUD Soetomo Surabaya"
+                        value={setupForm.company_name}
+                        onChange={e => setSetupForm(f => ({ ...f, company_name: e.target.value }))}
+                        disabled={setupActionLoading}
+                      />
+                      <div style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: 4 }}>
+                        Menggantikan nama bawaan "Auto Registered". Nama ini akan ditampilkan di seluruh log audit.
+                      </div>
+                    </div>
+
+                    <div className="ac-form-field">
+                      <label className="ac-form-label">Kafka Topic Prefix</label>
+                      <input
+                        className="ac-form-input"
+                        placeholder="morbis_simrs."
+                        value={setupForm.topic_prefix}
+                        onChange={e => setSetupForm(f => ({ ...f, topic_prefix: e.target.value }))}
+                        disabled={setupActionLoading}
+                      />
+                    </div>
+
+                    <div className="ac-form-field">
+                      <label className="ac-form-label">Actor Field Mapping</label>
+                      <input
+                        className="ac-form-input"
+                        placeholder="app_user"
+                        value={setupForm.actor_field}
+                        onChange={e => setSetupForm(f => ({ ...f, actor_field: e.target.value }))}
+                        disabled={setupActionLoading}
+                      />
+                    </div>
+
+                    <div className="ac-form-field">
+                      <label className="ac-form-label">Fallback Actor Field</label>
+                      <input
+                        className="ac-form-input"
+                        placeholder="db_user"
+                        value={setupForm.fallback_actor_field}
+                        onChange={e => setSetupForm(f => ({ ...f, fallback_actor_field: e.target.value }))}
+                        disabled={setupActionLoading}
+                      />
+                    </div>
+
+                    <div className="ac-form-field">
+                      <label className="ac-form-label">Action Field Mapping</label>
+                      <input
+                        className="ac-form-input"
+                        placeholder="operasi"
+                        value={setupForm.action_field}
+                        onChange={e => setSetupForm(f => ({ ...f, action_field: e.target.value }))}
+                        disabled={setupActionLoading}
+                      />
+                    </div>
+
+                    <div className="ac-form-field">
+                      <label className="ac-form-label">Resource Field Mapping</label>
+                      <input
+                        className="ac-form-input"
+                        placeholder="tabel"
+                        value={setupForm.resource_field}
+                        onChange={e => setSetupForm(f => ({ ...f, resource_field: e.target.value }))}
+                        disabled={setupActionLoading}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="ac-form-actions" style={{ marginTop: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      className="ac-btn-ghost-action"
+                      onClick={(e) => handleSaveAndApproveClient(e, false)}
+                      disabled={setupActionLoading}
+                    >
+                      💾 Simpan Draft (Tetap Pending)
+                    </button>
+
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button type="button" className="ac-btn-ghost-action" onClick={() => setShowSetupModal(false)}>
+                        Batal
+                      </button>
+                      <button
+                        type="submit"
+                        className="ac-btn-primary ac-btn-primary--success"
+                        style={{ padding: '8px 16px', fontWeight: 700 }}
+                        disabled={setupActionLoading}
+                      >
+                        {setupActionLoading ? 'Memproses...' : '🟢 Simpan & Aktifkan (Approve)'}
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              )}
             </div>
           </div>
         </div>
