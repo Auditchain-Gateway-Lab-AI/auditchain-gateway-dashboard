@@ -760,6 +760,12 @@
   color: #856404;
 }
 
+.ac-status--sync {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
 .ac-status--invalid {
   background: rgba(186, 26, 26, 0.12);
   color: var(--color-error);
