@@ -21,7 +21,7 @@ function SnapshotViewer({ currentLog, previousLog }) {
   ])].filter(k => !SKIP.has(k));
 
   if (allKeys.length === 0) {
-    return <span style={{ color: 'var(--color-on-surface-variant)', fontSize: '12px' }}>Tidak ada data metadata</span>;
+    return <span style={{ color: 'var(--color-on-surface-variant)', fontSize: '12px' }}>No metadata available</span>;
   }
 
   // INSERT — no previous, show all new values

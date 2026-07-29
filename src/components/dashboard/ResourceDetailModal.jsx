@@ -35,7 +35,7 @@ function ResourceDetailModal({ resource, selectedClient, onClose }) {
       })
       .catch(err => {
         if (cancelled) return;
-        setError(err.response?.data?.error || 'Gagal memuat riwayat resource.');
+        setError(err.response?.data?.error || 'Failed to load resource history.');
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -85,8 +85,8 @@ function ResourceDetailModal({ resource, selectedClient, onClose }) {
     }
 
     const issueLabels = {
-      client_mismatch: 'Data live di SIMRS Klien lebih baru daripada log (Out of Sync)',
-      log_integrity_failed: 'Log gagal verifikasi integritas kriptografi (Tampered)',
+      client_mismatch: 'Live data on Client Node is newer than audit log (Out of Sync)',
+      log_integrity_failed: 'Log failed cryptographic integrity verification (Tampered)',
     };
     const tooltip = uniqueCategories.map(cat => issueLabels[cat] || cat).join(' • ');
 
@@ -108,7 +108,7 @@ function ResourceDetailModal({ resource, selectedClient, onClose }) {
           <div className="ac-modal__header-right">
             {chainChip()}
             <span style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
-              {loading ? 'Memverifikasi...' : `${resourceLogs.length} logs found`}
+              {loading ? 'Verifying...' : `${resourceLogs.length} logs found`}
             </span>
             <button className="ac-modal__close" onClick={onClose}>×</button>
           </div>
@@ -118,7 +118,7 @@ function ResourceDetailModal({ resource, selectedClient, onClose }) {
           {loading ? (
             <div className="ac-empty">
               <div className="ac-empty__icon">⏳</div>
-              Memuat riwayat dan menjalankan verifikasi...
+              Loading history and running verification...
             </div>
           ) : error ? (
             <div className="ac-empty">
@@ -160,18 +160,18 @@ function ResourceDetailModal({ resource, selectedClient, onClose }) {
                             : logStatus.integrity_status === 'pending' ? 'ac-status--pending'
                               : 'ac-status--invalid'
                           }`}
-                        title={logStatus.is_latest ? `Agent: ${logStatus.agent_status}` : 'Riwayat historis — tidak dibandingkan ke Agent'}
+                        title={logStatus.is_latest ? `Agent: ${logStatus.agent_status}` : 'Historical record — not compared against Agent'}
                       >
                         {logStatus.integrity_status}
                       </span>
                     )}
                     {relatedIssues.includes('client_mismatch') && (
-                      <span className="ac-chain-badge ac-status--sync" title="Data live klien lebih baru daripada log ini (Out of Sync)">
+                      <span className="ac-chain-badge ac-status--sync" title="Live client data is newer than this log (Out of Sync)">
                         ⚠️ Client Out of Sync
                       </span>
                     )}
                     {relatedIssues.includes('log_integrity_failed') && (
-                      <span className="ac-chain-badge ac-status--invalid" title="Log ini gagal verifikasi integritas kriptografi (rehash/Merkle)">
+                      <span className="ac-chain-badge ac-status--invalid" title="Log failed cryptographic integrity verification (rehash/Merkle)">
                         🔓 Integrity Failed
                       </span>
                     )}

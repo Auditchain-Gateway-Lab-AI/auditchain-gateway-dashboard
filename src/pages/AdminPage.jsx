@@ -133,15 +133,15 @@ function AdminPage({ onLogout }) {
         company_name: detail.client?.company_name?.startsWith('Auto Registered')
           ? ''
           : (detail.client?.company_name || ''),
-        topic_prefix: detail.kafka_config?.topic_prefix || `morbis_simrs.${client.id.substring(0, 8)}`,
+        topic_prefix: detail.kafka_config?.topic_prefix || `cdc_client.${client.id.substring(0, 8)}`,
         actor_field: detail.client?.actor_field || 'app_user',
         fallback_actor_field: detail.client?.fallback_actor_field || 'db_user',
-        action_field: detail.client?.action_field || 'operasi',
-        resource_field: detail.client?.resource_field || 'tabel',
+        action_field: detail.client?.action_field || 'action',
+        resource_field: detail.client?.resource_field || 'resource',
       });
     } catch (err) {
-      console.error("Gagal load detail client:", err);
-      setSetupError(err.response?.data?.error || "Gagal mengambil detail node klien.");
+      console.error("Failed to load client details:", err);
+      setSetupError(err.response?.data?.error || "Failed to retrieve client node details.");
     } finally {
       setSetupLoading(false);
     }
@@ -163,7 +163,7 @@ function AdminPage({ onLogout }) {
       setClients(clientsRes.data || []);
       setKafkaConfigs(kafkaRes.data || []);
     } catch (err) {
-      console.error("Gagal load admin dashboard data:", err);
+      console.error("Failed to load admin dashboard data:", err);
       if (err.response?.status === 401) {
         onLogout();
       }
@@ -175,7 +175,7 @@ function AdminPage({ onLogout }) {
     if (!selectedPendingClient) return;
     const finalCompanyName = setupForm.company_name.trim();
     if (!finalCompanyName) {
-      setSetupError("Nama Resmi Rumah Sakit / Tenant wajib diisi!");
+      setSetupError("Official Client / Tenant Name is required!");
       return;
     }
     try {
@@ -193,8 +193,8 @@ function AdminPage({ onLogout }) {
       setShowSetupModal(false);
       fetchData();
     } catch (err) {
-      console.error("Gagal menyimpan / approve client:", err);
-      setSetupError(err.response?.data?.error || "Gagal memperbarui & menyetujui node klien.");
+      console.error("Failed to save / approve client:", err);
+      setSetupError(err.response?.data?.error || "Failed to update & approve client node.");
     } finally {
       setSetupActionLoading(false);
     }
@@ -217,7 +217,7 @@ function AdminPage({ onLogout }) {
       await api.patch(`/admin/clients/${client.id}/toggle`);
       fetchData();
     } catch (err) {
-      console.error("Gagal mengubah status klien:", err);
+      console.error("Failed to update client status:", err);
       alert(err.response?.data?.error || "Failed to update client status.");
     }
   }, [fetchData]);
@@ -230,7 +230,7 @@ function AdminPage({ onLogout }) {
       await api.delete(`/admin/clients/${client.id}`);
       fetchData();
     } catch (err) {
-      console.error("Gagal menghapus klien:", err);
+      console.error("Failed to delete client:", err);
       alert(err.response?.data?.error || "Failed to delete client.");
     }
   }, [fetchData]);
@@ -242,7 +242,7 @@ function AdminPage({ onLogout }) {
       const res = await api.get(`/admin/clients/${clientId}/users`);
       setClientUsers(res.data || []);
     } catch (err) {
-      console.error("Gagal load user klien:", err);
+      console.error("Failed to load client users:", err);
       setUserActionError(err.response?.data?.error || "Failed to load client users.");
     } finally {
       setUserActionLoading(false);
@@ -278,7 +278,7 @@ function AdminPage({ onLogout }) {
       setNewUserConfirmPassword('');
       fetchClientUsers(manageUsersClient.id);
     } catch (err) {
-      console.error("Gagal menambahkan user klien:", err);
+      console.error("Failed to add client user:", err);
       setUserActionError(err.response?.data?.error || "Failed to create user account.");
     } finally {
       setUserActionLoading(false);
@@ -297,7 +297,7 @@ function AdminPage({ onLogout }) {
         fetchClientUsers(manageUsersClient.id);
       }
     } catch (err) {
-      console.error("Gagal menghapus user klien:", err);
+      console.error("Failed to delete client user:", err);
       setUserActionError(err.response?.data?.error || "Failed to delete user account.");
     } finally {
       setUserActionLoading(false);
@@ -325,7 +325,7 @@ function AdminPage({ onLogout }) {
       });
       fetchData();
     } catch (err) {
-      alert(err.response?.data?.error || 'Gagal mendaftarkan klien');
+      alert(err.response?.data?.error || 'Failed to register client');
     }
   }, [clientForm, fetchData]);
 
@@ -344,7 +344,7 @@ function AdminPage({ onLogout }) {
       setKafkaForm({ client_id: '', kafka_brokers: '', topic_prefix: '', source_system: '', pk_field: 'ID', actor_field: '__user_name' });
       fetchData();
     } catch (err) {
-      alert(err.response?.data?.error || 'Gagal menyimpan konfigurasi Kafka');
+      alert(err.response?.data?.error || 'Failed to save Kafka configuration');
     }
   }, [kafkaForm, fetchData]);
 
@@ -353,7 +353,7 @@ function AdminPage({ onLogout }) {
       await api.patch(`/admin/kafka-config/${configId}/toggle`);
       fetchData();
     } catch (err) {
-      alert(err.response?.data?.error || 'Gagal memperbarui status konfigurasi Kafka');
+      alert(err.response?.data?.error || 'Failed to update Kafka configuration status');
     }
   }, [fetchData]);
 
@@ -390,8 +390,8 @@ function AdminPage({ onLogout }) {
         setAgentConfig(null);
         setAgentForm({ agent_url: '', verify_token: '', timeout_seconds: 5 });
       } else {
-        console.error("Gagal load agent config:", err);
-        setAgentActionError(err.response?.data?.error || "Gagal memuat konfigurasi Agent.");
+        console.error("Failed to load agent config:", err);
+        setAgentActionError(err.response?.data?.error || "Failed to load Agent configuration.");
       }
     } finally {
       setAgentLoading(false);
@@ -420,11 +420,11 @@ function AdminPage({ onLogout }) {
         verify_token: agentForm.verify_token,
         timeout_seconds: parseInt(agentForm.timeout_seconds, 10) || 5,
       });
-      setAgentActionSuccess(res.data.message || "Konfigurasi Agent berhasil disimpan!");
+      setAgentActionSuccess(res.data.message || "Agent configuration saved successfully!");
       fetchAgentConfig(selectedAgentClient.id);
     } catch (err) {
-      console.error("Gagal menyimpan agent config:", err);
-      setAgentActionError(err.response?.data?.error || "Gagal menyimpan konfigurasi Agent.");
+      console.error("Failed to save agent config:", err);
+      setAgentActionError(err.response?.data?.error || "Failed to save Agent configuration.");
     } finally {
       setAgentActionLoading(false);
     }
@@ -432,7 +432,7 @@ function AdminPage({ onLogout }) {
 
   const handleDeleteAgentConfig = useCallback(async () => {
     if (!selectedAgentClient) return;
-    if (!window.confirm(`Apakah Anda yakin ingin mencabut (revoke) akses Agent untuk klien "${selectedAgentClient.company_name}"?`)) {
+    if (!window.confirm(`Are you sure you want to revoke Agent access for client "${selectedAgentClient.company_name}"?`)) {
       return;
     }
     try {
@@ -440,13 +440,13 @@ function AdminPage({ onLogout }) {
       setAgentActionError('');
       setAgentActionSuccess('');
       const res = await api.delete(`/admin/clients/${selectedAgentClient.id}/agent-config`);
-      setAgentActionSuccess(res.data.message || "Konfigurasi Agent berhasil dihapus.");
+      setAgentActionSuccess(res.data.message || "Agent configuration deleted successfully.");
       setAgentConfig(null);
       setAgentPingResult(null);
       setAgentForm({ agent_url: '', verify_token: '', timeout_seconds: 5 });
     } catch (err) {
-      console.error("Gagal menghapus agent config:", err);
-      setAgentActionError(err.response?.data?.error || "Gagal menghapus konfigurasi Agent.");
+      console.error("Failed to delete agent config:", err);
+      setAgentActionError(err.response?.data?.error || "Failed to delete Agent configuration.");
     } finally {
       setAgentActionLoading(false);
     }
@@ -463,11 +463,11 @@ function AdminPage({ onLogout }) {
       const latency = Math.round(endTime - startTime);
       setAgentPingResult({ ...res.data, latency });
     } catch (err) {
-      console.error("Gagal ping agent:", err);
+      console.error("Failed to ping agent:", err);
       if (err.response?.data) {
         setAgentPingResult({ ...err.response.data, latency: null });
       } else {
-        setAgentPingResult({ reachable: false, error: err.message || "Gagal menghubungi server Agent.", latency: null });
+        setAgentPingResult({ reachable: false, error: err.message || "Failed to reach Agent server.", latency: null });
       }
     } finally {
       setAgentPingLoading(false);
@@ -475,15 +475,15 @@ function AdminPage({ onLogout }) {
   }, [selectedAgentClient]);
 
   const handleDeleteKafkaConfig = useCallback(async (configId, companyName) => {
-    if (!window.confirm(`Apakah Anda yakin ingin menghapus konfigurasi Kafka untuk "${companyName || 'klien'}"?`)) {
+    if (!window.confirm(`Are you sure you want to delete Kafka configuration for "${companyName || 'client'}"?`)) {
       return;
     }
     try {
       await api.delete(`/admin/kafka-config/${configId}`);
       fetchData();
     } catch (err) {
-      console.error("Gagal menghapus konfigurasi Kafka:", err);
-      alert(err.response?.data?.error || "Gagal menghapus konfigurasi Kafka.");
+      console.error("Failed to delete Kafka config:", err);
+      alert(err.response?.data?.error || "Failed to delete Kafka configuration.");
     }
   }, [fetchData]);
 
@@ -746,7 +746,7 @@ function AdminPage({ onLogout }) {
                     )}
                   </div>
                   <div className="ac-admin-card-sub">
-                    Daftar node VPS Rumah Sakit yang baru saja menjalankan skrip instalasi (install.sh) dan menunggu verifikasi Admin.
+                    List of client VPS nodes that recently ran the installation script (install.sh) and are awaiting Admin verification.
                   </div>
                 </div>
               </div>
@@ -754,8 +754,8 @@ function AdminPage({ onLogout }) {
               {pendingClients.length === 0 ? (
                 <div style={{ textAlign: 'center', color: 'var(--color-outline)', padding: '48px 16px' }}>
                   <div style={{ fontSize: '36px', marginBottom: '8px' }}>🎉</div>
-                  <div style={{ fontWeight: 600, color: 'var(--color-on-surface)', fontSize: '15px' }}>Tidak ada pendaftaran pending!</div>
-                  <div style={{ fontSize: '12px', marginTop: 4 }}>Semua node VPS Rumah Sakit telah terverifikasi dan aktif.</div>
+                  <div style={{ fontWeight: 600, color: 'var(--color-on-surface)', fontSize: '15px' }}>No pending registrations!</div>
+                  <div style={{ fontSize: '12px', marginTop: 4 }}>All client VPS nodes are verified and active.</div>
                 </div>
               ) : (
                 <div className="ac-pending-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '16px', padding: '16px 0' }}>
@@ -920,7 +920,7 @@ function AdminPage({ onLogout }) {
                 <div className="ac-form-grid">
                   <div className="ac-form-field" style={{ gridColumn: '1 / -1' }}>
                     <label className="ac-form-label">Company Name <span style={{ color: 'var(--color-error)' }}>*</span></label>
-                    <input className="ac-form-input" required placeholder="PT Contoh Indonesia"
+                    <input className="ac-form-input" required placeholder="e.g. Acme Corporation"
                       value={clientForm.company_name}
                       onChange={e => setClientForm(f => ({ ...f, company_name: e.target.value }))} />
                   </div>
@@ -1356,7 +1356,7 @@ function AdminPage({ onLogout }) {
             <div className="ac-modal__header">
               <div>
                 <div className="ac-modal__title">🤖 Agent Lapis 3: {selectedAgentClient.company_name}</div>
-                <div className="ac-modal__subtitle">Konfigurasi Agent lokal milik perusahaan untuk verifikasi & integrasi Gateway</div>
+                <div className="ac-modal__subtitle">Configure organization's local Agent for Gateway verification & integration</div>
               </div>
               <button className="ac-modal__close" onClick={() => setShowAgentModal(false)}>×</button>
             </div>
@@ -1376,10 +1376,10 @@ function AdminPage({ onLogout }) {
               }}>
                 <div>
                   <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
-                    {agentConfig ? '✅ Agent Terdaftar & Aktif' : '⚠️ Belum Ada Agent Terdaftar'}
+                    {agentConfig ? '✅ Agent Registered & Active' : '⚠️ No Registered Agent'}
                   </div>
                   <div style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: 2 }}>
-                    {agentConfig ? `URL: ${agentConfig.agent_url} | Timeout: ${agentConfig.timeout_seconds}s` : 'Daftarkan URL Agent lokal di bawah ini.'}
+                    {agentConfig ? `URL: ${agentConfig.agent_url} | Timeout: ${agentConfig.timeout_seconds}s` : 'Register local Agent URL below.'}
                   </div>
                 </div>
 
@@ -1448,7 +1448,7 @@ function AdminPage({ onLogout }) {
                         disabled={agentActionLoading}
                       />
                       <div style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: 4 }}>
-                        Endpoint HTTP/HTTPS ke Agent Lapis 3 lokal perusahaan klien.
+                        HTTP/HTTPS endpoint for the client organization's local Layer-3 Agent.
                       </div>
                     </div>
 
@@ -1515,8 +1515,8 @@ function AdminPage({ onLogout }) {
           <div className="ac-modal" style={{ maxWidth: '640px' }} onClick={e => e.stopPropagation()}>
             <div className="ac-modal__header">
               <div>
-                <h3 className="ac-modal__title">🔍 Verify & Approve Hospital Node</h3>
-                <div className="ac-modal__subtitle">Lengkapi nama resmi Rumah Sakit & verifikasi parameter koneksi sebelum diaktifkan</div>
+                <h3 className="ac-modal__title">🔍 Verify & Approve Client Node</h3>
+                <div className="ac-modal__subtitle">Provide official Client name & verify connection parameters before activation</div>
               </div>
               <button className="ac-modal__close" onClick={() => setShowSetupModal(false)}>×</button>
             </div>
@@ -1529,7 +1529,7 @@ function AdminPage({ onLogout }) {
               )}
 
               {setupLoading ? (
-                <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--color-outline)' }}>Memuat detail telemetri node...</div>
+                <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--color-outline)' }}>Loading node telemetry details...</div>
               ) : (
                 <form onSubmit={e => handleSaveAndApproveClient(e, true)}>
 
@@ -1542,7 +1542,7 @@ function AdminPage({ onLogout }) {
                     marginBottom: '18px'
                   }}>
                     <div style={{ fontSize: '12px', fontWeight: 700, color: '#1565c0', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      ⚡ Parameter Terdeteksi Otomatis (Dari Telemetri VPS RS)
+                      ⚡ Auto-Detected Parameters (From Client VPS Telemetry)
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '12px' }}>
                       <div>
@@ -1576,18 +1576,18 @@ function AdminPage({ onLogout }) {
                   <div className="ac-form-grid">
                     <div className="ac-form-field" style={{ gridColumn: '1 / -1' }}>
                       <label className="ac-form-label">
-                        Nama Resmi Rumah Sakit / Tenant <span style={{ color: 'var(--color-error)' }}>*</span>
+                        Official Client / Tenant Name <span style={{ color: 'var(--color-error)' }}>*</span>
                       </label>
                       <input
                         className="ac-form-input"
                         required
-                        placeholder="Contoh: RSUD Soetomo Surabaya"
+                        placeholder="e.g. Acme Corporation"
                         value={setupForm.company_name}
                         onChange={e => setSetupForm(f => ({ ...f, company_name: e.target.value }))}
                         disabled={setupActionLoading}
                       />
                       <div style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: 4 }}>
-                        Menggantikan nama bawaan "Auto Registered". Nama ini akan ditampilkan di seluruh log audit.
+                        Replaces the default "Auto Registered" name. This name will be displayed across all audit logs.
                       </div>
                     </div>
 
@@ -1595,7 +1595,7 @@ function AdminPage({ onLogout }) {
                       <label className="ac-form-label">Kafka Topic Prefix</label>
                       <input
                         className="ac-form-input"
-                        placeholder="morbis_simrs."
+                        placeholder="cdc_client."
                         value={setupForm.topic_prefix}
                         onChange={e => setSetupForm(f => ({ ...f, topic_prefix: e.target.value }))}
                         disabled={setupActionLoading}
@@ -1628,7 +1628,7 @@ function AdminPage({ onLogout }) {
                       <label className="ac-form-label">Action Field Mapping</label>
                       <input
                         className="ac-form-input"
-                        placeholder="operasi"
+                        placeholder="action"
                         value={setupForm.action_field}
                         onChange={e => setSetupForm(f => ({ ...f, action_field: e.target.value }))}
                         disabled={setupActionLoading}
@@ -1639,7 +1639,7 @@ function AdminPage({ onLogout }) {
                       <label className="ac-form-label">Resource Field Mapping</label>
                       <input
                         className="ac-form-input"
-                        placeholder="tabel"
+                        placeholder="resource"
                         value={setupForm.resource_field}
                         onChange={e => setSetupForm(f => ({ ...f, resource_field: e.target.value }))}
                         disabled={setupActionLoading}
@@ -1654,12 +1654,12 @@ function AdminPage({ onLogout }) {
                       onClick={(e) => handleSaveAndApproveClient(e, false)}
                       disabled={setupActionLoading}
                     >
-                      💾 Simpan Draft (Tetap Pending)
+                      💾 Save Draft (Keep Pending)
                     </button>
 
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <button type="button" className="ac-btn-ghost-action" onClick={() => setShowSetupModal(false)}>
-                        Batal
+                        Cancel
                       </button>
                       <button
                         type="submit"
@@ -1667,7 +1667,7 @@ function AdminPage({ onLogout }) {
                         style={{ padding: '8px 16px', fontWeight: 700 }}
                         disabled={setupActionLoading}
                       >
-                        {setupActionLoading ? 'Memproses...' : '🟢 Simpan & Aktifkan (Approve)'}
+                        {setupActionLoading ? 'Processing...' : '🟢 Save & Activate (Approve)'}
                       </button>
                     </div>
                   </div>
