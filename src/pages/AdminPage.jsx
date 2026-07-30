@@ -496,7 +496,7 @@ function AdminPage({ onLogout }) {
           <button className="ac-topnav__menu-btn" onClick={() => setSidebarOpen(o => !o)}>
             <Icon name="menu" size={22} />
           </button>
-          <img src="/logo/Group 1000009984.png" alt="Auditchain Logo" style={{ height: 38, width: 'auto', display: 'block', flexShrink: 0 }} />
+          <img src="/logo/logo-with-background.png" alt="Auditchain Logo" style={{ height: 38, width: 'auto', display: 'block', flexShrink: 0, borderRadius: 6 }} />
           <div>
             <div className="ac-topnav__brand-name">Auditchain Gateway</div>
             <div className="ac-topnav__brand-sub ac-admin-portal-label">Admin Portal</div>

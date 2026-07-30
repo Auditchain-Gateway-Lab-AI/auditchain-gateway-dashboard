@@ -56,7 +56,7 @@ function Footer({ t, waLink }) {
         <div className="lp-footer-inner">
           <div className="lp-footer-top">
             <div className="lp-footer-logo">
-              <img alt="Auditchain Logo" src="/logo/Group 1000009984.png" />
+              <img alt="Auditchain Logo" src="/logo/logo-with-background.png" style={{ borderRadius: 6 }} />
               <span>Auditchain Gateway</span>
             </div>
             <div className="lp-footer-links">

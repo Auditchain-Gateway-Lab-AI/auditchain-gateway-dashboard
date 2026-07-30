@@ -424,7 +424,7 @@ function DashboardPage({ onLogout }) {
           <button className="ac-topnav__menu-btn" onClick={() => setSidebarOpen(o => !o)}>
             <Icon name="menu" size={22} />
           </button>
-          <img src="/logo/Group 1000009984.png" alt="Auditchain Logo" style={{ height: 36, width: 'auto', display: 'block', flexShrink: 0 }} />
+          <img src="/logo/logo-with-background.png" alt="Auditchain Logo" style={{ height: 36, width: 'auto', display: 'block', flexShrink: 0, borderRadius: 6 }} />
           <div>
             <div className="ac-topnav__brand-name">Auditchain Gateway</div>
             <div className="ac-topnav__brand-sub">Gateway Portal</div>
@@ -640,7 +640,7 @@ function DashboardPage({ onLogout }) {
             )}
 
             {/* DATA INVENTORY */}
-            <section className="ac-card">
+            {/* <section className="ac-card">
               <div className="ac-card__header">
                 <div className="ac-card__header-left">
                   <span className="ac-card__icon">🗄️</span>
@@ -697,7 +697,8 @@ function DashboardPage({ onLogout }) {
                   </tbody>
                 </table>
               </div>
-            </section>
+            </section> */}
+            
 
             {/* AUDIT TRANSACTIONS */}
             <AuditLogTable

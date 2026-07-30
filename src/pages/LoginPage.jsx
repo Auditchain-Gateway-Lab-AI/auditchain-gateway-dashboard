@@ -70,7 +70,7 @@ function LoginPage({ onLogin }) {
         {/* Brand */}
         <div>
           <div className="ac-login-hero__brand">
-            <img src="/logo/Group 1000009984.png" alt="Auditchain Gateway Logo" style={{ height: 42, width: 'auto', display: 'block', flexShrink: 0 }} />
+            <img src="/logo/logo-with-background.png" alt="Auditchain Gateway Logo" style={{ height: 42, width: 'auto', display: 'block', flexShrink: 0, borderRadius: 8 }} />
             <div>
               <div className="ac-login-hero__brand-name">Auditchain Gateway</div>
               <div className="ac-login-hero__brand-sub">Gateway Portal</div>
@@ -122,7 +122,7 @@ function LoginPage({ onLogin }) {
 
           {/* Mobile brand header */}
           <div className="ac-login-mobile-brand">
-            <img src="/logo/Group 1000009984.png" alt="Auditchain Logo" style={{ height: 36, width: 'auto', display: 'block', flexShrink: 0 }} />
+            <img src="/logo/logo-with-background.png" alt="Auditchain Logo" style={{ height: 36, width: 'auto', display: 'block', flexShrink: 0, borderRadius: 6 }} />
             <div>
               <div style={{ fontSize: 18, fontWeight: 800, color: '#0d1b2e', letterSpacing: '.02em' }}>Auditchain Gateway</div>
               <div style={{ fontSize: 10, fontWeight: 600, color: '#0077ce', letterSpacing: '.1em', textTransform: 'uppercase' }}>Gateway Portal</div>
