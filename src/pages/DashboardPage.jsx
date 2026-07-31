@@ -2,45 +2,33 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import Icon from '../components/common/Icon';
-import ActionBadge from '../components/common/ActionBadge';
 import StatCards from '../components/dashboard/StatCards';
 import AuditLogTable from '../components/dashboard/AuditLogTable';
 import VerificationModal from '../components/dashboard/VerificationModal';
 import ResourceDetailModal from '../components/dashboard/ResourceDetailModal';
-import { parseJwt, formatTimestamp, mapRangeItemToVerifyStatus } from '../utils/formatters';
+import { parseJwt, mapRangeItemToVerifyStatus } from '../utils/formatters';
 
 function DashboardPage({ onLogout }) {
   const navigate = useNavigate();
   const [stats, setStats] = useState({ total_logs: 0, pending_logs: 0, anchored_logs: 0 });
   const [recentLogs, setRecentLogs] = useState([]);
-  const [inventory, setInventory] = useState([]);
   const [verifyStatuses, setVerifyStatuses] = useState({});
-  const [inventoryStatuses] = useState({});
   const [selectedVerifyResult, setSelectedVerifyResult] = useState(null);
   const [totalLogsCount, setTotalLogsCount] = useState(0);
   const [isServerPaginated, setIsServerPaginated] = useState(false);
 
   const verifyStatusesRef = useRef(verifyStatuses);
-  const inventoryStatusesRef = useRef(inventoryStatuses);
 
   useEffect(() => {
     verifyStatusesRef.current = verifyStatuses;
   }, [verifyStatuses]);
 
-  useEffect(() => {
-    inventoryStatusesRef.current = inventoryStatuses;
-  }, [inventoryStatuses]);
-
   const [selectedResource, setSelectedResource] = useState(null);
-  const [selectedTableModal, setSelectedTableModal] = useState(null);
 
-  // State untuk Modal Level 1 — records per tabel, di-fetch secara on-demand
-  const [tableModalRecords, setTableModalRecords] = useState([]);
-  const [isTableRecordsLoading, setIsTableRecordsLoading] = useState(false);
-  const [tableRecordsError, setTableRecordsError] = useState('');
-  const [modalSearchQuery, setModalSearchQuery] = useState('');
-  const [modalCurrentPage, setModalCurrentPage] = useState(1);
-  const modalRowsPerPage = 10;
+  // State Plan V12: Table Filter, Sort Order, & Table Names
+  const [sortOrder, setSortOrder] = useState('desc');
+  const [filterTable, setFilterTable] = useState('');
+  const [tableNames, setTableNames] = useState([]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterAction, setFilterAction] = useState('ALL');
@@ -85,34 +73,40 @@ function DashboardPage({ onLogout }) {
 
   const [isLogsLoading, setIsLogsLoading] = useState(false);
 
-  // Fetch summary stats & inventory (Otomatis & Cepat menggunakan tabel client_tables baru, auto-refresh 5s)
+  // Fetch summary stats (Auto-refresh 5s)
   useEffect(() => {
-    const fetchSummaryAndInventory = async () => {
+    const fetchSummaryStats = async () => {
       try {
-        const params = {};
-        if (selectedClient) {
-          params.client_id = selectedClient;
-        }
-
-        const [statsRes, invRes] = await Promise.all([
-          api.get('/dashboard/stats', { params }),
-          api.get('/dashboard/inventory', { params }),
-        ]);
-
+        const params = selectedClient ? { client_id: selectedClient } : {};
+        const statsRes = await api.get('/dashboard/stats', { params });
         setStats(statsRes.data);
-        setInventory(invRes.data || []);
       } catch (err) {
         if (err.response?.status === 401) onLogout();
       }
     };
 
-    fetchSummaryAndInventory();
-    const id = setInterval(fetchSummaryAndInventory, 5000);
+    fetchSummaryStats();
+    const id = setInterval(fetchSummaryStats, 5000);
     return () => clearInterval(id);
   }, [onLogout, selectedClient]);
 
+  // Fetch daftar nama tabel (Sekali saat mount / client berubah — bukan polling)
+  useEffect(() => {
+    const fetchTableNames = async () => {
+      try {
+        const params = selectedClient ? { client_id: selectedClient } : {};
+        const res = await api.get('/dashboard/inventory', { params });
+        const tables = (res.data || []).map(t => t.table_name).filter(Boolean).sort();
+        setTableNames(tables);
+      } catch (err) {
+        console.error("Failed to load table names:", err);
+      }
+    };
+    fetchTableNames();
+  }, [selectedClient]);
+
   // Fetch logs transaksi SECARA ON-DEMAND saat rentang tanggal ditentukan
-  const handleApplyLogsRange = useCallback(async (fromDate, toDate) => {
+  const handleApplyLogsRange = useCallback(async (fromDate, toDate, overrideSort, overrideTable) => {
     const fromVal = fromDate || tempDateFrom;
     const toVal = toDate || tempDateTo;
     if (!fromVal || !toVal) return;
@@ -122,11 +116,18 @@ function DashboardPage({ onLogout }) {
     setFilterDateTo(toVal);
     setCurrentPage(1);
 
+    const activeSort = overrideSort !== undefined ? overrideSort : sortOrder;
+    const activeTable = overrideTable !== undefined ? overrideTable : filterTable;
+
     try {
       const params = {
         page: 1,
         page_size: 1000,
+        sort_order: activeSort,
       };
+      if (activeTable) {
+        params.source_table = activeTable;
+      }
       if (selectedClient) {
         params.client_id = selectedClient;
       }
@@ -155,7 +156,21 @@ function DashboardPage({ onLogout }) {
     } finally {
       setIsLogsLoading(false);
     }
-  }, [tempDateFrom, tempDateTo, selectedClient, onLogout]);
+  }, [tempDateFrom, tempDateTo, selectedClient, onLogout, sortOrder, filterTable]);
+
+  const handleSortOrderChange = (newSort) => {
+    setSortOrder(newSort);
+    if (filterDateFrom && filterDateTo) {
+      handleApplyLogsRange(filterDateFrom, filterDateTo, newSort, filterTable);
+    }
+  };
+
+  const handleFilterTableChange = (newTable) => {
+    setFilterTable(newTable);
+    if (filterDateFrom && filterDateTo) {
+      handleApplyLogsRange(filterDateFrom, filterDateTo, sortOrder, newTable);
+    }
+  };
 
   // Auto-trigger logs fetch ketika kedua tanggal (From & To) dipilih
   useEffect(() => {
@@ -252,62 +267,7 @@ function DashboardPage({ onLogout }) {
     }
   }, [filterDateFrom, filterDateTo, selectedClient]);
 
-  // Grouping inventory by table name — mendukung dua format:
-  // 1. Format baru ClientTable: { table_name, row_count, last_action, last_updated_at, ... }
-  // 2. Format lama AuditLog:    { source_table, resource, action, timestamp, ... }
-  const groupedInventory = useMemo(() => {
-    return inventory.reduce((acc, item) => {
-      let tableName;
-      if (item?.table_name) {
-        // Format baru dari tabel client_tables (setelah optimasi Plan-V8)
-        tableName = item.table_name;
-      } else {
-        // Format lama dari audit_logs
-        const resource = item?.source_table || item?.resource || '';
-        tableName = resource.includes(':') ? resource.split(':')[0] : resource;
-      }
-      if (!tableName) return acc; // skip item tanpa nama tabel
-      if (!acc[tableName]) acc[tableName] = [];
-      acc[tableName].push(item);
-      return acc;
-    }, {});
-  }, [inventory]);
 
-  const tableNames = Object.keys(groupedInventory).sort();
-
-  // Fetch records per tabel secara on-demand saat Modal Level 1 dibuka
-  // Endpoint: GET /dashboard/verify-resource/:tableName
-  // Backend mendeteksi nama tabel (tanpa ':') dan mengembalikan semua resource unik di dalamnya.
-  // Response: { resource, chain_status, total_logs, logs: [ResourceLogVerification] }
-  useEffect(() => {
-    if (!selectedTableModal) {
-      setTableModalRecords([]);
-      setTableRecordsError('');
-      setModalSearchQuery('');
-      setModalCurrentPage(1);
-      return;
-    }
-
-    setIsTableRecordsLoading(true);
-    setTableRecordsError('');
-    setTableModalRecords([]);
-    setModalSearchQuery('');
-    setModalCurrentPage(1);
-
-    const params = {};
-    if (selectedClient) params.client_id = selectedClient;
-
-    api.get(`/dashboard/verify-resource/${encodeURIComponent(selectedTableModal)}`, { params })
-      .then(res => {
-        // Backend mengembalikan { resource, chain_status, total_logs, logs: [...] }
-        setTableModalRecords(res.data?.logs || []);
-      })
-      .catch(err => {
-        const msg = err.response?.data?.error || 'Gagal memuat daftar records tabel.';
-        setTableRecordsError(msg);
-      })
-      .finally(() => setIsTableRecordsLoading(false));
-  }, [selectedTableModal, selectedClient]);
 
   // Filter & pagination
   const filteredLogs = useMemo(() => {
@@ -639,67 +599,6 @@ function DashboardPage({ onLogout }) {
               />
             )}
 
-            {/* DATA INVENTORY */}
-            {/* <section className="ac-card">
-              <div className="ac-card__header">
-                <div className="ac-card__header-left">
-                  <span className="ac-card__icon">🗄️</span>
-                  <span className="ac-card__title">Data Inventory</span>
-                </div>
-                <span className="ac-card__subtitle">{tableNames.length} tables monitored — click to view records</span>
-              </div>
-              <div className="ac-table-wrap">
-                <table className="ac-table">
-                  <thead>
-                    <tr>
-                      <th>Table Name</th>
-                      <th>Total Monitored Records</th>
-                      <th style={{ textAlign: 'right' }}>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tableNames.length === 0 ? (
-                      <tr>
-                        <td colSpan={3}>
-                          <div className="ac-empty">
-                            <div className="ac-empty__icon">📦</div>
-                            No inventory data available.
-                          </div>
-                        </td>
-                      </tr>
-                    ) : tableNames.map(tableName => {
-                      const tableItems = groupedInventory[tableName] || [];
-                      const firstItem = tableItems[0] || {};
-                      const recordCount = firstItem.row_count !== undefined
-                        ? firstItem.row_count
-                        : tableItems.length;
-
-                      return (
-                        <tr key={tableName} onClick={() => setSelectedTableModal(tableName)}>
-                          <td>
-                            <div className="ac-table__icon-cell">
-                              <div className="ac-table__row-icon">
-                                <Icon name="database" size={14} />
-                              </div>
-                              <strong>{tableName}</strong>
-                            </div>
-                          </td>
-                          <td>{Number(recordCount).toLocaleString()} Records</td>
-                          <td style={{ textAlign: 'right' }}>
-                            <button className="ac-btn-ghost" onClick={e => { e.stopPropagation(); setSelectedTableModal(tableName); }}>
-                              View Rows
-                              <Icon name="chevronRight" size={13} />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </section> */}
-            
-
             {/* AUDIT TRANSACTIONS */}
             <AuditLogTable
               paginatedLogs={paginatedLogs}
@@ -709,6 +608,11 @@ function DashboardPage({ onLogout }) {
               setFilterAction={setFilterAction}
               filterVerification={filterVerification}
               setFilterVerification={setFilterVerification}
+              sortOrder={sortOrder}
+              setSortOrder={handleSortOrderChange}
+              filterTable={filterTable}
+              setFilterTable={handleFilterTableChange}
+              tableNames={tableNames}
               rowsPerPage={rowsPerPage}
               setRowsPerPage={setRowsPerPage}
               tempDateFrom={tempDateFrom}
@@ -738,170 +642,6 @@ function DashboardPage({ onLogout }) {
 
         </div>
       </main>
-
-      {/* MODAL LEVEL 1: Table Records */}
-      {selectedTableModal && (
-        <div className="ac-modal-overlay" onClick={() => setSelectedTableModal(null)}>
-          <div className="ac-modal ac-modal--sm" onClick={e => e.stopPropagation()}>
-            <div className="ac-modal__header">
-              <div>
-                <div className="ac-modal__title">🗂️ Table: {selectedTableModal}</div>
-                <div className="ac-modal__subtitle">
-                  {isTableRecordsLoading
-                    ? 'Loading records...'
-                    : tableRecordsError
-                      ? 'Failed to load'
-                      : `${tableModalRecords.length} records found`}
-                </div>
-              </div>
-              <button className="ac-modal__close" onClick={() => setSelectedTableModal(null)}>×</button>
-            </div>
-            <div className="ac-modal__body" style={{ padding: 0 }}>
-              {/* State: Loading */}
-              {isTableRecordsLoading && (
-                <div className="ac-empty" style={{ padding: '32px 0' }}>
-                  <div className="ac-empty__icon">⏳</div>
-                  <span>Loading records list...</span>
-                </div>
-              )}
-
-              {/* State: Error (endpoint missing or server error) */}
-              {!isTableRecordsLoading && tableRecordsError && (
-                <div className="ac-empty" style={{ padding: '32px 16px', textAlign: 'center' }}>
-                  <div className="ac-empty__icon">⚠️</div>
-                  <span style={{ color: 'var(--color-danger, #ef4444)', fontSize: 13 }}>
-                    {tableRecordsError}
-                  </span>
-                  <div style={{ fontSize: 12, color: 'var(--color-muted, #6b7280)', marginTop: 8 }}>
-                    This feature requires a backend update. Please contact the backend team.
-                  </div>
-                </div>
-              )}
-
-              {/* State: Empty */}
-              {!isTableRecordsLoading && !tableRecordsError && tableModalRecords.length === 0 && (
-                <div className="ac-empty" style={{ padding: '32px 0' }}>
-                  <div className="ac-empty__icon">📭</div>
-                  <span>No records found for this table.</span>
-                </div>
-              )}
-
-              {/* State: Data tersedia */}
-              {!isTableRecordsLoading && !tableRecordsError && tableModalRecords.length > 0 && (() => {
-                const filteredModalRecords = tableModalRecords.filter(item => {
-                  const resource = item.resource || item.source_table || '';
-                  const action = item.last_action || item.action || '';
-                  const q = modalSearchQuery.toLowerCase();
-                  return resource.toLowerCase().includes(q) || action.toLowerCase().includes(q);
-                });
-
-                const modalTotalPages = Math.ceil(filteredModalRecords.length / modalRowsPerPage) || 1;
-                const paginatedModalRecords = filteredModalRecords.slice(
-                  (modalCurrentPage - 1) * modalRowsPerPage,
-                  modalCurrentPage * modalRowsPerPage
-                );
-
-                return (
-                  <div>
-                    {/* Search & Meta Bar in Modal */}
-                    <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border, #e5e7eb)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-                      <input
-                        type="text"
-                        placeholder="🔍 Cari Resource ID / Action..."
-                        value={modalSearchQuery}
-                        onChange={e => { setModalSearchQuery(e.target.value); setModalCurrentPage(1); }}
-                        style={{
-                          padding: '6px 12px',
-                          borderRadius: 6,
-                          border: '1px solid var(--color-border, #d1d5db)',
-                          fontSize: 13,
-                          width: 240
-                        }}
-                      />
-                      <span style={{ fontSize: 12, color: 'var(--color-muted, #6b7280)' }}>
-                        Showing {paginatedModalRecords.length} of {filteredModalRecords.length} records
-                      </span>
-                    </div>
-
-                    <div className="ac-table-wrap">
-                      <table className="ac-table">
-                        <thead>
-                          <tr>
-                            <th>Resource ID</th>
-                            <th>Last Action</th>
-                            <th>Last Updated</th>
-                            <th>Chain Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {paginatedModalRecords.map(item => {
-                            const resource = item.resource || item.source_table || '';
-                            const resourceID = resource.includes(':') ? resource.split(':')[1] : resource;
-                            const action = item.last_action || item.action || '';
-                            const ts = item.last_updated_at || item.timestamp || '';
-                            const chainSt = item.chain_status || item.integrity_status || '';
-
-                            const chainBadge = (() => {
-                              switch (chainSt) {
-                                case 'valid':       return <span className="ac-chain-badge ac-status--valid">✅ Valid</span>;
-                                case 'tampered':    return <span className="ac-chain-badge ac-status--invalid">🚨 Tampered</span>;
-                                case 'pending':     return <span className="ac-chain-badge ac-status--pending">⏱️ Pending</span>;
-                                case 'unreachable': return <span className="ac-chain-badge ac-status--checking">⚠️ Unreachable</span>;
-                                default:            return <span className="ac-chain-badge ac-status--checking">⏳</span>;
-                              }
-                            })();
-
-                            return (
-                              <tr
-                                key={resource || item.log_id}
-                                onClick={() => { setSelectedResource(resource); setSelectedTableModal(null); }}
-                              >
-                                <td>
-                                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600 }}>
-                                    🔍 {resourceID || resource}
-                                  </span>
-                                </td>
-                                <td><ActionBadge action={action} /></td>
-                                <td className="ac-table__time">{formatTimestamp(ts)}</td>
-                                <td onClick={(e) => e.stopPropagation()}>{chainBadge}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {/* Modal Pagination Bar */}
-                    {modalTotalPages > 1 && (
-                      <div style={{ padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--color-border, #e5e7eb)' }}>
-                        <button
-                          className="ac-btn-ghost"
-                          style={{ padding: '4px 12px', fontSize: 12 }}
-                          disabled={modalCurrentPage <= 1}
-                          onClick={() => setModalCurrentPage(p => Math.max(1, p - 1))}
-                        >
-                          ‹ Previous
-                        </button>
-                        <span style={{ fontSize: 12, fontWeight: 600 }}>
-                          Page {modalCurrentPage} of {modalTotalPages}
-                        </span>
-                        <button
-                          className="ac-btn-ghost"
-                          style={{ padding: '4px 12px', fontSize: 12 }}
-                          disabled={modalCurrentPage >= modalTotalPages}
-                          onClick={() => setModalCurrentPage(p => Math.min(modalTotalPages, p + 1))}
-                        >
-                          Next ›
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* MODAL LEVEL 2: Resource Log History */}
       {selectedResource && (
