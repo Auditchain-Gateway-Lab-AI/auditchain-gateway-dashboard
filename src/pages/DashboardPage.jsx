@@ -2,37 +2,33 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import Icon from '../components/common/Icon';
-import ActionBadge from '../components/common/ActionBadge';
 import StatCards from '../components/dashboard/StatCards';
 import AuditLogTable from '../components/dashboard/AuditLogTable';
 import VerificationModal from '../components/dashboard/VerificationModal';
 import ResourceDetailModal from '../components/dashboard/ResourceDetailModal';
-import { parseJwt, formatTimestamp, mapRangeItemToVerifyStatus } from '../utils/formatters';
+import { parseJwt, mapRangeItemToVerifyStatus } from '../utils/formatters';
 
 function DashboardPage({ onLogout }) {
   const navigate = useNavigate();
   const [stats, setStats] = useState({ total_logs: 0, pending_logs: 0, anchored_logs: 0 });
   const [recentLogs, setRecentLogs] = useState([]);
-  const [inventory, setInventory] = useState([]);
   const [verifyStatuses, setVerifyStatuses] = useState({});
-  const [inventoryStatuses] = useState({});
   const [selectedVerifyResult, setSelectedVerifyResult] = useState(null);
   const [totalLogsCount, setTotalLogsCount] = useState(0);
   const [isServerPaginated, setIsServerPaginated] = useState(false);
 
   const verifyStatusesRef = useRef(verifyStatuses);
-  const inventoryStatusesRef = useRef(inventoryStatuses);
 
   useEffect(() => {
     verifyStatusesRef.current = verifyStatuses;
   }, [verifyStatuses]);
 
-  useEffect(() => {
-    inventoryStatusesRef.current = inventoryStatuses;
-  }, [inventoryStatuses]);
-
   const [selectedResource, setSelectedResource] = useState(null);
-  const [selectedTableModal, setSelectedTableModal] = useState(null);
+
+  // State Plan V12: Table Filter, Sort Order, & Table Names
+  const [sortOrder, setSortOrder] = useState('desc');
+  const [filterTable, setFilterTable] = useState('');
+  const [tableNames, setTableNames] = useState([]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterAction, setFilterAction] = useState('ALL');
@@ -63,7 +59,7 @@ function DashboardPage({ onLogout }) {
           setAdminClients(res.data || []);
         })
         .catch(err => {
-          console.error("Gagal memuat daftar klien admin:", err);
+          console.error("Failed to load admin clients list:", err);
         });
     }
   }, [clientInfo]);
@@ -77,34 +73,40 @@ function DashboardPage({ onLogout }) {
 
   const [isLogsLoading, setIsLogsLoading] = useState(false);
 
-  // Fetch summary stats & inventory (Ringan & Cepat, auto-refresh 5s)
+  // Fetch summary stats (Auto-refresh 5s)
   useEffect(() => {
-    const fetchSummary = async () => {
+    const fetchSummaryStats = async () => {
       try {
-        const params = {};
-        if (selectedClient) {
-          params.client_id = selectedClient;
-        }
-
-        const [statsRes, invRes] = await Promise.all([
-          api.get('/dashboard/stats', { params }),
-          api.get('/dashboard/inventory', { params }),
-        ]);
-
+        const params = selectedClient ? { client_id: selectedClient } : {};
+        const statsRes = await api.get('/dashboard/stats', { params });
         setStats(statsRes.data);
-        setInventory(invRes.data || []);
       } catch (err) {
         if (err.response?.status === 401) onLogout();
       }
     };
 
-    fetchSummary();
-    const id = setInterval(fetchSummary, 5000);
+    fetchSummaryStats();
+    const id = setInterval(fetchSummaryStats, 5000);
     return () => clearInterval(id);
   }, [onLogout, selectedClient]);
 
-  // Fetch logs transaksi SECARA ON-DEMAND saat tombol "Apply Range" diklik
-  const handleApplyLogsRange = useCallback(async (fromDate, toDate) => {
+  // Fetch daftar nama tabel (Sekali saat mount / client berubah — bukan polling)
+  useEffect(() => {
+    const fetchTableNames = async () => {
+      try {
+        const params = selectedClient ? { client_id: selectedClient } : {};
+        const res = await api.get('/dashboard/inventory', { params });
+        const tables = (res.data || []).map(t => t.table_name).filter(Boolean).sort();
+        setTableNames(tables);
+      } catch (err) {
+        console.error("Failed to load table names:", err);
+      }
+    };
+    fetchTableNames();
+  }, [selectedClient]);
+
+  // Fetch logs transaksi SECARA ON-DEMAND saat rentang tanggal ditentukan
+  const handleApplyLogsRange = useCallback(async (fromDate, toDate, overrideSort, overrideTable) => {
     const fromVal = fromDate || tempDateFrom;
     const toVal = toDate || tempDateTo;
     if (!fromVal || !toVal) return;
@@ -114,11 +116,18 @@ function DashboardPage({ onLogout }) {
     setFilterDateTo(toVal);
     setCurrentPage(1);
 
+    const activeSort = overrideSort !== undefined ? overrideSort : sortOrder;
+    const activeTable = overrideTable !== undefined ? overrideTable : filterTable;
+
     try {
       const params = {
         page: 1,
         page_size: 1000,
+        sort_order: activeSort,
       };
+      if (activeTable) {
+        params.source_table = activeTable;
+      }
       if (selectedClient) {
         params.client_id = selectedClient;
       }
@@ -142,12 +151,33 @@ function DashboardPage({ onLogout }) {
       setTotalLogsCount(serverTotal);
       setIsServerPaginated(serverPaginated);
     } catch (err) {
-      console.error("Gagal memuat log transaksi:", err);
+      console.error("Failed to load transaction logs:", err);
       if (err.response?.status === 401) onLogout();
     } finally {
       setIsLogsLoading(false);
     }
-  }, [tempDateFrom, tempDateTo, selectedClient, onLogout]);
+  }, [tempDateFrom, tempDateTo, selectedClient, onLogout, sortOrder, filterTable]);
+
+  const handleSortOrderChange = (newSort) => {
+    setSortOrder(newSort);
+    if (filterDateFrom && filterDateTo) {
+      handleApplyLogsRange(filterDateFrom, filterDateTo, newSort, filterTable);
+    }
+  };
+
+  const handleFilterTableChange = (newTable) => {
+    setFilterTable(newTable);
+    if (filterDateFrom && filterDateTo) {
+      handleApplyLogsRange(filterDateFrom, filterDateTo, sortOrder, newTable);
+    }
+  };
+
+  // Auto-trigger logs fetch ketika kedua tanggal (From & To) dipilih
+  useEffect(() => {
+    if (tempDateFrom && tempDateTo) {
+      handleApplyLogsRange(tempDateFrom, tempDateTo);
+    }
+  }, [tempDateFrom, tempDateTo, handleApplyLogsRange]);
 
   const [rangeVerifyResult, setRangeVerifyResult] = useState(null);
   const [isVerifyRangeLoading, setIsVerifyRangeLoading] = useState(false);
@@ -180,7 +210,7 @@ function DashboardPage({ onLogout }) {
         setSelectedVerifyResult(res.data);
       })
       .catch(err => {
-        const data = err.response?.data || { status: 'failed', message: 'Gagal menghubungi server verifikasi.' };
+        const data = err.response?.data || { status: 'failed', message: 'Failed to contact verification server.' };
         setVerifyStatuses(prev => ({ ...prev, [logId]: data }));
         setSelectedVerifyResult(data);
       });
@@ -224,31 +254,20 @@ function DashboardPage({ onLogout }) {
         results
       });
     } catch (err) {
-      console.error("Gagal verifikasi range:", err);
+      console.error("Failed to verify range:", err);
       setRangeVerifyResult({
         range: { from: filterDateFrom, to: filterDateTo },
         summary: { total: 0, valid: 0, invalid: 0, pending: 0 },
         results: [],
         status: 'failed_local',
-        message: err.response?.data?.error || 'Kesalahan koneksi saat memverifikasi range log.'
+        message: err.response?.data?.error || 'Connection error while verifying log range.'
       });
     } finally {
       setIsVerifyRangeLoading(false);
     }
   }, [filterDateFrom, filterDateTo, selectedClient]);
 
-  // Grouping inventory by table name
-  const groupedInventory = useMemo(() => {
-    return inventory.reduce((acc, item) => {
-      const resource = item?.source_table || item?.resource || '';
-      const tableName = resource.includes(':') ? resource.split(':')[0] : resource;
-      if (!acc[tableName]) acc[tableName] = [];
-      acc[tableName].push(item);
-      return acc;
-    }, {});
-  }, [inventory]);
 
-  const tableNames = Object.keys(groupedInventory).sort();
 
   // Filter & pagination
   const filteredLogs = useMemo(() => {
@@ -339,18 +358,6 @@ function DashboardPage({ onLogout }) {
     return <span className="ac-status ac-status--invalid" onClick={() => setSelectedVerifyResult(v)}>🚨 INVALID</span>;
   };
 
-  // Status badge for inventory
-  const renderInventoryBadge = (item) => {
-    const resource = item?.source_table || item?.resource;
-    const v = inventoryStatuses[resource];
-    if (!v || v.status === 'loading')
-      return <span className="ac-chain-badge ac-status--checking">⏳</span>;
-    if (v.chain_status === 'valid' || v.status === 'success')
-      return <span className="ac-chain-badge ac-status--valid" style={{ cursor: 'pointer' }} onClick={() => setSelectedVerifyResult(v)}>✅ Valid</span>;
-    if (v.chain_status === 'pending' || v.status === 'pending')
-      return <span className="ac-chain-badge ac-status--pending" style={{ cursor: 'pointer' }} onClick={() => setSelectedVerifyResult(v)}>⏱️ Pending</span>;
-    return <span className="ac-chain-badge ac-status--invalid" style={{ cursor: 'pointer' }} onClick={() => setSelectedVerifyResult(v)}>🚨 Invalid</span>;
-  };
 
   // Pagination page numbers
   const renderPageNumbers = () => {
@@ -377,7 +384,7 @@ function DashboardPage({ onLogout }) {
           <button className="ac-topnav__menu-btn" onClick={() => setSidebarOpen(o => !o)}>
             <Icon name="menu" size={22} />
           </button>
-          <img src="/logo/Group 1000009984.png" alt="Auditchain Logo" style={{ height: 36, width: 'auto', display: 'block', flexShrink: 0 }} />
+          <img src="/logo/logo-with-background.png" alt="Auditchain Logo" style={{ height: 36, width: 'auto', display: 'block', flexShrink: 0, borderRadius: 6 }} />
           <div>
             <div className="ac-topnav__brand-name">Auditchain Gateway</div>
             <div className="ac-topnav__brand-sub">Gateway Portal</div>
@@ -592,58 +599,6 @@ function DashboardPage({ onLogout }) {
               />
             )}
 
-            {/* DATA INVENTORY */}
-            <section className="ac-card">
-              <div className="ac-card__header">
-                <div className="ac-card__header-left">
-                  <span className="ac-card__icon">🗄️</span>
-                  <span className="ac-card__title">Data Inventory</span>
-                </div>
-                <span className="ac-card__subtitle">{tableNames.length} tables monitored — click to view records</span>
-              </div>
-              <div className="ac-table-wrap">
-                <table className="ac-table">
-                  <thead>
-                    <tr>
-                      <th>Table Name</th>
-                      <th>Total Monitored Records</th>
-                      <th style={{ textAlign: 'right' }}>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tableNames.length === 0 ? (
-                      <tr>
-                        <td colSpan={3}>
-                          <div className="ac-empty">
-                            <div className="ac-empty__icon">📦</div>
-                            No inventory data available.
-                          </div>
-                        </td>
-                      </tr>
-                    ) : tableNames.map(tableName => (
-                      <tr key={tableName} onClick={() => setSelectedTableModal(tableName)}>
-                        <td>
-                          <div className="ac-table__icon-cell">
-                            <div className="ac-table__row-icon">
-                              <Icon name="database" size={14} />
-                            </div>
-                            <strong>{tableName}</strong>
-                          </div>
-                        </td>
-                        <td>{groupedInventory[tableName].length.toLocaleString()} Records</td>
-                        <td style={{ textAlign: 'right' }}>
-                          <button className="ac-btn-ghost" onClick={e => { e.stopPropagation(); setSelectedTableModal(tableName); }}>
-                            View Rows
-                            <Icon name="chevronRight" size={13} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
             {/* AUDIT TRANSACTIONS */}
             <AuditLogTable
               paginatedLogs={paginatedLogs}
@@ -653,6 +608,11 @@ function DashboardPage({ onLogout }) {
               setFilterAction={setFilterAction}
               filterVerification={filterVerification}
               setFilterVerification={setFilterVerification}
+              sortOrder={sortOrder}
+              setSortOrder={handleSortOrderChange}
+              filterTable={filterTable}
+              setFilterTable={handleFilterTableChange}
+              tableNames={tableNames}
               rowsPerPage={rowsPerPage}
               setRowsPerPage={setRowsPerPage}
               tempDateFrom={tempDateFrom}
@@ -682,56 +642,6 @@ function DashboardPage({ onLogout }) {
 
         </div>
       </main>
-
-      {/* MODAL LEVEL 1: Table Records */}
-      {selectedTableModal && (
-        <div className="ac-modal-overlay" onClick={() => setSelectedTableModal(null)}>
-          <div className="ac-modal ac-modal--sm" onClick={e => e.stopPropagation()}>
-            <div className="ac-modal__header">
-              <div>
-                <div className="ac-modal__title">🗂️ Table: {selectedTableModal}</div>
-                <div className="ac-modal__subtitle">{groupedInventory[selectedTableModal]?.length} records found</div>
-              </div>
-              <button className="ac-modal__close" onClick={() => setSelectedTableModal(null)}>×</button>
-            </div>
-            <div className="ac-modal__body" style={{ padding: 0 }}>
-              <div className="ac-table-wrap">
-                <table className="ac-table">
-                  <thead>
-                    <tr>
-                      <th>Resource ID</th>
-                      <th>Last Action</th>
-                      <th>Last Updated</th>
-                      <th>Chain Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {groupedInventory[selectedTableModal].map(item => {
-                      const resource = item.source_table || item.resource || '';
-                      const resourceID = resource.includes(':') ? resource.split(':')[1] : resource;
-                      return (
-                        <tr
-                          key={resource}
-                          onClick={() => { setSelectedResource(resource); setSelectedTableModal(null); }}
-                        >
-                          <td>
-                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600 }}>
-                              🔍 {resourceID}
-                            </span>
-                          </td>
-                          <td><ActionBadge action={item.action} /></td>
-                          <td className="ac-table__time">{formatTimestamp(item.timestamp)}</td>
-                          <td onClick={(e) => e.stopPropagation()}>{renderInventoryBadge(item)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* MODAL LEVEL 2: Resource Log History */}
       {selectedResource && (

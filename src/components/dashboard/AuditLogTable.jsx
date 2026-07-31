@@ -11,6 +11,11 @@ function AuditLogTable({
   setFilterAction,
   filterVerification = 'ALL',
   setFilterVerification,
+  sortOrder = 'desc',
+  setSortOrder,
+  filterTable = '',
+  setFilterTable,
+  tableNames = [],
   rowsPerPage = 10,
   setRowsPerPage,
   tempDateFrom = '',
@@ -71,6 +76,21 @@ function AuditLogTable({
                 onChange={e => setSearchQuery(e.target.value)}
               />
             </div>
+            {/* Table filter dropdown */}
+            <select
+              className="ac-select"
+              value={filterTable}
+              onChange={e => {
+                if (setFilterTable) setFilterTable(e.target.value);
+                if (setCurrentPage) setCurrentPage(1);
+              }}
+            >
+              <option value="">All Tables</option>
+              {tableNames.map(name => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+
             <select className="ac-select" value={filterAction} onChange={e => setFilterAction(e.target.value)}>
               <option value="ALL">All Actions</option>
               <option value="INSERT">INSERT</option>
@@ -82,6 +102,20 @@ function AuditLogTable({
               <option value="VALID">VALID</option>
               <option value="INVALID">INVALID</option>
             </select>
+            
+            {/* Sort order toggle button */}
+            <button
+              type="button"
+              className={`ac-btn-ghost${sortOrder === 'desc' ? ' ac-btn-ghost--active' : ''}`}
+              style={{ padding: '0 12px', height: '36px', fontSize: '12px', fontWeight: '600', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+              onClick={() => {
+                if (setSortOrder) setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc');
+              }}
+              title={sortOrder === 'desc' ? 'Currently: Newest First' : 'Currently: Oldest First'}
+            >
+              {sortOrder === 'desc' ? '🔽 Newest First' : '🔼 Oldest First'}
+            </button>
+
             <select className="ac-select" value={rowsPerPage} onChange={e => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}>
               <option value={5}>5 Rows</option>
               <option value={10}>10 Rows</option>
@@ -120,22 +154,11 @@ function AuditLogTable({
               onChange={e => setTempDateTo(e.target.value)}
             />
           </div>
-          <button
-            className="ac-btn-primary"
-            style={{ padding: '0 16px', height: '36px', minWidth: 'auto', fontSize: '13px' }}
-            disabled={!tempDateFrom || !tempDateTo || isLogsLoading}
-            onClick={() => {
-              if (handleApplyLogsRange) {
-                handleApplyLogsRange(tempDateFrom, tempDateTo);
-              } else {
-                setFilterDateFrom(tempDateFrom);
-                setFilterDateTo(tempDateTo);
-                setCurrentPage(1);
-              }
-            }}
-          >
-            {isLogsLoading ? '⏳ Loading...' : 'Apply Range'}
-          </button>
+          {isLogsLoading && (
+            <span style={{ fontSize: '12px', color: 'var(--color-primary)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              ⏳ Loading logs...
+            </span>
+          )}
           {(tempDateFrom || tempDateTo || filterDateFrom || filterDateTo) && (
             <button
               className="ac-btn-ghost-action"

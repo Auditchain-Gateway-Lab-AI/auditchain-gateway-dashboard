@@ -88,7 +88,7 @@ const translations = {
     integDesc: 'Auditchain dirancang agar ramah bagi para pengembang. Gunakan REST API murni, agen CDC Docker, atau pilih SDK untuk bahasa pemrograman favorit Anda guna mengaktifkan audit trail di sistem Anda dalam hitungan menit.',
     techLabel: 'Didukung Oleh Teknologi Standar Industri',
     ctaTitle: 'Siap Mengamankan Integritas Data Sistem Anda?',
-    ctaSubtitle: 'Bergabunglah dengan rumah sakit dan lembaga fintech terkemuka yang telah mempercayakan penguncian log auditnya pada Auditchain Gateway.',
+    ctaSubtitle: 'Bergabunglah dengan enterprise dan lembaga keuangan terkemuka yang telah mempercayakan penguncian log auditnya pada Auditchain Gateway.',
     ctaBtn: 'Hubungi Tim Kami',
     footerPlatform: 'Platform',
     footerCompliance: 'Kepatuhan',
@@ -140,7 +140,7 @@ const translations = {
     featuresTag: 'Core Security Pillars',
     featuresTitle: 'Enterprise-Grade Audit Architecture',
     feat1Title: 'Zero Code Intrusion',
-    feat1Desc: 'Integrate a CDC pipeline directly from your database without modifying any backend code in your SIMRS or core system.',
+    feat1Desc: 'Integrate a CDC pipeline directly from your database without modifying any backend code in your client application or core system.',
     feat2Title: 'High-Throughput Ingestion',
     feat2Desc: 'Powered by an async Redis Queue capable of processing thousands of log events per second with sub-millisecond latency.',
     feat3Title: 'Merkle Tree Aggregation',
@@ -181,14 +181,14 @@ const translations = {
 };
 
 const INITIAL_AUDIT_LOGS = [
-  { id: 'LOG001', timestamp: '21/7/2026, 08.12.04.311', actor: 'RSIA_BUNDA', action: 'INSERT', resource: 'BILLING_RECORD:7821', metadata: '{"TOTAL": "Rp5.200.000", "STATUS": "LUNAS"}', sourceSystem: 'SIMRS Morbis 2', verification: 'VALID', tampered: false },
-  { id: 'LOG002', timestamp: '21/7/2026, 08.15.22.887', actor: 'POLINEMA', action: 'UPDATE', resource: 'PASIEN_DATA:4491', metadata: '{"NAMA": "Dewi Kartika", "KELAS": "I"}', sourceSystem: 'SIMRS Morbis 2', verification: 'VALID', tampered: false },
-  { id: 'LOG003', timestamp: '21/7/2026, 08.27.45.132', actor: 'RSU_SAKIT_HATI', action: 'UPDATE', resource: 'TINDAKAN:9034', metadata: '{"KODE": "86.22", "BIAYA": "Rp750.000"}', sourceSystem: 'SIM-RS Vmedis', verification: 'VALID', tampered: false },
-  { id: 'LOG004', timestamp: '21/7/2026, 08.34.11.554', actor: 'RSIA_BUNDA', action: 'DELETE', resource: 'JADWAL_DOKTER:2201', metadata: '{"DOKTER_ID": "D042", "SLOT": "09:00"}', sourceSystem: 'SIMRS Morbis 2', verification: 'VALID', tampered: false },
-  { id: 'LOG005', timestamp: '21/7/2026, 08.41.59.003', actor: 'RS_PRIMA', action: 'INSERT', resource: 'RESEP:6612', metadata: '{"OBAT": "Amoxicillin", "DOSIS": "500mg"}', sourceSystem: 'SIM-RS Intrahealth', verification: 'VALID', tampered: false },
-  { id: 'LOG006', timestamp: '21/7/2026, 08.53.17.441', actor: 'RSUD_MALANG', action: 'INSERT', resource: 'DIAGNOSA:1104', metadata: '{"ICD10": "J18.9", "KETERANGAN": "Pneumonia"}', sourceSystem: 'SIMRS Morbis 2', verification: 'VALID', tampered: false },
-  { id: 'LOG007', timestamp: '21/7/2026, 09.02.38.799', actor: 'RS_PRIMA', action: 'UPDATE', resource: 'LAB_RESULT:8831', metadata: '{"HB": "12.4", "LEUKOSIT": "8200"}', sourceSystem: 'SIM-RS Intrahealth', verification: 'VALID', tampered: false },
-  { id: 'LOG008', timestamp: '21/7/2026, 09.11.05.224', actor: 'POLINEMA', action: 'INSERT', resource: 'RAWAT_JALAN:3375', metadata: '{"POLI": "Penyakit Dalam", "ANTRIAN": "A-017"}', sourceSystem: 'SIMRS Morbis 2', verification: 'VALID', tampered: false },
+  { id: 'LOG001', timestamp: '21/7/2026, 08.12.04.311', actor: 'ACME_CORP', action: 'INSERT', resource: 'BILLING_RECORD:7821', metadata: '{"TOTAL": "$5,200", "STATUS": "PAID"}', sourceSystem: 'Client Gateway Node', verification: 'VALID', tampered: false },
+  { id: 'LOG002', timestamp: '21/7/2026, 08.15.22.887', actor: 'FINANCE_HUB', action: 'UPDATE', resource: 'USER_DATA:4491', metadata: '{"NAME": "Jane Doe", "TIER": "Premium"}', sourceSystem: 'Client Gateway Node', verification: 'VALID', tampered: false },
+  { id: 'LOG003', timestamp: '21/7/2026, 08.27.45.132', actor: 'CLIENT_NODE_ALPHA', action: 'UPDATE', resource: 'PAYMENT:9034', metadata: '{"CODE": "86.22", "AMOUNT": "$750"}', sourceSystem: 'Client Service', verification: 'VALID', tampered: false },
+  { id: 'LOG004', timestamp: '21/7/2026, 08.34.11.554', actor: 'ACME_CORP', action: 'DELETE', resource: 'SCHEDULE:2201', metadata: '{"USER_ID": "U042", "SLOT": "09:00"}', sourceSystem: 'Client Gateway Node', verification: 'VALID', tampered: false },
+  { id: 'LOG005', timestamp: '21/7/2026, 08.41.59.003', actor: 'TECH_SOLUTIONS', action: 'INSERT', resource: 'ORDER:6612', metadata: '{"ITEM": "License Pack", "QTY": "500"}', sourceSystem: 'Client Service', verification: 'VALID', tampered: false },
+  { id: 'LOG006', timestamp: '21/7/2026, 08.53.17.441', actor: 'LOGISTICS_CLIENT', action: 'INSERT', resource: 'INVENTORY:1104', metadata: '{"SKU": "J18.9", "STATUS": "In Stock"}', sourceSystem: 'Client Gateway Node', verification: 'VALID', tampered: false },
+  { id: 'LOG007', timestamp: '21/7/2026, 09.02.38.799', actor: 'TECH_SOLUTIONS', action: 'UPDATE', resource: 'METRICS:8831', metadata: '{"CPU": "12.4%", "RAM": "8200MB"}', sourceSystem: 'Client Service', verification: 'VALID', tampered: false },
+  { id: 'LOG008', timestamp: '21/7/2026, 09.11.05.224', actor: 'FINANCE_HUB', action: 'INSERT', resource: 'TRANSACTION:3375', metadata: '{"TYPE": "Transfer", "QUEUE": "A-017"}', sourceSystem: 'Client Gateway Node', verification: 'VALID', tampered: false },
 ];
 
 const INTEGRITY_LAYERS = {

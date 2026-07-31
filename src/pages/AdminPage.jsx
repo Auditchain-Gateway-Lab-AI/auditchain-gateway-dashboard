@@ -33,15 +33,16 @@ function AdminPage({ onLogout }) {
   }, []);
 
   const buildInstallCommand = useCallback((apiKey, tailscaleKey) => {
-    const baseURL = api.defaults.baseURL || 'http://localhost:8080/api';
+    const baseURL = api.defaults.baseURL || 'http://localhost:8081/api';
     const cleanBase = baseURL.replace(/\/$/, '');
+    const gatewayHost = cleanBase.replace(/\/api\/?$/, '');
     const scriptUrl = `${cleanBase}/install.sh`;
-    let cmd = `GATEWAY_URL="${cleanBase}" CLIENT_KEY="${apiKey || '<YOUR_CLIENT_API_KEY>'}"`;
+    const key = apiKey || '<YOUR_CLIENT_API_KEY>';
+
     if (tailscaleKey && tailscaleKey.trim()) {
-      cmd += ` TAILSCALE_AUTHKEY="${tailscaleKey.trim()}"`;
+      return `GATEWAY_URL="${gatewayHost}" CLIENT_KEY="${key}" TAILSCALE_AUTHKEY="${tailscaleKey.trim()}" sudo -E bash -c "$(curl -fsSL ${scriptUrl})"`;
     }
-    cmd += ` sudo -E bash -c "$(curl -fsSL ${scriptUrl})"`;
-    return cmd;
+    return `curl -fsSL ${scriptUrl} | sudo bash -s -- ${gatewayHost} ${key}`;
   }, []);
 
   const handleCopySetupCmd = useCallback((cmdText) => {
@@ -114,7 +115,7 @@ function AdminPage({ onLogout }) {
       setClients(clientsRes.data || []);
       setKafkaConfigs(kafkaRes.data || []);
     } catch (err) {
-      console.error("Gagal load admin dashboard data:", err);
+      console.error("Failed to load admin dashboard data:", err);
       if (err.response?.status === 401) {
         onLogout();
       }
@@ -128,9 +129,6 @@ function AdminPage({ onLogout }) {
   const handleToggleClientStatus = useCallback(async (client) => {
     let actionText = client.status === 'active' ? 'deactivate' : 'activate';
     let confirmMsg = `Are you sure you want to ${actionText} the client "${client.company_name}"?`;
-    if (client.status === 'pending_setup') {
-      confirmMsg = `Verify & activate client "${client.company_name}"? Client status will be changed to Active.`;
-    }
     if (!window.confirm(confirmMsg)) {
       return;
     }
@@ -138,7 +136,7 @@ function AdminPage({ onLogout }) {
       await api.patch(`/admin/clients/${client.id}/toggle`);
       fetchData();
     } catch (err) {
-      console.error("Gagal mengubah status klien:", err);
+      console.error("Failed to update client status:", err);
       alert(err.response?.data?.error || "Failed to update client status.");
     }
   }, [fetchData]);
@@ -151,7 +149,7 @@ function AdminPage({ onLogout }) {
       await api.delete(`/admin/clients/${client.id}`);
       fetchData();
     } catch (err) {
-      console.error("Gagal menghapus klien:", err);
+      console.error("Failed to delete client:", err);
       alert(err.response?.data?.error || "Failed to delete client.");
     }
   }, [fetchData]);
@@ -163,7 +161,7 @@ function AdminPage({ onLogout }) {
       const res = await api.get(`/admin/clients/${clientId}/users`);
       setClientUsers(res.data || []);
     } catch (err) {
-      console.error("Gagal load user klien:", err);
+      console.error("Failed to load client users:", err);
       setUserActionError(err.response?.data?.error || "Failed to load client users.");
     } finally {
       setUserActionLoading(false);
@@ -199,7 +197,7 @@ function AdminPage({ onLogout }) {
       setNewUserConfirmPassword('');
       fetchClientUsers(manageUsersClient.id);
     } catch (err) {
-      console.error("Gagal menambahkan user klien:", err);
+      console.error("Failed to add client user:", err);
       setUserActionError(err.response?.data?.error || "Failed to create user account.");
     } finally {
       setUserActionLoading(false);
@@ -218,7 +216,7 @@ function AdminPage({ onLogout }) {
         fetchClientUsers(manageUsersClient.id);
       }
     } catch (err) {
-      console.error("Gagal menghapus user klien:", err);
+      console.error("Failed to delete client user:", err);
       setUserActionError(err.response?.data?.error || "Failed to delete user account.");
     } finally {
       setUserActionLoading(false);
@@ -246,7 +244,7 @@ function AdminPage({ onLogout }) {
       });
       fetchData();
     } catch (err) {
-      alert(err.response?.data?.error || 'Gagal mendaftarkan klien');
+      alert(err.response?.data?.error || 'Failed to register client');
     }
   }, [clientForm, fetchData]);
 
@@ -265,7 +263,7 @@ function AdminPage({ onLogout }) {
       setKafkaForm({ client_id: '', kafka_brokers: '', topic_prefix: '', source_system: '', pk_field: 'ID', actor_field: '__user_name' });
       fetchData();
     } catch (err) {
-      alert(err.response?.data?.error || 'Gagal menyimpan konfigurasi Kafka');
+      alert(err.response?.data?.error || 'Failed to save Kafka configuration');
     }
   }, [kafkaForm, fetchData]);
 
@@ -274,7 +272,7 @@ function AdminPage({ onLogout }) {
       await api.patch(`/admin/kafka-config/${configId}/toggle`);
       fetchData();
     } catch (err) {
-      alert(err.response?.data?.error || 'Gagal memperbarui status konfigurasi Kafka');
+      alert(err.response?.data?.error || 'Failed to update Kafka configuration status');
     }
   }, [fetchData]);
 
@@ -311,8 +309,8 @@ function AdminPage({ onLogout }) {
         setAgentConfig(null);
         setAgentForm({ agent_url: '', verify_token: '', timeout_seconds: 5 });
       } else {
-        console.error("Gagal load agent config:", err);
-        setAgentActionError(err.response?.data?.error || "Gagal memuat konfigurasi Agent.");
+        console.error("Failed to load agent config:", err);
+        setAgentActionError(err.response?.data?.error || "Failed to load Agent configuration.");
       }
     } finally {
       setAgentLoading(false);
@@ -341,11 +339,11 @@ function AdminPage({ onLogout }) {
         verify_token: agentForm.verify_token,
         timeout_seconds: parseInt(agentForm.timeout_seconds, 10) || 5,
       });
-      setAgentActionSuccess(res.data.message || "Konfigurasi Agent berhasil disimpan!");
+      setAgentActionSuccess(res.data.message || "Agent configuration saved successfully!");
       fetchAgentConfig(selectedAgentClient.id);
     } catch (err) {
-      console.error("Gagal menyimpan agent config:", err);
-      setAgentActionError(err.response?.data?.error || "Gagal menyimpan konfigurasi Agent.");
+      console.error("Failed to save agent config:", err);
+      setAgentActionError(err.response?.data?.error || "Failed to save Agent configuration.");
     } finally {
       setAgentActionLoading(false);
     }
@@ -353,7 +351,7 @@ function AdminPage({ onLogout }) {
 
   const handleDeleteAgentConfig = useCallback(async () => {
     if (!selectedAgentClient) return;
-    if (!window.confirm(`Apakah Anda yakin ingin mencabut (revoke) akses Agent untuk klien "${selectedAgentClient.company_name}"?`)) {
+    if (!window.confirm(`Are you sure you want to revoke Agent access for client "${selectedAgentClient.company_name}"?`)) {
       return;
     }
     try {
@@ -361,13 +359,13 @@ function AdminPage({ onLogout }) {
       setAgentActionError('');
       setAgentActionSuccess('');
       const res = await api.delete(`/admin/clients/${selectedAgentClient.id}/agent-config`);
-      setAgentActionSuccess(res.data.message || "Konfigurasi Agent berhasil dihapus.");
+      setAgentActionSuccess(res.data.message || "Agent configuration deleted successfully.");
       setAgentConfig(null);
       setAgentPingResult(null);
       setAgentForm({ agent_url: '', verify_token: '', timeout_seconds: 5 });
     } catch (err) {
-      console.error("Gagal menghapus agent config:", err);
-      setAgentActionError(err.response?.data?.error || "Gagal menghapus konfigurasi Agent.");
+      console.error("Failed to delete agent config:", err);
+      setAgentActionError(err.response?.data?.error || "Failed to delete Agent configuration.");
     } finally {
       setAgentActionLoading(false);
     }
@@ -384,11 +382,11 @@ function AdminPage({ onLogout }) {
       const latency = Math.round(endTime - startTime);
       setAgentPingResult({ ...res.data, latency });
     } catch (err) {
-      console.error("Gagal ping agent:", err);
+      console.error("Failed to ping agent:", err);
       if (err.response?.data) {
         setAgentPingResult({ ...err.response.data, latency: null });
       } else {
-        setAgentPingResult({ reachable: false, error: err.message || "Gagal menghubungi server Agent.", latency: null });
+        setAgentPingResult({ reachable: false, error: err.message || "Failed to reach Agent server.", latency: null });
       }
     } finally {
       setAgentPingLoading(false);
@@ -396,15 +394,15 @@ function AdminPage({ onLogout }) {
   }, [selectedAgentClient]);
 
   const handleDeleteKafkaConfig = useCallback(async (configId, companyName) => {
-    if (!window.confirm(`Apakah Anda yakin ingin menghapus konfigurasi Kafka untuk "${companyName || 'klien'}"?`)) {
+    if (!window.confirm(`Are you sure you want to delete Kafka configuration for "${companyName || 'client'}"?`)) {
       return;
     }
     try {
       await api.delete(`/admin/kafka-config/${configId}`);
       fetchData();
     } catch (err) {
-      console.error("Gagal menghapus konfigurasi Kafka:", err);
-      alert(err.response?.data?.error || "Gagal menghapus konfigurasi Kafka.");
+      console.error("Failed to delete Kafka config:", err);
+      alert(err.response?.data?.error || "Failed to delete Kafka configuration.");
     }
   }, [fetchData]);
 
@@ -417,7 +415,7 @@ function AdminPage({ onLogout }) {
           <button className="ac-topnav__menu-btn" onClick={() => setSidebarOpen(o => !o)}>
             <Icon name="menu" size={22} />
           </button>
-          <img src="/logo/Group 1000009984.png" alt="Auditchain Logo" style={{ height: 38, width: 'auto', display: 'block', flexShrink: 0 }} />
+          <img src="/logo/logo-with-background.png" alt="Auditchain Logo" style={{ height: 38, width: 'auto', display: 'block', flexShrink: 0, borderRadius: 6 }} />
           <div>
             <div className="ac-topnav__brand-name">Auditchain Gateway</div>
             <div className="ac-topnav__brand-sub ac-admin-portal-label">Admin Portal</div>
@@ -458,6 +456,7 @@ function AdminPage({ onLogout }) {
             <Icon name="database" size={18} />
             Client Registry
           </button>
+
           <button
             className={`ac-sidebar__nav-item${activeTab === 'kafka' ? ' ac-sidebar__nav-item--active' : ''}`}
             onClick={() => { setActiveTab('kafka'); setSidebarOpen(false); }}
@@ -589,7 +588,7 @@ function AdminPage({ onLogout }) {
                                 style={{ padding: '6px 10px', fontSize: '11px', minWidth: '96px', justifyContent: 'center' }}
                                 onClick={() => handleToggleClientStatus(client)}
                               >
-                                {client.status === 'active' ? '🚫 Block' : client.status === 'pending_setup' ? '✅ Verify & Activate' : '✅ Activate'}
+                                {client.status === 'active' ? '🚫 Block' : '✅ Activate'}
                               </button>
                               <button
                                 className="ac-btn-primary"
@@ -633,6 +632,8 @@ function AdminPage({ onLogout }) {
               </div>
             </section>
           )}
+
+
 
           {/* ===== TAB: KONFIGURASI KAFKA ===== */}
           {activeTab === 'kafka' && (
@@ -723,7 +724,7 @@ function AdminPage({ onLogout }) {
                 <div className="ac-form-grid">
                   <div className="ac-form-field" style={{ gridColumn: '1 / -1' }}>
                     <label className="ac-form-label">Company Name <span style={{ color: 'var(--color-error)' }}>*</span></label>
-                    <input className="ac-form-input" required placeholder="PT Contoh Indonesia"
+                    <input className="ac-form-input" required placeholder="e.g. Acme Corporation"
                       value={clientForm.company_name}
                       onChange={e => setClientForm(f => ({ ...f, company_name: e.target.value }))} />
                   </div>
@@ -774,59 +775,42 @@ function AdminPage({ onLogout }) {
         </div>
       )}
 
-      {/* ===== MODAL: API KEY REVEAL & 1-COMMAND INSTALLER ===== */}
+      {/* ======= MODAL: API KEY & 1-COMMAND INSTALLER ======= */}
       {showApiKeyModal && (
         <div className="ac-modal-overlay">
           <div className="ac-modal" style={{ maxWidth: '680px', width: '92%' }} onClick={e => e.stopPropagation()}>
             <div className="ac-modal__header">
               <div>
                 <div className="ac-modal__title">🎉 Client Successfully Registered!</div>
-                <div className="ac-modal__subtitle">Save credentials & copy the 1-command installer script for client server setup</div>
+                <div className="ac-modal__subtitle">Copy and run the 1-command installer script on the client server</div>
               </div>
             </div>
             <div className="ac-modal__body" style={{ maxHeight: '80vh', overflowY: 'auto' }}>
               
-              {/* API Key Box */}
-              <div className="ac-api-key-box">
-                <div className="ac-api-key-box__label">🔑 Client API Key</div>
-                <div className="ac-api-key-box__key">{newApiKey}</div>
-                <button
-                  className={`ac-btn-primary${apiKeyCopied ? ' ac-btn-primary--success' : ''}`}
-                  style={{ marginTop: 12, width: '100%' }}
-                  onClick={handleCopyApiKey}
-                >
-                  {apiKeyCopied ? '✅ API Key Copied!' : '📋 Copy API Key'}
-                </button>
-              </div>
-
-              <div className="ac-api-key-box__warning">
-                ⚠️ <strong>Security Note:</strong> This API Key is displayed <strong>ONLY ONCE</strong>. After closing this dialog, the full key cannot be retrieved again.
-              </div>
-
-              {/* 1-Command Installer Script Box */}
-              <div style={{ marginTop: '20px' }}>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-on-surface)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {/* 1-Command Installer Script Box (PRIMARY) */}
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-on-surface)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
                   🚀 1-Command Automated Agent & CDC Installer
                 </div>
-                <div style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: '2px' }}>
-                  Run this command on the Client's Linux VPS/Server terminal as Root/Sudo:
+                <div style={{ fontSize: '11px', color: 'var(--color-outline)', marginBottom: '12px' }}>
+                  Copy and run this command on the Client's Linux VPS/Server terminal as Root/Sudo:
                 </div>
 
                 <div className="ac-terminal-box">
                   <div className="ac-terminal-box__header">
                     <div className="ac-terminal-box__title">
-                      <span>💻 BASH ONE-LINER</span>
+                      <span>💻 BASH ONE-LINER (AUTO-CONFIGURED)</span>
                     </div>
-                    <span style={{ fontSize: '10px', color: '#8b949e' }}>Auto-Configured</span>
+                    <span style={{ fontSize: '10px', color: '#8b949e', fontFamily: 'var(--font-mono)' }}>Ready to paste</span>
                   </div>
-                  <div className="ac-terminal-box__code">
+                  <div className="ac-terminal-box__code" style={{ fontSize: '12px', lineHeight: 1.5, wordBreak: 'break-all' }}>
                     {buildInstallCommand(newApiKey, customTailscaleKey)}
                   </div>
-                  <div className="ac-terminal-box__actions">
+                  <div className="ac-terminal-box__actions" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <button
                       type="button"
                       className={`ac-btn-primary ${setupCmdCopied ? 'ac-btn-primary--success' : ''}`}
-                      style={{ padding: '6px 12px', fontSize: '11px' }}
+                      style={{ padding: '8px 16px', fontSize: '12px', fontWeight: 700 }}
                       onClick={() => handleCopySetupCmd(buildInstallCommand(newApiKey, customTailscaleKey))}
                     >
                       {setupCmdCopied ? '✅ Command Copied!' : '📋 Copy Setup Command'}
@@ -843,8 +827,39 @@ function AdminPage({ onLogout }) {
                   </div>
                 </div>
 
+                {/* Compact API Key reference for record */}
+                <div style={{
+                  marginTop: '16px',
+                  padding: '10px 14px',
+                  backgroundColor: 'var(--color-surface-variant, rgba(0,0,0,0.03))',
+                  borderRadius: '8px',
+                  border: '1px solid var(--color-outline-variant, #e0e0e0)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px'
+                }}>
+                  <div style={{ overflow: 'hidden' }}>
+                    <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-outline)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                      🔑 Generated API Key Reference
+                    </div>
+                    <div style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--color-on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {newApiKey}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="ac-btn-ghost-action"
+                    style={{ padding: '4px 8px', fontSize: '11px', flexShrink: 0 }}
+                    onClick={handleCopyApiKey}
+                    title="Copy Raw API Key"
+                  >
+                    {apiKeyCopied ? '✅ Copied' : '📋 Copy Key'}
+                  </button>
+                </div>
+
                 {/* Advanced Customization (Custom Tailscale Auth Key) */}
-                <details className="ac-adv-customization">
+                <details className="ac-adv-customization" style={{ marginTop: '14px' }}>
                   <summary>⚙️ Advanced Customization (Custom Tailscale Auth Key)</summary>
                   <div style={{ marginTop: '10px' }}>
                     <label className="ac-form-label" style={{ fontSize: '11px' }}>Custom Tailscale Auth Key (Optional)</label>
@@ -873,7 +888,7 @@ function AdminPage({ onLogout }) {
                     setCustomTailscaleKey('');
                   }}
                 >
-                  I Have Saved & Copied — Close
+                  I Have Copied — Close
                 </button>
               </div>
             </div>
@@ -1145,7 +1160,7 @@ function AdminPage({ onLogout }) {
             <div className="ac-modal__header">
               <div>
                 <div className="ac-modal__title">🤖 Agent Lapis 3: {selectedAgentClient.company_name}</div>
-                <div className="ac-modal__subtitle">Konfigurasi Agent lokal milik perusahaan untuk verifikasi & integrasi Gateway</div>
+                <div className="ac-modal__subtitle">Configure organization's local Agent for Gateway verification & integration</div>
               </div>
               <button className="ac-modal__close" onClick={() => setShowAgentModal(false)}>×</button>
             </div>
@@ -1165,10 +1180,10 @@ function AdminPage({ onLogout }) {
               }}>
                 <div>
                   <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
-                    {agentConfig ? '✅ Agent Terdaftar & Aktif' : '⚠️ Belum Ada Agent Terdaftar'}
+                    {agentConfig ? '✅ Agent Registered & Active' : '⚠️ No Registered Agent'}
                   </div>
                   <div style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: 2 }}>
-                    {agentConfig ? `URL: ${agentConfig.agent_url} | Timeout: ${agentConfig.timeout_seconds}s` : 'Daftarkan URL Agent lokal di bawah ini.'}
+                    {agentConfig ? `URL: ${agentConfig.agent_url} | Timeout: ${agentConfig.timeout_seconds}s` : 'Register local Agent URL below.'}
                   </div>
                 </div>
 
@@ -1237,7 +1252,7 @@ function AdminPage({ onLogout }) {
                         disabled={agentActionLoading}
                       />
                       <div style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: 4 }}>
-                        Endpoint HTTP/HTTPS ke Agent Lapis 3 lokal perusahaan klien.
+                        HTTP/HTTPS endpoint for the client organization's local Layer-3 Agent.
                       </div>
                     </div>
 
@@ -1297,6 +1312,8 @@ function AdminPage({ onLogout }) {
           </div>
         </div>
       )}
+
+
 
     </div>
   );
