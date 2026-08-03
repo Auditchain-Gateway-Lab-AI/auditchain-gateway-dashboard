@@ -4,7 +4,6 @@ import api from '../api';
 import Icon from '../components/common/Icon';
 import StatCards from '../components/dashboard/StatCards';
 import AuditLogTable from '../components/dashboard/AuditLogTable';
-import VerificationModal from '../components/dashboard/VerificationModal';
 import ResourceDetailModal from '../components/dashboard/ResourceDetailModal';
 import { parseJwt, mapRangeItemToVerifyStatus } from '../utils/formatters';
 
@@ -73,38 +72,6 @@ function DashboardPage({ onLogout }) {
 
   const [isLogsLoading, setIsLogsLoading] = useState(false);
 
-  // Fetch summary stats (Auto-refresh 5s)
-  useEffect(() => {
-    const fetchSummaryStats = async () => {
-      try {
-        const params = selectedClient ? { client_id: selectedClient } : {};
-        const statsRes = await api.get('/dashboard/stats', { params });
-        setStats(statsRes.data);
-      } catch (err) {
-        if (err.response?.status === 401) onLogout();
-      }
-    };
-
-    fetchSummaryStats();
-    const id = setInterval(fetchSummaryStats, 5000);
-    return () => clearInterval(id);
-  }, [onLogout, selectedClient]);
-
-  // Fetch daftar nama tabel (Sekali saat mount / client berubah — bukan polling)
-  useEffect(() => {
-    const fetchTableNames = async () => {
-      try {
-        const params = selectedClient ? { client_id: selectedClient } : {};
-        const res = await api.get('/dashboard/inventory', { params });
-        const tables = (res.data || []).map(t => t.table_name).filter(Boolean).sort();
-        setTableNames(tables);
-      } catch (err) {
-        console.error("Failed to load table names:", err);
-      }
-    };
-    fetchTableNames();
-  }, [selectedClient]);
-
   // Fetch logs transaksi SECARA ON-DEMAND saat rentang tanggal ditentukan
   const handleApplyLogsRange = useCallback(async (fromDate, toDate, overrideSort, overrideTable) => {
     const fromVal = fromDate || tempDateFrom;
@@ -120,10 +87,17 @@ function DashboardPage({ onLogout }) {
     const activeTable = overrideTable !== undefined ? overrideTable : filterTable;
 
     try {
+      const fromObj = new Date(fromVal);
+      const toObj = new Date(toVal);
+      // Sertakan detik & milidetik terakhir pada tanggal TO (:59.999) agar transaksi menit tersebut tidak terpotong
+      toObj.setSeconds(59, 999);
+
       const params = {
         page: 1,
         page_size: 1000,
         sort_order: activeSort,
+        from: fromObj.toISOString(),
+        to: toObj.toISOString(),
       };
       if (activeTable) {
         params.source_table = activeTable;
@@ -158,17 +132,73 @@ function DashboardPage({ onLogout }) {
     }
   }, [tempDateFrom, tempDateTo, selectedClient, onLogout, sortOrder, filterTable]);
 
+  const prevTotalLogsRef = useRef(null);
+  const filterDateFromRef = useRef(filterDateFrom);
+  const filterDateToRef = useRef(filterDateTo);
+  const handleApplyLogsRangeRef = useRef(handleApplyLogsRange);
+
+  useEffect(() => { filterDateFromRef.current = filterDateFrom; }, [filterDateFrom]);
+  useEffect(() => { filterDateToRef.current = filterDateTo; }, [filterDateTo]);
+  useEffect(() => { handleApplyLogsRangeRef.current = handleApplyLogsRange; }, [handleApplyLogsRange]);
+
+  // Fetch summary stats (Auto-refresh 5s & Smart Polling for Table Auto-Refresh)
+  useEffect(() => {
+    const fetchSummaryStats = async () => {
+      try {
+        const params = selectedClient ? { client_id: selectedClient } : {};
+        const statsRes = await api.get('/dashboard/stats', { params });
+        setStats(statsRes.data);
+
+        // Smart Polling: Otomatis re-fetch tabel transaksi jika total_logs berubah & date range aktif
+        const newTotal = statsRes.data.total_logs;
+        if (prevTotalLogsRef.current !== null &&
+            newTotal !== prevTotalLogsRef.current &&
+            filterDateFromRef.current && filterDateToRef.current) {
+          handleApplyLogsRangeRef.current(filterDateFromRef.current, filterDateToRef.current);
+        }
+        prevTotalLogsRef.current = newTotal;
+      } catch (err) {
+        if (err.response?.status === 401) onLogout();
+      }
+    };
+
+    fetchSummaryStats();
+    const id = setInterval(fetchSummaryStats, 5000);
+    return () => clearInterval(id);
+  }, [onLogout, selectedClient]);
+
+  // Fetch daftar nama tabel (Sekali saat mount / client berubah — bukan polling)
+  useEffect(() => {
+    const fetchTableNames = async () => {
+      try {
+        const params = selectedClient ? { client_id: selectedClient } : {};
+        const res = await api.get('/dashboard/inventory', { params });
+        const tables = (res.data || []).map(t => t.table_name).filter(Boolean).sort();
+        setTableNames(tables);
+      } catch (err) {
+        console.error("Failed to load table names:", err);
+      }
+    };
+    fetchTableNames();
+  }, [selectedClient]);
+
+
+
   const handleSortOrderChange = (newSort) => {
     setSortOrder(newSort);
-    if (filterDateFrom && filterDateTo) {
-      handleApplyLogsRange(filterDateFrom, filterDateTo, newSort, filterTable);
+    const fDate = filterDateFrom || tempDateFrom;
+    const tDate = filterDateTo || tempDateTo;
+    if (fDate && tDate) {
+      handleApplyLogsRange(fDate, tDate, newSort, filterTable);
     }
   };
 
   const handleFilterTableChange = (newTable) => {
     setFilterTable(newTable);
-    if (filterDateFrom && filterDateTo) {
-      handleApplyLogsRange(filterDateFrom, filterDateTo, sortOrder, newTable);
+    const fDate = filterDateFrom || tempDateFrom;
+    const tDate = filterDateTo || tempDateTo;
+    if (fDate && tDate) {
+      handleApplyLogsRange(fDate, tDate, sortOrder, newTable);
     }
   };
 
@@ -192,6 +222,7 @@ function DashboardPage({ onLogout }) {
     setTotalLogsCount(0);
     setRangeVerifyResult(null);
     setFilterVerification('ALL');
+    setSortOrder('desc');
     setCurrentPage(1);
   }, []);
 
@@ -271,7 +302,7 @@ function DashboardPage({ onLogout }) {
 
   // Filter & pagination
   const filteredLogs = useMemo(() => {
-    return recentLogs.filter(log => {
+    const list = recentLogs.filter(log => {
       const matchSearch =
         (log?.source_table?.toLowerCase() || log?.resource?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
         (log?.actor?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
@@ -283,16 +314,28 @@ function DashboardPage({ onLogout }) {
 
       let matchDate = true;
       if (log?.timestamp) {
-        const logTime = new Date(log.timestamp).getTime();
-        if (filterDateFrom) {
-          const fromTime = new Date(filterDateFrom).getTime();
-          if (logTime < fromTime) matchDate = false;
+        let tsStr = String(log.timestamp);
+        if (tsStr.includes(' ') && !tsStr.includes('T')) {
+          tsStr = tsStr.replace(' ', 'T');
         }
-        if (filterDateTo) {
-          const toTime = new Date(filterDateTo).getTime();
-          if (logTime > toTime) matchDate = false;
+        const logTime = new Date(tsStr).getTime();
+
+        const activeFrom = filterDateFrom || tempDateFrom;
+        const activeTo = filterDateTo || tempDateTo;
+
+        if (!isNaN(logTime)) {
+          if (activeFrom) {
+            const fromTime = new Date(activeFrom).getTime();
+            if (!isNaN(fromTime) && logTime < fromTime) matchDate = false;
+          }
+          if (activeTo) {
+            const toObj = new Date(activeTo);
+            toObj.setSeconds(59, 999);
+            const toTime = toObj.getTime();
+            if (!isNaN(toTime) && logTime > toTime) matchDate = false;
+          }
         }
-      } else if (filterDateFrom || filterDateTo) {
+      } else if (filterDateFrom || filterDateTo || tempDateFrom || tempDateTo) {
         matchDate = false;
       }
 
@@ -310,7 +353,25 @@ function DashboardPage({ onLogout }) {
 
       return matchSearch && matchAction && matchDate && matchVerification;
     });
-  }, [recentLogs, searchQuery, filterAction, filterDateFrom, filterDateTo, filterVerification, verifyStatuses]);
+
+    // Urutkan data secara aman berdasarkan sortOrder:
+    // 'desc' (Newest First) -> Dari TO ke FROM (timestamp terbaru ke terlama)
+    // 'asc'  (Oldest First) -> Dari FROM ke TO (timestamp terlama ke terbaru)
+    return list.sort((a, b) => {
+      let tsA = String(a?.timestamp || '');
+      if (tsA.includes(' ') && !tsA.includes('T')) tsA = tsA.replace(' ', 'T');
+      let tsB = String(b?.timestamp || '');
+      if (tsB.includes(' ') && !tsB.includes('T')) tsB = tsB.replace(' ', 'T');
+
+      const timeA = new Date(tsA).getTime() || 0;
+      const timeB = new Date(tsB).getTime() || 0;
+
+      if (sortOrder === 'asc') {
+        return timeA - timeB;
+      }
+      return timeB - timeA;
+    });
+  }, [recentLogs, searchQuery, filterAction, filterDateFrom, filterDateTo, tempDateFrom, tempDateTo, filterVerification, verifyStatuses, sortOrder]);
   const isLocalPaginated = !isServerPaginated || filterDateFrom || filterDateTo;
 
   const totalPages = isLocalPaginated
@@ -591,14 +652,6 @@ function DashboardPage({ onLogout }) {
             {/* Stats Grid */}
             <StatCards stats={stats} />
 
-            {/* Verification Detail (Single log modal inspection) */}
-            {selectedVerifyResult && !selectedVerifyResult.range && (
-              <VerificationModal
-                result={selectedVerifyResult}
-                onClose={() => setSelectedVerifyResult(null)}
-              />
-            )}
-
             {/* AUDIT TRANSACTIONS */}
             <AuditLogTable
               paginatedLogs={paginatedLogs}
@@ -630,6 +683,8 @@ function DashboardPage({ onLogout }) {
               rangeVerifyResult={rangeVerifyResult}
               setRangeVerifyResult={setRangeVerifyResult}
               isVerifyRangeLoading={isVerifyRangeLoading}
+              selectedVerifyResult={selectedVerifyResult}
+              setSelectedVerifyResult={setSelectedVerifyResult}
               onSelectResource={setSelectedResource}
               renderStatusBadge={renderStatusBadge}
               displayTotal={displayTotal}

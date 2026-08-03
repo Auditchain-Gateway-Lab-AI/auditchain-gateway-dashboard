@@ -90,13 +90,11 @@ function AdminPage({ onLogout }) {
   const [clientForm, setClientForm] = useState({
     company_name: '', subscription_tier: 'basic', rate_limit_per_sec: 50,
     status: 'active', actor_field: 'actor', fallback_actor_field: '',
-    action_field: 'action', resource_field: 'resource',
   });
 
   // Kafka form state
   const [kafkaForm, setKafkaForm] = useState({
-    client_id: '', kafka_brokers: '', topic_prefix: '',
-    source_system: '', pk_field: 'ID', actor_field: '__user_name',
+    client_id: '', kafka_brokers: '', topic_prefix: '', pk_field: 'ID',
   });
 
   const clientInfo = useMemo(() => {
@@ -124,6 +122,8 @@ function AdminPage({ onLogout }) {
 
   useEffect(() => {
     fetchData();
+    const intervalId = setInterval(fetchData, 5000);
+    return () => clearInterval(intervalId);
   }, [fetchData]);
 
   const handleToggleClientStatus = useCallback(async (client) => {
@@ -230,9 +230,7 @@ function AdminPage({ onLogout }) {
         company_name: clientForm.company_name,
         status: clientForm.status,
         actor_field: clientForm.actor_field,
-        fallback_actor_field: clientForm.fallback_actor_field,
-        action_field: clientForm.action_field,
-        resource_field: clientForm.resource_field
+        fallback_actor_field: clientForm.fallback_actor_field
       });
       setNewApiKey(response.data.api_key);
       setShowClientModal(false);
@@ -240,7 +238,6 @@ function AdminPage({ onLogout }) {
       setClientForm({
         company_name: '', subscription_tier: 'basic', rate_limit_per_sec: 50,
         status: 'active', actor_field: 'actor', fallback_actor_field: '',
-        action_field: 'action', resource_field: 'resource',
       });
       fetchData();
     } catch (err) {
@@ -255,12 +252,12 @@ function AdminPage({ onLogout }) {
         client_id: kafkaForm.client_id,
         kafka_brokers: kafkaForm.kafka_brokers,
         topic_prefix: kafkaForm.topic_prefix,
-        source_system: kafkaForm.source_system,
+        source_system: 'Auto-Sync', // Backend akan override dengan Company Name
         pk_field: kafkaForm.pk_field,
-        actor_field: kafkaForm.actor_field,
+        actor_field: '', // Tidak dipakai lagi
       });
       setShowKafkaModal(false);
-      setKafkaForm({ client_id: '', kafka_brokers: '', topic_prefix: '', source_system: '', pk_field: 'ID', actor_field: '__user_name' });
+      setKafkaForm({ client_id: '', kafka_brokers: '', topic_prefix: '', pk_field: 'ID' });
       fetchData();
     } catch (err) {
       alert(err.response?.data?.error || 'Failed to save Kafka configuration');
@@ -576,8 +573,9 @@ function AdminPage({ onLogout }) {
                           <td>
                             <div className="ac-field-map">
                               <div className="ac-field-map__item"><span className="ac-field-map__key">actor</span> {client.actor_field || '—'}</div>
-                              <div className="ac-field-map__item"><span className="ac-field-map__key">action</span> {client.action_field || '—'}</div>
-                              <div className="ac-field-map__item"><span className="ac-field-map__key">resource</span> {client.resource_field || '—'}</div>
+                              {client.fallback_actor_field && (
+                                <div className="ac-field-map__item"><span className="ac-field-map__key">fallback</span> {client.fallback_actor_field}</div>
+                              )}
                             </div>
                           </td>
                           <td className="ac-table__time">{formatTimestamp(client.created_at)}</td>
@@ -746,23 +744,11 @@ function AdminPage({ onLogout }) {
                 <div style={{ height: 1, background: 'var(--color-outline-variant)', margin: '16px 0' }} />
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-on-surface-variant)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 12 }}>Custom Field Mapping</div>
                 <div className="ac-form-grid">
-                  <div className="ac-form-field">
+                  <div className="ac-form-field" style={{ gridColumn: '1 / -1' }}>
                     <label className="ac-form-label">Actor Field</label>
                     <input className="ac-form-input" placeholder="actor"
                       value={clientForm.actor_field}
                       onChange={e => setClientForm(f => ({ ...f, actor_field: e.target.value }))} />
-                  </div>
-                  <div className="ac-form-field">
-                    <label className="ac-form-label">Action Field</label>
-                    <input className="ac-form-input" placeholder="action"
-                      value={clientForm.action_field}
-                      onChange={e => setClientForm(f => ({ ...f, action_field: e.target.value }))} />
-                  </div>
-                  <div className="ac-form-field">
-                    <label className="ac-form-label">Resource Field</label>
-                    <input className="ac-form-input" placeholder="resource"
-                      value={clientForm.resource_field}
-                      onChange={e => setClientForm(f => ({ ...f, resource_field: e.target.value }))} />
                   </div>
                 </div>
                 <div className="ac-form-actions">
@@ -990,22 +976,10 @@ function AdminPage({ onLogout }) {
                       onChange={e => setKafkaForm(f => ({ ...f, topic_prefix: e.target.value }))} />
                   </div>
                   <div className="ac-form-field">
-                    <label className="ac-form-label">Source System <span style={{ color: 'var(--color-error)' }}>*</span></label>
-                    <input className="ac-form-input" required placeholder="SIMRS-Prod"
-                      value={kafkaForm.source_system}
-                      onChange={e => setKafkaForm(f => ({ ...f, source_system: e.target.value }))} />
-                  </div>
-                  <div className="ac-form-field">
                     <label className="ac-form-label">PK Field</label>
                     <input className="ac-form-input" placeholder="ID"
                       value={kafkaForm.pk_field}
                       onChange={e => setKafkaForm(f => ({ ...f, pk_field: e.target.value }))} />
-                  </div>
-                  <div className="ac-form-field">
-                    <label className="ac-form-label">Actor Field</label>
-                    <input className="ac-form-input" placeholder="__user_name"
-                      value={kafkaForm.actor_field}
-                      onChange={e => setKafkaForm(f => ({ ...f, actor_field: e.target.value }))} />
                   </div>
                 </div>
                 <div className="ac-form-actions">
