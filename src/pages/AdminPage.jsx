@@ -122,6 +122,8 @@ function AdminPage({ onLogout }) {
 
   useEffect(() => {
     fetchData();
+    const intervalId = setInterval(fetchData, 5000);
+    return () => clearInterval(intervalId);
   }, [fetchData]);
 
   const handleToggleClientStatus = useCallback(async (client) => {
