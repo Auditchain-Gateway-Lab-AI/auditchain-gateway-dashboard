@@ -4,7 +4,6 @@ import api from '../api';
 import Icon from '../components/common/Icon';
 import StatCards from '../components/dashboard/StatCards';
 import AuditLogTable from '../components/dashboard/AuditLogTable';
-import VerificationModal from '../components/dashboard/VerificationModal';
 import ResourceDetailModal from '../components/dashboard/ResourceDetailModal';
 import { parseJwt, mapRangeItemToVerifyStatus } from '../utils/formatters';
 
@@ -73,38 +72,6 @@ function DashboardPage({ onLogout }) {
 
   const [isLogsLoading, setIsLogsLoading] = useState(false);
 
-  // Fetch summary stats (Auto-refresh 5s)
-  useEffect(() => {
-    const fetchSummaryStats = async () => {
-      try {
-        const params = selectedClient ? { client_id: selectedClient } : {};
-        const statsRes = await api.get('/dashboard/stats', { params });
-        setStats(statsRes.data);
-      } catch (err) {
-        if (err.response?.status === 401) onLogout();
-      }
-    };
-
-    fetchSummaryStats();
-    const id = setInterval(fetchSummaryStats, 5000);
-    return () => clearInterval(id);
-  }, [onLogout, selectedClient]);
-
-  // Fetch daftar nama tabel (Sekali saat mount / client berubah — bukan polling)
-  useEffect(() => {
-    const fetchTableNames = async () => {
-      try {
-        const params = selectedClient ? { client_id: selectedClient } : {};
-        const res = await api.get('/dashboard/inventory', { params });
-        const tables = (res.data || []).map(t => t.table_name).filter(Boolean).sort();
-        setTableNames(tables);
-      } catch (err) {
-        console.error("Failed to load table names:", err);
-      }
-    };
-    fetchTableNames();
-  }, [selectedClient]);
-
   // Fetch logs transaksi SECARA ON-DEMAND saat rentang tanggal ditentukan
   const handleApplyLogsRange = useCallback(async (fromDate, toDate, overrideSort, overrideTable) => {
     const fromVal = fromDate || tempDateFrom;
@@ -164,6 +131,58 @@ function DashboardPage({ onLogout }) {
       setIsLogsLoading(false);
     }
   }, [tempDateFrom, tempDateTo, selectedClient, onLogout, sortOrder, filterTable]);
+
+  const prevTotalLogsRef = useRef(null);
+  const filterDateFromRef = useRef(filterDateFrom);
+  const filterDateToRef = useRef(filterDateTo);
+  const handleApplyLogsRangeRef = useRef(handleApplyLogsRange);
+
+  useEffect(() => { filterDateFromRef.current = filterDateFrom; }, [filterDateFrom]);
+  useEffect(() => { filterDateToRef.current = filterDateTo; }, [filterDateTo]);
+  useEffect(() => { handleApplyLogsRangeRef.current = handleApplyLogsRange; }, [handleApplyLogsRange]);
+
+  // Fetch summary stats (Auto-refresh 5s & Smart Polling for Table Auto-Refresh)
+  useEffect(() => {
+    const fetchSummaryStats = async () => {
+      try {
+        const params = selectedClient ? { client_id: selectedClient } : {};
+        const statsRes = await api.get('/dashboard/stats', { params });
+        setStats(statsRes.data);
+
+        // Smart Polling: Otomatis re-fetch tabel transaksi jika total_logs berubah & date range aktif
+        const newTotal = statsRes.data.total_logs;
+        if (prevTotalLogsRef.current !== null &&
+            newTotal !== prevTotalLogsRef.current &&
+            filterDateFromRef.current && filterDateToRef.current) {
+          handleApplyLogsRangeRef.current(filterDateFromRef.current, filterDateToRef.current);
+        }
+        prevTotalLogsRef.current = newTotal;
+      } catch (err) {
+        if (err.response?.status === 401) onLogout();
+      }
+    };
+
+    fetchSummaryStats();
+    const id = setInterval(fetchSummaryStats, 5000);
+    return () => clearInterval(id);
+  }, [onLogout, selectedClient]);
+
+  // Fetch daftar nama tabel (Sekali saat mount / client berubah — bukan polling)
+  useEffect(() => {
+    const fetchTableNames = async () => {
+      try {
+        const params = selectedClient ? { client_id: selectedClient } : {};
+        const res = await api.get('/dashboard/inventory', { params });
+        const tables = (res.data || []).map(t => t.table_name).filter(Boolean).sort();
+        setTableNames(tables);
+      } catch (err) {
+        console.error("Failed to load table names:", err);
+      }
+    };
+    fetchTableNames();
+  }, [selectedClient]);
+
+
 
   const handleSortOrderChange = (newSort) => {
     setSortOrder(newSort);
@@ -633,14 +652,6 @@ function DashboardPage({ onLogout }) {
             {/* Stats Grid */}
             <StatCards stats={stats} />
 
-            {/* Verification Detail (Single log modal inspection) */}
-            {selectedVerifyResult && !selectedVerifyResult.range && (
-              <VerificationModal
-                result={selectedVerifyResult}
-                onClose={() => setSelectedVerifyResult(null)}
-              />
-            )}
-
             {/* AUDIT TRANSACTIONS */}
             <AuditLogTable
               paginatedLogs={paginatedLogs}
@@ -672,6 +683,8 @@ function DashboardPage({ onLogout }) {
               rangeVerifyResult={rangeVerifyResult}
               setRangeVerifyResult={setRangeVerifyResult}
               isVerifyRangeLoading={isVerifyRangeLoading}
+              selectedVerifyResult={selectedVerifyResult}
+              setSelectedVerifyResult={setSelectedVerifyResult}
               onSelectResource={setSelectedResource}
               renderStatusBadge={renderStatusBadge}
               displayTotal={displayTotal}

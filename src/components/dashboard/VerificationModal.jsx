@@ -139,6 +139,40 @@ function VerificationModal({ result, onClose }) {
             </div>
           )}
 
+          {/* Agent Verification Status (Layer 3) */}
+          {data.agent_status && data.agent_status !== 'skipped_historical' && (
+            <div className="ac-verify__detail-row">
+              <span className="ac-verify__detail-label">Agent Status: </span>
+              <span className={`ac-status ${
+                data.agent_status === 'matched' ? 'ac-status--valid' :
+                data.agent_status === 'mismatch' ? 'ac-status--invalid' :
+                data.agent_status === 'unreachable' ? 'ac-status--pending' :
+                ''
+              }`} style={{ fontSize: '11px', padding: '2px 8px', marginLeft: '4px' }}>
+                {data.agent_status === 'matched' ? '✅ Agent Matched' :
+                 data.agent_status === 'mismatch' ? '🚨 Agent Mismatch' :
+                 data.agent_status === 'unreachable' ? '🔌 Agent Unreachable' :
+                 data.agent_status === 'not_configured' ? '⚙️ Agent Not Configured' :
+                 data.agent_status}
+              </span>
+            </div>
+          )}
+
+          {/* Agent Discrepancies Details */}
+          {data.agent_discrepancies && data.agent_discrepancies.length > 0 && (
+            <div className="ac-verify__mismatch" style={{ marginTop: '8px' }}>
+              <div className="ac-verify__mismatch-title">Agent Discrepancy Details:</div>
+              {data.agent_discrepancies.map((d, i) => (
+                <div key={i} className="ac-verify__detail-row" style={{ marginBottom: '4px' }}>
+                  <span style={{ color: 'var(--color-error)', fontWeight: 600 }}>{d.field}: </span>
+                  <code className="ac-verify__detail-code" style={{ fontSize: '11px' }}>
+                    Log: {d.in_log} → Agent: {d.in_agent}
+                  </code>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Hash mismatch — Lapis 2 failed */}
           {result.status === 'failed_local' && (
             <div className="ac-verify__mismatch">

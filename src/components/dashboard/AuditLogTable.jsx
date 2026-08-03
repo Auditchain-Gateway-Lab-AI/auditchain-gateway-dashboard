@@ -1,6 +1,7 @@
 import React from 'react';
 import Icon from '../common/Icon';
 import ActionBadge from '../common/ActionBadge';
+import VerificationModal from './VerificationModal';
 import { formatTimestamp, renderMetadataCell } from '../../utils/formatters';
 
 function AuditLogTable({
@@ -32,6 +33,8 @@ function AuditLogTable({
   rangeVerifyResult = null,
   setRangeVerifyResult,
   isVerifyRangeLoading = false,
+  selectedVerifyResult = null,
+  setSelectedVerifyResult,
   onSelectResource,
   renderStatusBadge,
   displayTotal = 0,
@@ -311,6 +314,16 @@ function AuditLogTable({
             )}
           </div>
         </div>
+
+        {/* Inline Verification Animation — Single Log Verification */}
+        {selectedVerifyResult && !selectedVerifyResult.range && (
+          <div style={{ marginTop: '12px' }}>
+            <VerificationModal
+              result={selectedVerifyResult}
+              onClose={() => setSelectedVerifyResult && setSelectedVerifyResult(null)}
+            />
+          </div>
+        )}
 
         {rangeVerifyResult && rangeVerifyResult.summary && (
           <div style={{
