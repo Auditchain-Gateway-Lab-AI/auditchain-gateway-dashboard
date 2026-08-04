@@ -102,6 +102,15 @@ function AdminPage({ onLogout }) {
     return parseJwt(token);
   }, []);
 
+  const clientStats = useMemo(() => {
+    const configuredClientIds = new Set(kafkaConfigs.map(config => config.client_id));
+    return {
+      active: clients.filter(client => client.status === 'active').length,
+      pending: clients.filter(client => client.status === 'pending_setup').length,
+      configured: clients.filter(client => configuredClientIds.has(client.id)).length,
+    };
+  }, [clients, kafkaConfigs]);
+
   const fetchData = useCallback(async () => {
     try {
       const [summaryRes, clientsRes, kafkaRes] = await Promise.all([
@@ -527,18 +536,35 @@ function AdminPage({ onLogout }) {
 
           {/* ===== TAB: DAFTAR KLIEN ===== */}
           {activeTab === 'clients' && (
-            <section className="ac-card" style={{ animation: 'fadeIn 0.3s ease' }}>
-              <div className="ac-card__header">
-                <div>
+            <section className="ac-card ac-admin-registry-card" style={{ animation: 'fadeIn 0.3s ease' }}>
+              <div className="ac-card__header ac-admin-registry-header">
+                <div className="ac-admin-registry-header__copy">
                   <div className="ac-card__title">Client Registry</div>
                   <div className="ac-admin-card-sub">All client companies and systems registered under the AuditChain Gateway</div>
                 </div>
-                <button className="ac-btn-primary" onClick={() => setShowClientModal(true)}>
-                  + Register New Client
+                <div className="ac-admin-registry-header__meta">
+                  <span className="ac-admin-mini-stat">
+                    <strong>{clientStats.active}</strong>
+                    Active
+                  </span>
+                  <span className="ac-admin-mini-stat ac-admin-mini-stat--soft">
+                    <strong>{clientStats.configured}</strong>
+                    Configured
+                  </span>
+                  {clientStats.pending > 0 && (
+                    <span className="ac-admin-mini-stat ac-admin-mini-stat--warning">
+                      <strong>{clientStats.pending}</strong>
+                      Pending
+                    </span>
+                  )}
+                </div>
+                <button className="ac-btn-primary ac-admin-register-btn" onClick={() => setShowClientModal(true)}>
+                  <Icon name="database" size={15} />
+                  Register Client
                 </button>
               </div>
               <div className="ac-table-wrap">
-                <table className="ac-table">
+                <table className="ac-table ac-admin-client-table">
                   <thead>
                     <tr>
                       <th>Company Name</th>
@@ -557,11 +583,19 @@ function AdminPage({ onLogout }) {
                       return (
                         <tr key={client.id}>
                           <td>
-                            <div style={{ fontWeight: 600, color: 'var(--color-on-surface)' }}>{client.company_name}</div>
-                            <div style={{ fontSize: 11, color: 'var(--color-outline)', fontFamily: 'var(--font-mono)', marginTop: 2 }}>{client.id}</div>
+                            <div className="ac-admin-client-cell">
+                              <div className="ac-admin-client-cell__avatar">
+                                {client.company_name?.charAt(0)?.toUpperCase() || 'C'}
+                              </div>
+                              <div className="ac-admin-client-cell__content">
+                                <div className="ac-admin-client-cell__name">{client.company_name}</div>
+                                <div className="ac-admin-client-cell__id">{client.id}</div>
+                              </div>
+                            </div>
                             {matchingKafka && (
-                              <div style={{ fontSize: 10, color: 'var(--color-outline)', marginTop: 3, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                🖥️ <span>{matchingKafka.source_system}</span> <code className="ac-code-chip" style={{ fontSize: '9px', padding: '1px 4px' }}>{matchingKafka.kafka_brokers}</code>
+                              <div className="ac-admin-client-meta">
+                                <span className="ac-admin-client-meta__source">{matchingKafka.source_system}</span>
+                                <code className="ac-code-chip ac-code-chip--xs">{matchingKafka.kafka_brokers}</code>
                               </div>
                             )}
                           </td>
@@ -579,46 +613,49 @@ function AdminPage({ onLogout }) {
                             </div>
                           </td>
                           <td className="ac-table__time">{formatTimestamp(client.created_at)}</td>
-                          <td>
-                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                          <td className="ac-admin-actions-cell">
+                            <div className="ac-admin-action-group">
                               <button
-                                className={`ac-btn-primary ${client.status === 'active' ? 'ac-btn-primary--warning' : 'ac-btn-primary--success'}`}
-                                style={{ padding: '6px 10px', fontSize: '11px', minWidth: '96px', justifyContent: 'center' }}
+                                className={`ac-admin-action-btn ${client.status === 'active' ? 'ac-admin-action-btn--warning' : 'ac-admin-action-btn--success'}`}
                                 onClick={() => handleToggleClientStatus(client)}
+                                title={client.status === 'active' ? 'Block client access' : 'Activate client access'}
                               >
-                                {client.status === 'active' ? '🚫 Block' : '✅ Activate'}
+                                <Icon name={client.status === 'active' ? 'lock' : 'shield'} size={14} />
+                                <span>{client.status === 'active' ? 'Block' : 'Activate'}</span>
                               </button>
                               <button
-                                className="ac-btn-primary"
-                                style={{ padding: '6px 10px', fontSize: '11px', backgroundColor: '#455a64' }}
+                                className="ac-admin-action-btn ac-admin-action-btn--neutral"
                                 onClick={() => {
                                   setSelectedQuickSetupClient(client);
                                   setShowQuickSetupModal(true);
                                 }}
                                 title="View 1-Command Setup Guide"
                               >
-                                ⚡ Setup
+                                <Icon name="zap" size={14} />
+                                <span>Setup</span>
                               </button>
                               <button
-                                className="ac-btn-primary"
-                                style={{ padding: '6px 10px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: 'var(--color-tertiary, #388e3c)' }}
+                                className="ac-admin-action-btn ac-admin-action-btn--agent"
                                 onClick={() => handleOpenAgentModal(client)}
+                                title="Configure local Agent"
                               >
-                                🤖 Agent
+                                <Icon name="link" size={14} />
+                                <span>Agent</span>
                               </button>
                               <button
-                                className="ac-btn-primary"
-                                style={{ padding: '6px 10px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                className="ac-admin-action-btn ac-admin-action-btn--primary"
                                 onClick={() => handleManageUsers(client)}
+                                title="Manage client users"
                               >
-                                👥 Users
+                                <Icon name="user" size={14} />
+                                <span>Users</span>
                               </button>
                               <button
-                                className="ac-btn-primary ac-btn-primary--danger"
-                                style={{ padding: '6px 10px', fontSize: '11px' }}
+                                className="ac-admin-action-btn ac-admin-action-btn--danger ac-admin-action-btn--icon"
                                 onClick={() => handleDeleteClient(client)}
+                                title="Delete client"
                               >
-                                🗑️
+                                <Icon name="x" size={14} />
                               </button>
                             </div>
                           </td>
@@ -709,7 +746,7 @@ function AdminPage({ onLogout }) {
       {/* ===== MODAL: DAFTARKAN KLIEN BARU ===== */}
       {showClientModal && (
         <div className="ac-modal-overlay" onClick={() => setShowClientModal(false)}>
-          <div className="ac-modal ac-modal--sm" onClick={e => e.stopPropagation()}>
+          <div className="ac-modal ac-modal--client-register" onClick={e => e.stopPropagation()}>
             <div className="ac-modal__header">
               <div>
                 <div className="ac-modal__title">🏢 Register New Client</div>
@@ -718,42 +755,72 @@ function AdminPage({ onLogout }) {
               <button className="ac-modal__close" onClick={() => setShowClientModal(false)}>×</button>
             </div>
             <div className="ac-modal__body">
-              <form onSubmit={handleSubmitClient}>
-                <div className="ac-form-grid">
-                  <div className="ac-form-field" style={{ gridColumn: '1 / -1' }}>
+              <form className="ac-register-form" onSubmit={handleSubmitClient}>
+                <section className="ac-form-section">
+                  <div className="ac-form-section__head">
+                    <div className="ac-form-section__icon">
+                      <Icon name="database" size={17} />
+                    </div>
+                    <div>
+                      <div className="ac-form-section__title">Client Identity</div>
+                      <div className="ac-form-section__subtitle">Basic tenant data used across the admin and auditor dashboards.</div>
+                    </div>
+                  </div>
+                <div className="ac-form-grid ac-form-grid--register">
+                  <div className="ac-form-field ac-form-field--wide">
                     <label className="ac-form-label">Company Name <span style={{ color: 'var(--color-error)' }}>*</span></label>
-                    <input className="ac-form-input" required placeholder="e.g. Acme Corporation"
+                    <input className="ac-form-input ac-form-input--lg" required placeholder="e.g. Acme Corporation"
                       value={clientForm.company_name}
                       onChange={e => setClientForm(f => ({ ...f, company_name: e.target.value }))} />
                   </div>
                   <div className="ac-form-field">
                     <label className="ac-form-label">Status</label>
-                    <select className="ac-form-input" value={clientForm.status}
+                    <select className="ac-form-input ac-form-input--lg" value={clientForm.status}
                       onChange={e => setClientForm(f => ({ ...f, status: e.target.value }))}>
                       <option value="active">Active</option>
                       <option value="inactive">Inactive</option>
                     </select>
                   </div>
+                </div>
+                </section>
+
+                <section className="ac-form-section">
+                  <div className="ac-form-section__head">
+                    <div className="ac-form-section__icon ac-form-section__icon--teal">
+                      <Icon name="link" size={17} />
+                    </div>
+                    <div>
+                      <div className="ac-form-section__title">Audit Field Mapping</div>
+                      <div className="ac-form-section__subtitle">Map the primary source field used to identify the actor in audit logs.</div>
+                    </div>
+                  </div>
+                <div className="ac-form-grid ac-form-grid--register">
+                  <div className="ac-form-field ac-form-field--wide">
+                    <label className="ac-form-label">Actor Field</label>
+                    <input className="ac-form-input ac-form-input--lg" placeholder="actor"
+                      value={clientForm.actor_field}
+                      onChange={e => setClientForm(f => ({ ...f, actor_field: e.target.value }))} />
+                  </div>
                   <div className="ac-form-field">
                     <label className="ac-form-label">Fallback Actor Field</label>
-                    <input className="ac-form-input" placeholder="(optional — e.g., db_user)"
+                    <input className="ac-form-input ac-form-input--lg" placeholder="Optional, e.g. db_user"
                       value={clientForm.fallback_actor_field}
                       onChange={e => setClientForm(f => ({ ...f, fallback_actor_field: e.target.value }))} />
                   </div>
                 </div>
-                <div style={{ height: 1, background: 'var(--color-outline-variant)', margin: '16px 0' }} />
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-on-surface-variant)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 12 }}>Custom Field Mapping</div>
-                <div className="ac-form-grid">
-                  <div className="ac-form-field" style={{ gridColumn: '1 / -1' }}>
-                    <label className="ac-form-label">Actor Field</label>
-                    <input className="ac-form-input" placeholder="actor"
-                      value={clientForm.actor_field}
-                      onChange={e => setClientForm(f => ({ ...f, actor_field: e.target.value }))} />
-                  </div>
+                </section>
+
+                <div className="ac-register-form__note">
+                  <Icon name="lock" size={15} />
+                  API key will be generated after registration and displayed once.
                 </div>
-                <div className="ac-form-actions">
+
+                <div className="ac-form-actions ac-register-form__actions">
                   <button type="button" className="ac-btn-ghost-action" onClick={() => setShowClientModal(false)}>Cancel</button>
-                  <button type="submit" className="ac-btn-primary">Register Client</button>
+                  <button type="submit" className="ac-btn-primary">
+                    <Icon name="checkmark" size={15} />
+                    Register Client
+                  </button>
                 </div>
               </form>
             </div>
