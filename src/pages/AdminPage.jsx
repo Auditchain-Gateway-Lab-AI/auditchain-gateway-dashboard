@@ -1,12 +1,18 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api';
 import Icon from '../components/common/Icon';
+import DBEngineBadge from '../components/common/DBEngineBadge';
+import ConnectorStatusBadge from '../components/common/ConnectorStatusBadge';
 import { parseJwt, formatTimestamp } from '../utils/formatters';
+
+const ADMIN_TABS = ['overview', 'clients', 'users', 'kafka', 'profile'];
 
 function AdminPage({ onLogout }) {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('overview');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const activeTab = ADMIN_TABS.includes(tabParam) ? tabParam : 'overview';
   const [clients, setClients] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
   const [kafkaConfigs, setKafkaConfigs] = useState([]);
@@ -139,6 +145,10 @@ function AdminPage({ onLogout }) {
     .slice(0, 2)
     .toUpperCase();
 
+  const handleAdminTabChange = useCallback((tab) => {
+    setSearchParams(tab === 'overview' ? {} : { tab });
+  }, [setSearchParams]);
+
   useEffect(() => {
     localStorage.setItem('auditchain_admin_sidebar_collapsed', sidebarCollapsed ? 'true' : 'false');
   }, [sidebarCollapsed]);
@@ -159,7 +169,6 @@ function AdminPage({ onLogout }) {
     return {
       total: allUsers.length,
       admins: allUsers.filter(user => user.role?.toLowerCase() === 'admin').length,
-      auditors: allUsers.filter(user => user.role?.toLowerCase() !== 'admin').length,
     };
   }, [allUsers]);
 
@@ -229,7 +238,7 @@ function AdminPage({ onLogout }) {
     users: {
       kicker: 'Access Control',
       title: 'Admin User Management',
-      subtitle: 'Manage gateway administrator accounts. Auditor accounts stay scoped inside each client registry.'
+      subtitle: 'Kelola akun administrator yang memiliki akses untuk mengatur gateway dashboard.'
     },
     profile: {
       kicker: 'Admin Account',
@@ -738,7 +747,7 @@ function AdminPage({ onLogout }) {
             </button>
             {profileMenuOpen && (
               <div className="ac-profile-menu__panel">
-                <button onClick={() => { setProfileMenuOpen(false); setActiveTab('profile'); }}>
+                <button onClick={() => { setProfileMenuOpen(false); handleAdminTabChange('profile'); }}>
                   <Icon name="user" size={15} />
                   Profile
                 </button>
@@ -762,7 +771,7 @@ function AdminPage({ onLogout }) {
         <nav className="ac-sidebar__nav">
           <button
             className={`ac-sidebar__nav-item${activeTab === 'overview' ? ' ac-sidebar__nav-item--active' : ''}`}
-            onClick={() => { setActiveTab('overview'); setSidebarOpen(false); }}
+            onClick={() => { handleAdminTabChange('overview'); setSidebarOpen(false); }}
             title="Admin Dashboard"
           >
             <Icon name="dashboard" size={18} />
@@ -771,7 +780,7 @@ function AdminPage({ onLogout }) {
 
           <button
             className={`ac-sidebar__nav-item${activeTab === 'clients' ? ' ac-sidebar__nav-item--active' : ''}`}
-            onClick={() => { setActiveTab('clients'); setSidebarOpen(false); }}
+            onClick={() => { handleAdminTabChange('clients'); setSidebarOpen(false); }}
             title="Client Registry"
           >
             <Icon name="database" size={18} />
@@ -780,7 +789,7 @@ function AdminPage({ onLogout }) {
 
           <button
             className={`ac-sidebar__nav-item${activeTab === 'users' ? ' ac-sidebar__nav-item--active' : ''}`}
-            onClick={() => { setActiveTab('users'); setSidebarOpen(false); }}
+            onClick={() => { handleAdminTabChange('users'); setSidebarOpen(false); }}
             title="User Management"
           >
             <Icon name="user" size={18} />
@@ -789,7 +798,7 @@ function AdminPage({ onLogout }) {
 
           <button
             className={`ac-sidebar__nav-item${activeTab === 'kafka' ? ' ac-sidebar__nav-item--active' : ''}`}
-            onClick={() => { setActiveTab('kafka'); setSidebarOpen(false); }}
+            onClick={() => { handleAdminTabChange('kafka'); setSidebarOpen(false); }}
             title="Kafka Configuration"
           >
             <Icon name="link" size={18} />
@@ -815,7 +824,7 @@ function AdminPage({ onLogout }) {
               </div>
               <div className="ac-sidebar__identity-client">
                 <Icon name="database" size={14} />
-                <span>{clientInfo.client_id ? 'Client Workspace' : 'Global Gateway'}</span>
+                <span>{clientInfo.client_id ? 'Client Workspace' : 'Admin Dashboard'}</span>
               </div>
             </div>
           )}
@@ -928,14 +937,14 @@ function AdminPage({ onLogout }) {
                         <small>Configure Kafka ingestion</small>
                       </span>
                     </button>
-                    <button onClick={() => setActiveTab('users')}>
+                    <button onClick={() => handleAdminTabChange('users')}>
                       <Icon name="user" size={19} />
                       <span>
                         <strong>Manage Admins</strong>
-                        <small>Create global admin accounts</small>
+                        <small>Create administrator accounts</small>
                       </span>
                     </button>
-                    <button onClick={() => setActiveTab('clients')}>
+                    <button onClick={() => handleAdminTabChange('clients')}>
                       <Icon name="warn" size={19} />
                       <span>
                         <strong>Review Setup</strong>
@@ -980,14 +989,14 @@ function AdminPage({ onLogout }) {
                       <h2>Recent Clients</h2>
                       <p>Latest tenants added to the gateway.</p>
                     </div>
-                    <button className="ac-admin-link-btn" onClick={() => setActiveTab('clients')}>View Registry</button>
+                    <button className="ac-admin-link-btn" onClick={() => handleAdminTabChange('clients')}>View Registry</button>
                   </div>
                   <div className="ac-admin-recent-list">
                     {overviewData.recentClients.length === 0 ? (
                       <div className="ac-admin-empty-state">No clients registered yet.</div>
                     ) : (
                       overviewData.recentClients.map(client => (
-                        <button className="ac-admin-recent-client" key={client.id} onClick={() => setActiveTab('clients')}>
+                        <button className="ac-admin-recent-client" key={client.id} onClick={() => handleAdminTabChange('clients')}>
                           <span className="ac-admin-client-cell__avatar">{client.company_name?.charAt(0)?.toUpperCase() || 'C'}</span>
                           <span>
                             <strong>{client.company_name}</strong>
@@ -1063,6 +1072,8 @@ function AdminPage({ onLogout }) {
                     <tr>
                       <th>Company Name</th>
                       <th>Status</th>
+                      <th>DB Engine</th>
+                      <th>Connector Status</th>
                       <th>Field Mapping</th>
                       <th>Registration Date</th>
                       <th>Actions</th>
@@ -1070,10 +1081,13 @@ function AdminPage({ onLogout }) {
                   </thead>
                   <tbody>
                     {clients.length === 0 && (
-                      <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--color-outline)', padding: '32px 0' }}>No registered clients found.</td></tr>
+                      <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--color-outline)', padding: '32px 0' }}>No registered clients found.</td></tr>
                     )}
                     {clients.map(client => {
                       const matchingKafka = kafkaConfigs.find(k => k.client_id === client.id);
+                      const dbEngine = client.db_engine || matchingKafka?.db_engine || '';
+                      const connectorStatus = client.connector_status || 'unknown';
+                      
                       return (
                         <tr key={client.id}>
                           <td>
@@ -1099,6 +1113,12 @@ function AdminPage({ onLogout }) {
                             </span>
                           </td>
                           <td>
+                            <DBEngineBadge engine={dbEngine} />
+                          </td>
+                          <td>
+                            <ConnectorStatusBadge status={connectorStatus} />
+                          </td>
+                          <td>
                             <div className="ac-field-map">
                               <div className="ac-field-map__item"><span className="ac-field-map__key">actor</span> {client.actor_field || '—'}</div>
                               {client.fallback_actor_field && (
@@ -1110,15 +1130,14 @@ function AdminPage({ onLogout }) {
                           <td className="ac-admin-actions-cell">
                             <div className="ac-admin-action-group">
                               <button
-                                className={`ac-admin-action-btn ${client.status === 'active' ? 'ac-admin-action-btn--warning' : 'ac-admin-action-btn--success'}`}
+                                className={`ac-admin-action-btn ac-admin-action-btn--icon ${client.status === 'active' ? 'ac-admin-action-btn--warning' : 'ac-admin-action-btn--success'}`}
                                 onClick={() => handleToggleClientStatus(client)}
                                 title={client.status === 'active' ? 'Block client access' : 'Activate client access'}
                               >
                                 <Icon name={client.status === 'active' ? 'lock' : 'shield'} size={14} />
-                                <span>{client.status === 'active' ? 'Block' : 'Activate'}</span>
                               </button>
                               <button
-                                className="ac-admin-action-btn ac-admin-action-btn--neutral"
+                                className="ac-admin-action-btn ac-admin-action-btn--neutral ac-admin-action-btn--icon"
                                 onClick={() => {
                                   setSelectedQuickSetupClient(client);
                                   setShowQuickSetupModal(true);
@@ -1126,23 +1145,20 @@ function AdminPage({ onLogout }) {
                                 title="View 1-Command Setup Guide"
                               >
                                 <Icon name="zap" size={14} />
-                                <span>Setup</span>
                               </button>
                               <button
-                                className="ac-admin-action-btn ac-admin-action-btn--agent"
+                                className="ac-admin-action-btn ac-admin-action-btn--agent ac-admin-action-btn--icon"
                                 onClick={() => handleOpenAgentModal(client)}
                                 title="Configure local Agent"
                               >
                                 <Icon name="link" size={14} />
-                                <span>Agent</span>
                               </button>
                               <button
-                                className="ac-admin-action-btn ac-admin-action-btn--primary"
+                                className="ac-admin-action-btn ac-admin-action-btn--primary ac-admin-action-btn--icon"
                                 onClick={() => handleManageUsers(client)}
                                 title="Manage client users"
                               >
                                 <Icon name="user" size={14} />
-                                <span>Users</span>
                               </button>
                               <button
                                 className="ac-admin-action-btn ac-admin-action-btn--danger ac-admin-action-btn--icon"
@@ -1168,20 +1184,12 @@ function AdminPage({ onLogout }) {
               <div className="ac-card__header ac-admin-registry-header">
                 <div className="ac-admin-registry-header__copy">
                   <div className="ac-card__title">Admin User Management</div>
-                  <div className="ac-admin-card-sub">Global access control for administrator accounts. Admins are not attached to any client workspace.</div>
+                  <div className="ac-admin-card-sub">Kelola akun admin yang bisa mengatur client, Kafka stream, dan akses dashboard.</div>
                 </div>
                 <div className="ac-admin-registry-header__meta">
                   <span className="ac-admin-mini-stat">
                     <strong>{userStats.admins}</strong>
                     Admins
-                  </span>
-                  <span className="ac-admin-mini-stat ac-admin-mini-stat--soft">
-                    <strong>Global</strong>
-                    Scope
-                  </span>
-                  <span className="ac-admin-mini-stat ac-admin-mini-stat--warning">
-                    <strong>{userStats.auditors}</strong>
-                    Auditors in Registry
                   </span>
                 </div>
                 <button className="ac-btn-primary ac-admin-register-btn" onClick={handleOpenUserModal}>
@@ -1199,12 +1207,12 @@ function AdminPage({ onLogout }) {
 
               <div className="ac-admin-user-guidance">
                 <div>
-                  <strong>Admin-only area</strong>
-                  <span>User Management ini khusus akun admin global yang bisa mengelola tenant, stream, dan access control.</span>
+                  <strong>Khusus akun admin</strong>
+                  <span>Halaman ini hanya menampilkan dan membuat akun administrator.</span>
                 </div>
                 <div>
-                  <strong>No client binding</strong>
-                  <span>Admin yang dibuat di sini tidak login sebagai client mana pun. Auditor tetap dibuat dari Client Registry.</span>
+                  <strong>Akun auditor</strong>
+                  <span>Akun auditor dibuat dari menu Client Registry pada client masing-masing.</span>
                 </div>
               </div>
 
@@ -1214,7 +1222,7 @@ function AdminPage({ onLogout }) {
                     <tr>
                       <th>User</th>
                       <th>Role</th>
-                      <th>Scope</th>
+                      <th>Workspace</th>
                       <th>Created</th>
                       <th>Actions</th>
                     </tr>
@@ -1254,8 +1262,8 @@ function AdminPage({ onLogout }) {
                           </td>
                           <td>
                             <div className="ac-admin-workspace-cell">
-                              <strong>{user.company_name || 'Global Gateway'}</strong>
-                              <small>{user.client_id || 'No client workspace'}</small>
+                              <strong>{user.company_name || 'Tidak terhubung ke klien'}</strong>
+                              <small>{user.client_id || 'Admin dashboard'}</small>
                             </div>
                           </td>
                           <td className="ac-table__time">{formatTimestamp(user.created_at)}</td>
@@ -1433,7 +1441,7 @@ function AdminPage({ onLogout }) {
                     </label>
 
                     <div className="ac-profile-actions">
-                      <button type="button" className="ac-btn-ghost-action" onClick={() => setActiveTab('overview')}>
+                      <button type="button" className="ac-btn-ghost-action" onClick={() => handleAdminTabChange('overview')}>
                         Back to Overview
                       </button>
                       <button type="submit" className="ac-btn-primary" disabled={profileSaving}>
@@ -1797,7 +1805,7 @@ function AdminPage({ onLogout }) {
             <div className="ac-modal__header">
               <div>
                 <div className="ac-modal__title">Create Admin Account</div>
-                <div className="ac-modal__subtitle">Provision gateway administrator access without attaching the account to a client</div>
+                <div className="ac-modal__subtitle">Buat akun administrator untuk mengelola dashboard gateway</div>
               </div>
               <button className="ac-modal__close" onClick={() => setShowUserModal(false)}>&times;</button>
             </div>
@@ -1878,8 +1886,8 @@ function AdminPage({ onLogout }) {
                       <Icon name="shield" size={17} />
                     </div>
                     <div>
-                      <div className="ac-form-section__title">Access Scope</div>
-                      <div className="ac-form-section__subtitle">This flow only creates global admin accounts. Auditor accounts are created from Client Registry.</div>
+                      <div className="ac-form-section__title">Access</div>
+                      <div className="ac-form-section__subtitle">Akun ini hanya dibuat sebagai administrator dashboard.</div>
                     </div>
                   </div>
                   <div className="ac-admin-role-preview">
@@ -1888,8 +1896,8 @@ function AdminPage({ onLogout }) {
                       Admin
                     </span>
                     <div>
-                      <strong>Global Gateway Access</strong>
-                      <small>No client workspace will be attached to this account.</small>
+                      <strong>Administrator</strong>
+                      <small>Dapat mengelola client, Kafka stream, dan akun admin.</small>
                     </div>
                   </div>
                   <div className="ac-register-form__note">

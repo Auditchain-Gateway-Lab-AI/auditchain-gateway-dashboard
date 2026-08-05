@@ -28,6 +28,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
   const [sortOrder, setSortOrder] = useState('desc');
   const [filterTable, setFilterTable] = useState('');
   const [tableNames, setTableNames] = useState([]);
+  const [filterDbEngine, setFilterDbEngine] = useState('ALL');
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterAction, setFilterAction] = useState('ALL');
@@ -168,7 +169,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
   const [isLogsLoading, setIsLogsLoading] = useState(false);
 
   // Fetch logs transaksi SECARA ON-DEMAND saat rentang tanggal ditentukan
-  const handleApplyLogsRange = useCallback(async (fromDate, toDate, overrideSort, overrideTable) => {
+  const handleApplyLogsRange = useCallback(async (fromDate, toDate, overrideSort, overrideTable, overrideDbEngine) => {
     const fromVal = fromDate || tempDateFrom;
     const toVal = toDate || tempDateTo;
     if (!fromVal || !toVal) return;
@@ -180,6 +181,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
 
     const activeSort = overrideSort !== undefined ? overrideSort : sortOrder;
     const activeTable = overrideTable !== undefined ? overrideTable : filterTable;
+    const activeDbEngine = overrideDbEngine !== undefined ? overrideDbEngine : filterDbEngine;
 
     try {
       const fromObj = new Date(fromVal);
@@ -196,6 +198,9 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
       };
       if (activeTable) {
         params.source_table = activeTable;
+      }
+      if (activeDbEngine && activeDbEngine !== 'ALL') {
+        params.db_engine = activeDbEngine.toLowerCase();
       }
       if (selectedClient) {
         params.client_id = selectedClient;
@@ -225,7 +230,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
     } finally {
       setIsLogsLoading(false);
     }
-  }, [tempDateFrom, tempDateTo, selectedClient, onLogout, sortOrder, filterTable]);
+  }, [tempDateFrom, tempDateTo, selectedClient, onLogout, sortOrder, filterTable, filterDbEngine]);
 
   const prevTotalLogsRef = useRef(null);
   const filterDateFromRef = useRef(filterDateFrom);
@@ -284,7 +289,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
     const fDate = filterDateFrom || tempDateFrom;
     const tDate = filterDateTo || tempDateTo;
     if (fDate && tDate) {
-      handleApplyLogsRange(fDate, tDate, newSort, filterTable);
+      handleApplyLogsRange(fDate, tDate, newSort, filterTable, filterDbEngine);
     }
   };
 
@@ -293,7 +298,17 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
     const fDate = filterDateFrom || tempDateFrom;
     const tDate = filterDateTo || tempDateTo;
     if (fDate && tDate) {
-      handleApplyLogsRange(fDate, tDate, sortOrder, newTable);
+      handleApplyLogsRange(fDate, tDate, sortOrder, newTable, filterDbEngine);
+    }
+  };
+
+  const handleFilterDbEngineChange = (nextEngine) => {
+    setFilterDbEngine(nextEngine);
+    setCurrentPage(1);
+    const fDate = filterDateFrom || tempDateFrom;
+    const tDate = filterDateTo || tempDateTo;
+    if (fDate && tDate) {
+      handleApplyLogsRange(fDate, tDate, sortOrder, filterTable, nextEngine);
     }
   };
 
@@ -317,6 +332,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
     setTotalLogsCount(0);
     setRangeVerifyResult(null);
     setFilterVerification('ALL');
+    setFilterDbEngine('ALL');
     setSortOrder('desc');
     setCurrentPage(1);
   }, []);
@@ -446,7 +462,19 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
         }
       }
 
-      return matchSearch && matchAction && matchDate && matchVerification;
+      // DB Engine filter (Dropdown: ALL | POSTGRES | MONGODB | MYSQL)
+      const normalizeDbEngine = (e) => {
+        if (!e) return 'unknown';
+        const lower = e.toLowerCase();
+        if (lower === 'postgresql' || lower === 'postgres') return 'postgres';
+        if (lower === 'mongodb' || lower === 'mongo') return 'mongodb';
+        if (lower === 'mysql' || lower === 'mariadb') return 'mysql';
+        return 'unknown';
+      };
+      
+      const matchDbEngine = filterDbEngine === 'ALL' || normalizeDbEngine(log?.db_engine) === filterDbEngine.toLowerCase();
+
+      return matchSearch && matchAction && matchDate && matchVerification && matchDbEngine;
     });
 
     // Urutkan data secara aman berdasarkan sortOrder:
@@ -466,7 +494,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
       }
       return timeB - timeA;
     });
-  }, [recentLogs, searchQuery, filterAction, filterDateFrom, filterDateTo, tempDateFrom, tempDateTo, filterVerification, verifyStatuses, sortOrder]);
+  }, [recentLogs, searchQuery, filterAction, filterDateFrom, filterDateTo, tempDateFrom, tempDateTo, filterVerification, verifyStatuses, sortOrder, filterDbEngine]);
   const isLocalPaginated = !isServerPaginated || filterDateFrom || filterDateTo;
 
   const totalPages = isLocalPaginated
@@ -650,15 +678,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
             <Icon name="dashboard" size={18} />
             <span className="ac-sidebar__nav-label">Dashboard</span>
           </button>
-          <button
-            className={`ac-sidebar__nav-item${view === 'profile' ? ' ac-sidebar__nav-item--active' : ''}`}
-            onClick={() => { navigate('/profile'); setSidebarOpen(false); }}
-            style={{ marginTop: 4 }}
-            title="Profile"
-          >
-            <Icon name="user" size={18} />
-            <span className="ac-sidebar__nav-label">Profile</span>
-          </button>
+
           {clientInfo && clientInfo.role?.toLowerCase() === 'admin' && (
             <button
               className="ac-sidebar__nav-item"
@@ -889,6 +909,8 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
               setSortOrder={handleSortOrderChange}
               filterTable={filterTable}
               setFilterTable={handleFilterTableChange}
+              filterDbEngine={filterDbEngine}
+              setFilterDbEngine={handleFilterDbEngineChange}
               tableNames={tableNames}
               rowsPerPage={rowsPerPage}
               setRowsPerPage={setRowsPerPage}

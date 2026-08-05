@@ -3285,7 +3285,7 @@
   grid-template-columns: minmax(260px, 1fr) auto auto;
   align-items: center;
   gap: 14px;
-  padding: 18px var(--space-lg);
+  padding: 20px var(--space-lg) 22px;
 }
 
 .ac-admin-registry-header__copy {
@@ -3341,12 +3341,12 @@
 
 .ac-admin-client-table {
   table-layout: fixed;
-  min-width: 1040px;
+  min-width: 1400px;
 }
 
 .ac-admin-client-table th:nth-child(1),
 .ac-admin-client-table td:nth-child(1) {
-  width: 29%;
+  width: 20%;
 }
 
 .ac-admin-client-table th:nth-child(2),
@@ -3356,17 +3356,28 @@
 
 .ac-admin-client-table th:nth-child(3),
 .ac-admin-client-table td:nth-child(3) {
-  width: 16%;
+  width: 11%;
 }
 
 .ac-admin-client-table th:nth-child(4),
 .ac-admin-client-table td:nth-child(4) {
-  width: 17%;
+  width: 12%;
 }
 
 .ac-admin-client-table th:nth-child(5),
 .ac-admin-client-table td:nth-child(5) {
-  width: 28%;
+  width: 14%;
+}
+
+.ac-admin-client-table th:nth-child(6),
+.ac-admin-client-table td:nth-child(6) {
+  width: 16%;
+  white-space: nowrap;
+}
+
+.ac-admin-client-table th:nth-child(7),
+.ac-admin-client-table td:nth-child(7) {
+  width: 17%;
 }
 
 .ac-admin-client-cell {
@@ -3449,10 +3460,10 @@
 }
 
 .ac-admin-action-group {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(74px, 1fr));
-  gap: 6px;
-  justify-content: end;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  justify-content: flex-start;
   align-items: center;
 }
 
@@ -3544,16 +3555,18 @@
 .ac-admin-user-guidance {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  padding: 0 var(--space-lg) 16px;
+  gap: 14px;
+  padding: 18px var(--space-lg) 20px;
+  background: rgba(255, 255, 255, 0.68);
 }
 
 .ac-admin-user-guidance > div {
-  min-height: 62px;
-  padding: 12px 14px;
-  border: 1px solid rgba(7, 52, 95, 0.09);
+  min-height: 66px;
+  padding: 14px 18px;
+  border: 1px solid rgba(7, 52, 95, 0.1);
   border-radius: var(--radius-md);
-  background: linear-gradient(180deg, rgba(248, 250, 252, 0.88), rgba(255, 255, 255, 0.72));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.8));
+  box-shadow: 0 8px 20px rgba(7, 52, 95, 0.04);
 }
 
 .ac-admin-user-guidance strong,
@@ -3684,15 +3697,15 @@
 }
 
 .ac-admin-role-preview {
-  min-height: 46px;
+  min-height: 58px;
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 10px;
-  padding: 8px 11px;
-  border: 1px solid rgba(7, 52, 95, 0.1);
-  border-radius: var(--radius-sm);
-  background: rgba(248, 250, 252, 0.82);
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(7, 52, 95, 0.11);
+  border-radius: var(--radius-md);
+  background: rgba(248, 250, 252, 0.92);
 }
 
 .ac-admin-role-preview > div {
@@ -3734,7 +3747,7 @@
 }
 
 .ac-form-section {
-  padding: 16px;
+  padding: 18px;
   border: 1px solid rgba(192, 199, 212, 0.55);
   border-radius: var(--radius-md);
   background: linear-gradient(180deg, rgba(255,255,255,0.82), rgba(242,244,247,0.45));
@@ -3793,13 +3806,17 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   border: 1px solid rgba(217, 119, 6, 0.18);
   border-radius: var(--radius-md);
   background: var(--color-admin-accent-bg);
   color: var(--color-admin-accent);
   font-size: 12px;
   font-weight: 650;
+}
+
+.ac-admin-role-preview + .ac-register-form__note {
+  margin-top: 12px;
 }
 
 .ac-register-form__actions {
@@ -4135,9 +4152,7 @@
     width: 100%;
   }
 
-  .ac-admin-action-group {
-    grid-template-columns: repeat(2, minmax(92px, 1fr));
-  }
+
 
   .ac-form-section {
     padding: 14px;
@@ -5791,6 +5806,105 @@
   box-shadow: 0 2px 6px rgba(230, 81, 0, 0.3);
 }
 
+/* ===== TERMINAL BOX STYLING ===== */
+.ac-terminal-box {
+  margin-top: 14px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: var(--radius-md, 8px);
+  overflow: hidden;
+  font-family: 'Fira Code', 'Roboto Mono', Monaco, Consolas, monospace;
+}
+
+.ac-terminal-box__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+}
+
+.ac-terminal-box__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ac-terminal-box__code {
+  padding: 14px;
+  color: #e6edf3;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow-x: auto;
+  user-select: all;
+  background: #0d1117;
+}
+
+.ac-terminal-box__code .cmd-env { color: #79c0ff; font-weight: 600; }
+.ac-terminal-box__code .cmd-val { color: #a5d6ff; }
+.ac-terminal-box__code .cmd-sudo { color: #ff7b72; font-weight: 700; }
+.ac-terminal-box__code .cmd-url { color: #56d364; text-decoration: underline; }
+
+.ac-terminal-box__actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #161b22;
+  border-top: 1px solid #30363d;
+}
+
+/* ===== SECURITY WARNING & ADVANCED OPTIONS ===== */
+.ac-security-warning {
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: rgba(255, 152, 0, 0.08);
+  border: 1px solid rgba(255, 152, 0, 0.3);
+  border-radius: 6px;
+  font-size: 12px;
+  color: #b76e00;
+  line-height: 1.5;
+}
+
+.ac-adv-customization {
+  margin-top: 14px;
+  border: 1px solid var(--color-outline-variant, #e0e0e0);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: var(--color-surface-container-low, #fcfcfc);
+}
+
+.ac-adv-customization summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-primary);
+  user-select: none;
+}
+
+/* ===== PENDING SETUP BADGE & STYLES ===== */
+.ac-pending-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #e65100;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 999px;
+  margin-left: auto;
+  line-height: 1;
+  box-shadow: 0 2px 6px rgba(230, 81, 0, 0.3);
+}
+
 .ac-badge-pending-count {
   display: inline-flex;
   align-items: center;
@@ -5814,5 +5928,62 @@
   border-color: rgba(255, 179, 0, 0.7) !important;
 }
 
+/* ================================================================ */
+/* NEW BADGE STYLES (DB Engine & Connector Status)                  */
+/* ================================================================ */
 
+/* Connector Status Badges */
+.ac-badge--success {
+  background-color: rgba(46, 125, 50, 0.1);
+  color: #2e7d32;
+  border-color: rgba(46, 125, 50, 0.3);
+}
 
+.ac-badge--error {
+  background-color: rgba(198, 40, 40, 0.1);
+  color: #c62828;
+  border-color: rgba(198, 40, 40, 0.3);
+}
+
+.ac-badge--warning {
+  background-color: rgba(245, 127, 23, 0.1);
+  color: #f57f17;
+  border-color: rgba(245, 127, 23, 0.3);
+}
+
+.ac-badge--neutral {
+  background-color: rgba(97, 97, 97, 0.1);
+  color: #616161;
+  border-color: rgba(97, 97, 97, 0.3);
+}
+
+/* DB Engine Badges */
+.ac-db-engine-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.ac-db-engine-badge__icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.ac-db-engine-badge--postgres {
+  color: #0277bd;
+}
+
+.ac-db-engine-badge--mongodb {
+  color: #2e7d32;
+}
+
+.ac-db-engine-badge--mysql {
+  color: #00695c;
+}
+
+.ac-db-engine-badge--unknown {
+  color: #757575;
+}

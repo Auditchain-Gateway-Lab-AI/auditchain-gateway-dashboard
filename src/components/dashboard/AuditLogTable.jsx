@@ -3,6 +3,7 @@ import Icon from '../common/Icon';
 import ActionBadge from '../common/ActionBadge';
 import VerificationModal from './VerificationModal';
 import { formatTimestamp, renderMetadataCell } from '../../utils/formatters';
+import DBEngineBadge from '../common/DBEngineBadge';
 
 function AuditLogTable({
   paginatedLogs = [],
@@ -16,6 +17,8 @@ function AuditLogTable({
   setSortOrder,
   filterTable = '',
   setFilterTable,
+  filterDbEngine = 'ALL',
+  setFilterDbEngine,
   tableNames = [],
   rowsPerPage = 10,
   setRowsPerPage,
@@ -178,6 +181,18 @@ function AuditLogTable({
                 <option value="INSERT">INSERT</option>
                 <option value="UPDATE">UPDATE</option>
                 <option value="DELETE">DELETE</option>
+              </select>
+              <span className="ac-filter-select__chevron">
+                <Icon name="chevronDown" size={15} />
+              </span>
+            </div>
+
+            <div className="ac-filter-select">
+              <select className="ac-select ac-select--filter" value={filterDbEngine} onChange={e => setFilterDbEngine && setFilterDbEngine(e.target.value)}>
+                <option value="ALL">All Engines</option>
+                <option value="postgres">Postgres</option>
+                <option value="mongodb">MongoDB</option>
+                <option value="mysql">MySQL</option>
               </select>
               <span className="ac-filter-select__chevron">
                 <Icon name="chevronDown" size={15} />
@@ -389,6 +404,7 @@ function AuditLogTable({
               <th>Actor</th>
               <th>Action</th>
               <th>Resource</th>
+              <th>DB Engine</th>
               <th>Metadata</th>
               <th>Source System</th>
               <th>Verification</th>
@@ -397,7 +413,7 @@ function AuditLogTable({
           <tbody>
             {paginatedLogs.length === 0 ? (
               <tr>
-                <td colSpan={7}>
+                <td colSpan={8}>
                   <div className="ac-empty">
                     <div className="ac-empty__icon">
                       <Icon name="calendar" size={30} />
@@ -424,6 +440,7 @@ function AuditLogTable({
                   <td className="ac-table__actor">{log.actor}</td>
                   <td><ActionBadge action={log.action} /></td>
                   <td className="ac-table__mono">{log.source_table || log.resource || '-'}</td>
+                  <td><DBEngineBadge engine={log.db_engine} /></td>
                   <td onClick={e => e.stopPropagation()}>{renderMetadataCell(log.metadata)}</td>
                   <td className="ac-table__source-system">{log.source_system || '-'}</td>
                   <td onClick={e => e.stopPropagation()}>
