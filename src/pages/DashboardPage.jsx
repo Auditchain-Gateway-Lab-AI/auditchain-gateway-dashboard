@@ -452,25 +452,52 @@ function DashboardPage({ onLogout }) {
           </div>
         </div>
         <div className="ac-topnav__right">
-          {clientInfo && (
-            <div className="ac-topnav__client-pill">
-              <span className="ac-topnav__client-dot" />
+          {clientInfo && clientInfo.role?.toLowerCase() === 'admin' ? (
+            <select
+              value={selectedClient}
+              onChange={e => setSelectedClient(e.target.value)}
+              className="ac-topnav__client-select"
+              style={{
+                background: 'rgba(3,40,93,0.05)',
+                border: '1px solid rgba(3,40,93,0.1)',
+                color: '#03285D',
+                padding: '6px 12px',
+                borderRadius: 'var(--radius-md)',
+                fontSize: '13px',
+                fontWeight: '700',
+                outline: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              <option value={clientInfo.client_id}>
+                {clientInfo.client_id} (Admin Default)
+              </option>
+              {adminClients.length === 0 ? (
+                <>
+                  <option value="ed067ad4-e549-4baa-9c9d-3d27ff24194d">
+                    SIMRS Dummy 2 (ed067ad4-e549-4baa-9c9d-3d27ff24194d)
+                  </option>
+                  <option value="7f2bc265-d419-48fe-9892-d6ef198751e1">
+                    Satu Peta Debezium (7f2bc265-d419-48fe-9892-d6ef198751e1)
+                  </option>
+                </>
+              ) : (
+                adminClients.map(client => {
+                  if (client.id === clientInfo.client_id) return null;
+                  return (
+                    <option key={client.id} value={client.id}>
+                      {client.company_name || 'Klien'} ({client.id})
+                    </option>
+                  );
+                })
+              )}
+            </select>
+          ) : clientInfo ? (
+            <div className="ac-topnav__client-pill" style={{ background: 'rgba(3,40,93,0.05)', color: '#03285D', border: '1px solid rgba(3,40,93,0.1)' }}>
+              <span className="ac-topnav__client-dot" style={{ background: '#008862' }} />
               <span className="ac-topnav__client-label">{clientInfo.client_id}</span>
             </div>
-          )}
-          <div className="ac-topnav__user">
-            <div className="ac-topnav__user-info">
-              <div className="ac-topnav__user-name">{clientInfo?.username || 'Auditor'}</div>
-              <div className="ac-topnav__user-role">{clientInfo?.role || 'System Administrator'}</div>
-            </div>
-            <div className="ac-topnav__avatar">
-              {(clientInfo?.username || 'A').charAt(0).toUpperCase()}
-            </div>
-          </div>
-          <button className="ac-topnav__logout" onClick={onLogout}>
-            <Icon name="logout" size={16} />
-            Logout
-          </button>
+          ) : null}
         </div>
       </header>
 
@@ -487,6 +514,14 @@ function DashboardPage({ onLogout }) {
           >
             <Icon name="dashboard" size={18} />
             Dashboard
+          </button>
+          <button
+            className={`ac-sidebar__nav-item${activeView === 'settings' ? ' ac-sidebar__nav-item--active' : ''}`}
+            onClick={() => { setActiveView('settings'); setSidebarOpen(false); }}
+            style={{ marginTop: 4 }}
+          >
+            <Icon name="settings" size={18} />
+            Profile & Settings
           </button>
           {clientInfo && clientInfo.role?.toLowerCase() === 'admin' && (
             <button
@@ -518,13 +553,16 @@ function DashboardPage({ onLogout }) {
               </div>
               <div className="ac-sidebar__identity-client">
                 <span className="ac-sidebar__identity-client-title">Client Workspace</span>
-                <span className="ac-sidebar__identity-client-val" title={clientInfo.client_id}>
+                <span className="ac-sidebar__identity-client-val" title={clientInfo.client_id} style={{ marginBottom: 2 }}>
                   {clientInfo.client_id}
+                </span>
+                <span className="ac-sidebar__identity-client-title" style={{ marginTop: 4, color: '#008862', fontWeight: 700 }}>
+                  🏢 {adminClients.find(c => c.id === clientInfo.client_id)?.company_name || clientInfo.company_name || "PT. Hari selasa"}
                 </span>
               </div>
             </div>
           )}
-          <button className="ac-sidebar__nav-item" style={{ marginTop: 6 }} onClick={onLogout}>
+          <button className="ac-sidebar__nav-item ac-sidebar__nav-item--logout" style={{ marginTop: 6 }} onClick={onLogout}>
             <Icon name="logout" size={18} />
             Logout
           </button>
@@ -543,95 +581,30 @@ function DashboardPage({ onLogout }) {
       <main className="ac-main">
         <div className="ac-main__container">
 
-          {/* ===== CLIENT IDENTITY BANNER ===== */}
-          {clientInfo && (
-            <div className="ac-cib">
-              <div className="ac-cib__bg-grid" />
-              <div className="ac-cib__top-row">
-                <div className="ac-cib__client-block">
-                  <div className="ac-cib__client-icon">🏢</div>
-                  <div className="ac-cib__client-meta">
-                    <div className="ac-cib__client-eyebrow">Auditchain Gateway System</div>
-                    {clientInfo.role?.toLowerCase() === 'admin' ? (
-                      <select
-                        value={selectedClient}
-                        onChange={e => setSelectedClient(e.target.value)}
-                        style={{
-                          background: 'rgba(255,255,255,0.12)',
-                          border: '1.5px solid rgba(255,255,255,0.2)',
-                          color: '#fff',
-                          padding: '6px 12px',
-                          borderRadius: 'var(--radius-md)',
-                          fontSize: '14px',
-                          fontWeight: '700',
-                          outline: 'none',
-                          cursor: 'pointer',
-                          marginTop: '4px',
-                          minWidth: '240px'
-                        }}
-                      >
-                        <option style={{ color: '#000' }} value={clientInfo.client_id}>
-                          {clientInfo.client_id} (Admin Default)
-                        </option>
-                        {adminClients.length === 0 ? (
-                          <>
-                            <option style={{ color: '#000' }} value="ed067ad4-e549-4baa-9c9d-3d27ff24194d">
-                              SIMRS Dummy 2 (ed067ad4-e549-4baa-9c9d-3d27ff24194d)
-                            </option>
-                            <option style={{ color: '#000' }} value="7f2bc265-d419-48fe-9892-d6ef198751e1">
-                              Satu Peta Debezium (7f2bc265-d419-48fe-9892-d6ef198751e1)
-                            </option>
-                          </>
-                        ) : (
-                          adminClients.map(client => {
-                            if (client.id === clientInfo.client_id) return null;
-                            return (
-                              <option style={{ color: '#000' }} key={client.id} value={client.id}>
-                                {client.company_name || 'Klien'} ({client.id})
-                              </option>
-                            );
-                          })
-                        )}
-                      </select>
-                    ) : (
-                      <div className="ac-cib__client-name" title={clientInfo.client_id}>
-                        {clientInfo.client_id}
-                      </div>
-                    )}
-                    <div className="ac-cib__client-badge">
-                      <span className="ac-cib__live-dot" />
-                      Active Session
-                    </div>
-                  </div>
-                </div>
 
-                <div className="ac-cib__divider" />
 
-                <div className="ac-cib__admin-block">
-                  <div className="ac-cib__admin-avatar">
-                    {clientInfo.username.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="ac-cib__admin-meta">
-                    <div className="ac-cib__admin-eyebrow">Logged in as</div>
-                    <div className="ac-cib__admin-name">{clientInfo.username}</div>
-                    <div className="ac-cib__admin-role">
-                      <span className="ac-cib__role-chip">{clientInfo.role}</span>
-                    </div>
-                  </div>
+          {activeView === 'settings' ? (
+            <section className="ac-hero">
+              <div className="ac-hero__pattern" />
+              <div className="ac-hero__content">
+                <div className="ac-hero__left">
+                  <h1 className="ac-hero__title">⚙️ Profile & Settings</h1>
+                  <p className="ac-hero__subtitle">
+                    Manage your account details and workspace preferences.
+                  </p>
                 </div>
               </div>
-
-              <div className="ac-cib__notice-bar">
-                <span className="ac-cib__notice-icon">🔒</span>
-                <span className="ac-cib__notice-text">
-                  <strong>Data Isolation Active</strong> — Audit logs are exclusively scoped to the{' '}
-                  <span className="ac-cib__notice-highlight">{selectedClient}</span>{' '}
-                  workspace. Cross-client access is blocked at the gateway level.
-                </span>
+              <div style={{ marginTop: '30px', background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                <h3 style={{ marginBottom: '16px', color: '#03285D' }}>Notification Settings</h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                    <input type="checkbox" style={{ marginRight: '8px', width: '16px', height: '16px' }} defaultChecked />
+                    <span style={{ fontSize: '14px', color: '#4b5563' }}>Enable Email Alerts</span>
+                  </label>
+                </div>
               </div>
-            </div>
-          )}
-
+            </section>
+          ) : (
           <>
             {/* Hero Section */}
             <section className="ac-hero">
@@ -694,6 +667,7 @@ function DashboardPage({ onLogout }) {
               renderPageNumbers={renderPageNumbers}
             />
           </>
+          )}
 
         </div>
       </main>
