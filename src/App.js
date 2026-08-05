@@ -19,18 +19,24 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return !!(localStorage.getItem('token') || sessionStorage.getItem('token'));
   });
+  const [, setAuthVersion] = useState(0);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     sessionStorage.removeItem('token');
     setIsAuthenticated(false);
+    setAuthVersion(v => v + 1);
   };
 
+  const handleAuthRefresh = () => {
+    setAuthVersion(v => v + 1);
+  };
+
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token');
   const clientInfo = useMemo(() => {
     if (!isAuthenticated) return null;
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
     return token ? parseJwt(token) : null;
-  }, [isAuthenticated]);
+  }, [isAuthenticated, token]);
 
   const isAdmin = clientInfo?.role?.toLowerCase() === 'admin';
 
@@ -42,7 +48,7 @@ function App() {
           path="/login"
           element={
             !isAuthenticated ? (
-              <LoginPage onLogin={() => setIsAuthenticated(true)} />
+              <LoginPage onLogin={() => { setIsAuthenticated(true); handleAuthRefresh(); }} />
             ) : (
               <Navigate to={isAdmin ? "/admin" : "/dashboard"} replace />
             )
@@ -52,7 +58,15 @@ function App() {
           path="/dashboard"
           element={
             <ProtectedRoute isAuthenticated={isAuthenticated}>
-              <DashboardPage onLogout={handleLogout} />
+              <DashboardPage onLogout={handleLogout} onProfileUpdated={handleAuthRefresh} />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute isAuthenticated={isAuthenticated}>
+              <DashboardPage view="profile" onLogout={handleLogout} onProfileUpdated={handleAuthRefresh} />
             </ProtectedRoute>
           }
         />

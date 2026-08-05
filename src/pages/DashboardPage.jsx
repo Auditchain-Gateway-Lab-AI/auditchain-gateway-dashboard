@@ -7,7 +7,7 @@ import AuditLogTable from '../components/dashboard/AuditLogTable';
 import ResourceDetailModal from '../components/dashboard/ResourceDetailModal';
 import { parseJwt, mapRangeItemToVerifyStatus } from '../utils/formatters';
 
-function DashboardPage({ onLogout }) {
+function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
   const navigate = useNavigate();
   const [stats, setStats] = useState({ total_logs: 0, pending_logs: 0, anchored_logs: 0 });
   const [recentLogs, setRecentLogs] = useState([]);
@@ -35,20 +35,42 @@ function DashboardPage({ onLogout }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [activeView, setActiveView] = useState('dashboard');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('auditchain_sidebar_collapsed') === 'true');
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [tempDateFrom, setTempDateFrom] = useState('');
   const [tempDateTo, setTempDateTo] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
 
   // Decode JWT info for Workspace Context Indicator
-  const clientInfo = useMemo(() => {
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-    return parseJwt(token);
-  }, []);
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+  const clientInfo = useMemo(() => parseJwt(token), [token]);
+
+  const displayName = clientInfo?.full_name || clientInfo?.username || 'Auditor';
+  const initials = (displayName || 'A')
+    .split(' ')
+    .map(part => part.charAt(0))
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+
+  useEffect(() => {
+    localStorage.setItem('auditchain_sidebar_collapsed', sidebarCollapsed ? 'true' : 'false');
+  }, [sidebarCollapsed]);
 
   const [selectedClient, setSelectedClient] = useState(clientInfo?.client_id || '');
   const [adminClients, setAdminClients] = useState([]);
+  const [profileForm, setProfileForm] = useState({
+    full_name: '',
+    username: '',
+    current_password: '',
+    new_password: '',
+    confirm_password: ''
+  });
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState('');
+  const [profileSuccess, setProfileSuccess] = useState('');
 
   // Fetch client list for admin dropdown
   useEffect(() => {
@@ -69,6 +91,79 @@ function DashboardPage({ onLogout }) {
       setSelectedClient(clientInfo.client_id);
     }
   }, [clientInfo]);
+
+  useEffect(() => {
+    if (view !== 'profile') return;
+
+    let cancelled = false;
+    setProfileLoading(true);
+    setProfileError('');
+
+    api.get('/auth/me')
+      .then(res => {
+        if (cancelled) return;
+        setProfileForm(form => ({
+          ...form,
+          full_name: res.data?.full_name || '',
+          username: res.data?.username || clientInfo?.username || '',
+          current_password: '',
+          new_password: '',
+          confirm_password: ''
+        }));
+      })
+      .catch(err => {
+        if (cancelled) return;
+        if (err.response?.status === 401) onLogout();
+        setProfileError(err.response?.data?.error || 'Failed to load profile data.');
+      })
+      .finally(() => {
+        if (!cancelled) setProfileLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [view, clientInfo?.username, onLogout]);
+
+  const handleProfileSubmit = async (e) => {
+    e.preventDefault();
+    setProfileError('');
+    setProfileSuccess('');
+
+    if (profileForm.new_password && profileForm.new_password !== profileForm.confirm_password) {
+      setProfileError('Password baru dan konfirmasi password belum sama.');
+      return;
+    }
+
+    try {
+      setProfileSaving(true);
+      const tokenStorage = localStorage.getItem('token') ? localStorage : sessionStorage;
+      const res = await api.put('/auth/me', {
+        full_name: profileForm.full_name,
+        username: profileForm.username,
+        current_password: profileForm.current_password,
+        new_password: profileForm.new_password
+      });
+
+      if (res.data?.token) {
+        tokenStorage.setItem('token', res.data.token);
+        if (onProfileUpdated) onProfileUpdated();
+      }
+
+      setProfileForm(form => ({
+        ...form,
+        current_password: '',
+        new_password: '',
+        confirm_password: ''
+      }));
+      setProfileSuccess('Profile updated successfully.');
+    } catch (err) {
+      if (err.response?.status === 401 && !profileForm.new_password) onLogout();
+      setProfileError(err.response?.data?.error || 'Failed to update profile.');
+    } finally {
+      setProfileSaving(false);
+    }
+  };
 
   const [isLogsLoading, setIsLogsLoading] = useState(false);
 
@@ -438,11 +533,21 @@ function DashboardPage({ onLogout }) {
   };
 
   return (
-    <div className="ac-shell">
+    <div className={`ac-shell ac-shell--user${sidebarCollapsed ? ' ac-shell--sidebar-collapsed' : ''}`}>
       {/* ======= TOP NAV ======= */}
       <header className="ac-topnav">
         <div className="ac-topnav__brand">
-          <button className="ac-topnav__menu-btn" onClick={() => setSidebarOpen(o => !o)}>
+          <button
+            className="ac-topnav__menu-btn ac-topnav__menu-btn--visible"
+            onClick={() => {
+              if (window.innerWidth <= 768) {
+                setSidebarOpen(o => !o);
+              } else {
+                setSidebarCollapsed(o => !o);
+              }
+            }}
+            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
             <Icon name="menu" size={22} />
           </button>
           <img src="/logo/logo-with-background.png" alt="Auditchain Logo" style={{ height: 36, width: 'auto', display: 'block', flexShrink: 0, borderRadius: 6 }} />
@@ -493,58 +598,89 @@ function DashboardPage({ onLogout }) {
               )}
             </select>
           ) : clientInfo ? (
-            <div className="ac-topnav__client-pill" style={{ background: 'rgba(3,40,93,0.05)', color: '#03285D', border: '1px solid rgba(3,40,93,0.1)' }}>
+            <div className="ac-topnav__client-pill">
               <span className="ac-topnav__client-dot" style={{ background: '#008862' }} />
               <span className="ac-topnav__client-label">{clientInfo.client_id}</span>
             </div>
           ) : null}
+          {clientInfo && (
+            <div className="ac-profile-menu">
+              <button
+                className={`ac-topnav__profile-btn${view === 'profile' ? ' ac-topnav__profile-btn--active' : ''}`}
+                onClick={() => setProfileMenuOpen(open => !open)}
+                title="Open user menu"
+              >
+                <span className="ac-topnav__avatar ac-topnav__avatar--compact">{initials}</span>
+                <span className="ac-topnav__profile-copy">
+                  <span className="ac-topnav__user-name">{displayName}</span>
+                  <span className="ac-topnav__user-role">{clientInfo.role || 'Auditor'}</span>
+                </span>
+                <Icon name="chevronDown" size={14} />
+              </button>
+              {profileMenuOpen && (
+                <div className="ac-profile-menu__panel">
+                  <button onClick={() => { setProfileMenuOpen(false); navigate('/profile'); }}>
+                    <Icon name="user" size={15} />
+                    Profile
+                  </button>
+                  <button onClick={onLogout} className="ac-profile-menu__danger">
+                    <Icon name="logout" size={15} />
+                    Logout
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </header>
 
       {/* ======= SIDEBAR ======= */}
       <aside className={`ac-sidebar${sidebarOpen ? ' ac-sidebar--open' : ''}`}>
         <div className="ac-sidebar__header">
+          <img className="ac-sidebar__compact-logo" src="/logo/Mask group.png" alt="AG" />
           <div className="ac-sidebar__section-label">Audit Manager</div>
           <div className="ac-sidebar__section-sub">Secure Data Integrity</div>
         </div>
         <nav className="ac-sidebar__nav">
           <button
-            className={`ac-sidebar__nav-item${activeView === 'dashboard' ? ' ac-sidebar__nav-item--active' : ''}`}
-            onClick={() => { setActiveView('dashboard'); setSidebarOpen(false); }}
+            className={`ac-sidebar__nav-item${view === 'dashboard' ? ' ac-sidebar__nav-item--active' : ''}`}
+            onClick={() => { navigate('/dashboard'); setSidebarOpen(false); }}
+            title="Dashboard"
           >
             <Icon name="dashboard" size={18} />
-            Dashboard
+            <span className="ac-sidebar__nav-label">Dashboard</span>
           </button>
           <button
-            className={`ac-sidebar__nav-item${activeView === 'settings' ? ' ac-sidebar__nav-item--active' : ''}`}
-            onClick={() => { setActiveView('settings'); setSidebarOpen(false); }}
+            className={`ac-sidebar__nav-item${view === 'profile' ? ' ac-sidebar__nav-item--active' : ''}`}
+            onClick={() => { navigate('/profile'); setSidebarOpen(false); }}
             style={{ marginTop: 4 }}
+            title="Profile"
           >
-            <Icon name="settings" size={18} />
-            Profile & Settings
+            <Icon name="user" size={18} />
+            <span className="ac-sidebar__nav-label">Profile</span>
           </button>
           {clientInfo && clientInfo.role?.toLowerCase() === 'admin' && (
             <button
               className="ac-sidebar__nav-item"
               onClick={() => navigate('/admin')}
               style={{ marginTop: 4 }}
+              title="Admin Panel"
             >
               <Icon name="shield" size={18} />
-              Admin Panel
+              <span className="ac-sidebar__nav-label">Admin Panel</span>
             </button>
           )}
         </nav>
         <div className="ac-sidebar__footer">
           {clientInfo && (
             <div className="ac-sidebar__identity-card">
-              <div className="ac-sidebar__identity-label">Session Identity</div>
               <div className="ac-sidebar__identity-user">
                 <span className="ac-sidebar__identity-avatar">
-                  {clientInfo.username.charAt(0).toUpperCase()}
+                  {initials}
                 </span>
                 <div className="ac-sidebar__identity-details">
-                  <span className="ac-sidebar__identity-name" title={clientInfo.username}>
-                    {clientInfo.username}
+                  <span className="ac-sidebar__identity-name" title={displayName}>
+                    {displayName}
                   </span>
                   <span className="ac-sidebar__identity-role">
                     {clientInfo.role}
@@ -552,19 +688,17 @@ function DashboardPage({ onLogout }) {
                 </div>
               </div>
               <div className="ac-sidebar__identity-client">
-                <span className="ac-sidebar__identity-client-title">Client Workspace</span>
-                <span className="ac-sidebar__identity-client-val" title={clientInfo.client_id} style={{ marginBottom: 2 }}>
-                  {clientInfo.client_id}
-                </span>
-                <span className="ac-sidebar__identity-client-title" style={{ marginTop: 4, color: '#008862', fontWeight: 700 }}>
-                  🏢 {adminClients.find(c => c.id === clientInfo.client_id)?.company_name || clientInfo.company_name || "PT. Hari selasa"}
+                <Icon name="database" size={14} />
+                <span className="ac-sidebar__identity-workspace">
+                  <strong>{adminClients.find(c => c.id === clientInfo.client_id)?.company_name || clientInfo.company_name || 'Client Workspace'}</strong>
+                  <small title={clientInfo.client_id}>{clientInfo.client_id}</small>
                 </span>
               </div>
             </div>
           )}
-          <button className="ac-sidebar__nav-item ac-sidebar__nav-item--logout" style={{ marginTop: 6 }} onClick={onLogout}>
+          <button className="ac-sidebar__nav-item ac-sidebar__nav-item--logout" style={{ marginTop: 6 }} onClick={onLogout} title="Logout">
             <Icon name="logout" size={18} />
-            Logout
+            <span className="ac-sidebar__nav-label">Logout</span>
           </button>
         </div>
       </aside>
@@ -583,16 +717,133 @@ function DashboardPage({ onLogout }) {
 
 
 
-          {activeView === 'settings' ? (
+          {view === 'profile' ? (
             <section className="ac-hero">
               <div className="ac-hero__pattern" />
               <div className="ac-hero__content">
                 <div className="ac-hero__left">
-                  <h1 className="ac-hero__title">⚙️ Profile & Settings</h1>
+                  <span className="ac-page-kicker">Account Center</span>
+                  <h1 className="ac-hero__title">{displayName}</h1>
                   <p className="ac-hero__subtitle">
-                    Manage your account details and workspace preferences.
+                    Manage the identity used across your Auditchain workspace.
                   </p>
                 </div>
+              </div>
+              <div className="ac-profile-layout">
+                <form className="ac-profile-card ac-profile-form" onSubmit={handleProfileSubmit}>
+                  <div className="ac-profile-card__header">
+                    <div>
+                      <h2>Profile Details</h2>
+                      <p>Update display name, username, and password.</p>
+                    </div>
+                    <span className="ac-profile-card__icon">
+                      <Icon name="user" size={18} />
+                    </span>
+                  </div>
+
+                  {profileLoading ? (
+                    <div className="ac-profile-loading">
+                      <Icon name="spinner" size={18} />
+                      Loading profile...
+                    </div>
+                  ) : (
+                    <>
+                      {profileError && <div className="ac-profile-alert ac-profile-alert--error">{profileError}</div>}
+                      {profileSuccess && <div className="ac-profile-alert ac-profile-alert--success">{profileSuccess}</div>}
+
+                      <label className="ac-form-field">
+                        <span className="ac-form-label">Full Name</span>
+                        <input
+                          className="ac-form-input ac-form-input--lg"
+                          value={profileForm.full_name}
+                          onChange={e => setProfileForm(form => ({ ...form, full_name: e.target.value }))}
+                          placeholder="Your display name"
+                        />
+                      </label>
+
+                      <label className="ac-form-field">
+                        <span className="ac-form-label">Username</span>
+                        <input
+                          className="ac-form-input ac-form-input--lg"
+                          value={profileForm.username}
+                          onChange={e => setProfileForm(form => ({ ...form, username: e.target.value }))}
+                          placeholder="Username"
+                          required
+                          minLength={4}
+                        />
+                      </label>
+
+                      <div className="ac-profile-password-grid">
+                        <label className="ac-form-field">
+                          <span className="ac-form-label">Current Password</span>
+                          <input
+                            className="ac-form-input ac-form-input--lg"
+                            type="password"
+                            value={profileForm.current_password}
+                            onChange={e => setProfileForm(form => ({ ...form, current_password: e.target.value }))}
+                            placeholder="Required for password change"
+                          />
+                        </label>
+
+                        <label className="ac-form-field">
+                          <span className="ac-form-label">New Password</span>
+                          <input
+                            className="ac-form-input ac-form-input--lg"
+                            type="password"
+                            value={profileForm.new_password}
+                            onChange={e => setProfileForm(form => ({ ...form, new_password: e.target.value }))}
+                            placeholder="Minimum 6 characters"
+                          />
+                        </label>
+                      </div>
+
+                      <label className="ac-form-field">
+                        <span className="ac-form-label">Confirm New Password</span>
+                        <input
+                          className="ac-form-input ac-form-input--lg"
+                          type="password"
+                          value={profileForm.confirm_password}
+                          onChange={e => setProfileForm(form => ({ ...form, confirm_password: e.target.value }))}
+                          placeholder="Repeat new password"
+                        />
+                      </label>
+
+                      <div className="ac-profile-actions">
+                        <button type="button" className="ac-btn-ghost-action" onClick={() => navigate('/dashboard')}>
+                          Back to Dashboard
+                        </button>
+                        <button type="submit" className="ac-btn-primary" disabled={profileSaving}>
+                          <Icon name={profileSaving ? 'spinner' : 'checkmark'} size={15} />
+                          {profileSaving ? 'Saving...' : 'Save Changes'}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </form>
+
+                <aside className="ac-profile-card ac-profile-summary">
+                  <div className="ac-profile-card__header">
+                    <div>
+                      <h2>Workspace</h2>
+                      <p>Session identity assigned by admin.</p>
+                    </div>
+                    <span className="ac-profile-card__icon ac-profile-card__icon--teal">
+                      <Icon name="shield" size={18} />
+                    </span>
+                  </div>
+                  <div className="ac-profile-summary__row">
+                    <span>Role</span>
+                    <strong>{clientInfo?.role || 'Auditor'}</strong>
+                  </div>
+                  <div className="ac-profile-summary__row">
+                    <span>Client ID</span>
+                    <code>{clientInfo?.client_id || '-'}</code>
+                  </div>
+                  <div className="ac-profile-summary__row">
+                    <span>Company</span>
+                    <strong>{clientInfo?.company_name || adminClients.find(c => c.id === clientInfo?.client_id)?.company_name || 'Workspace'}</strong>
+                  </div>
+                </aside>
               </div>
               <div style={{ marginTop: '30px', background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
                 <h3 style={{ marginBottom: '16px', color: '#03285D' }}>Notification Settings</h3>
@@ -686,3 +937,4 @@ function DashboardPage({ onLogout }) {
 
 export { DashboardPage };
 export default DashboardPage;
+
