@@ -542,6 +542,7 @@
   line-height: 1.15;
   background: linear-gradient(135deg, #03285D 0%, #008862 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   color: transparent;
   margin-bottom: 10px;
 }
@@ -4597,6 +4598,7 @@
   letter-spacing: 0;
   background: linear-gradient(135deg, var(--user-navy), var(--user-teal));
   -webkit-background-clip: text;
+  background-clip: text;
   color: transparent;
 }
 
@@ -5285,6 +5287,7 @@
   letter-spacing: 0;
   background: linear-gradient(135deg, var(--admin-navy), var(--admin-amber));
   -webkit-background-clip: text;
+  background-clip: text;
   color: transparent;
 }
 
