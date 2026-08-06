@@ -560,24 +560,14 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
     return pages;
   };
 
+  const isMobileSidebar = typeof window !== 'undefined' && window.innerWidth <= 768;
+  const isSidebarExpanded = isMobileSidebar ? sidebarOpen : !sidebarCollapsed;
+
   return (
     <div className={`ac-shell ac-shell--user${sidebarCollapsed ? ' ac-shell--sidebar-collapsed' : ''}`}>
       {/* ======= TOP NAV ======= */}
       <header className="ac-topnav">
         <div className="ac-topnav__brand">
-          <button
-            className="ac-topnav__menu-btn ac-topnav__menu-btn--visible"
-            onClick={() => {
-              if (window.innerWidth <= 768) {
-                setSidebarOpen(o => !o);
-              } else {
-                setSidebarCollapsed(o => !o);
-              }
-            }}
-            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            <Icon name="menu" size={22} />
-          </button>
           <img src="/logo/logo-with-background.png" alt="Auditchain Logo" style={{ height: 36, width: 'auto', display: 'block', flexShrink: 0, borderRadius: 6 }} />
           <div>
             <div className="ac-topnav__brand-name">Auditchain Gateway</div>
@@ -665,9 +655,27 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
       {/* ======= SIDEBAR ======= */}
       <aside className={`ac-sidebar${sidebarOpen ? ' ac-sidebar--open' : ''}`}>
         <div className="ac-sidebar__header">
-          <img className="ac-sidebar__compact-logo" src="/logo/Mask group.png" alt="AG" />
-          <div className="ac-sidebar__section-label">Audit Manager</div>
-          <div className="ac-sidebar__section-sub">Secure Data Integrity</div>
+          <div className="ac-sidebar__header-main">
+            <img className="ac-sidebar__compact-logo" src="/logo/Mask group.png" alt="AG" />
+            <div className="ac-sidebar__header-copy">
+              <div className="ac-sidebar__section-label">Audit Manager</div>
+              <div className="ac-sidebar__section-sub">Secure Data Integrity</div>
+            </div>
+          </div>
+          <button
+            className="ac-sidebar__toggle-btn"
+            onClick={() => {
+              if (window.innerWidth <= 768) {
+                setSidebarOpen(o => !o);
+              } else {
+                setSidebarCollapsed(o => !o);
+              }
+            }}
+            title={isSidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+            aria-label={isSidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+          >
+            <Icon name={isSidebarExpanded ? 'chevronLeft' : 'chevronRight'} size={18} />
+          </button>
         </div>
         <nav className="ac-sidebar__nav">
           <button
