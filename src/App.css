@@ -1160,12 +1160,22 @@
   border: 1.5px solid var(--color-outline-variant);
   border-radius: var(--radius-md);
   color: var(--color-primary);
+  cursor: pointer;
   transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.ac-date-input-shell:hover {
+  border-color: rgba(0, 94, 164, 0.42);
 }
 
 .ac-date-input-shell:focus-within {
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px rgba(0, 94, 164, 0.11);
+}
+
+.ac-date-input-shell:focus-visible {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(0, 94, 164, 0.16);
 }
 
 .ac-date-input {
@@ -1175,8 +1185,10 @@
   outline: none;
   background: transparent;
   color: var(--color-on-surface);
+  cursor: pointer;
   font-size: 13px;
   font-weight: 650;
+  pointer-events: none;
 }
 
 .ac-date-input::-webkit-calendar-picker-indicator {
