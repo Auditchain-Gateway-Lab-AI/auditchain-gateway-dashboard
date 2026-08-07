@@ -1688,6 +1688,60 @@
   animation: modalIn 0.25s ease;
 }
 
+/* ================================================================
+   DRAWERS
+   ================================================================ */
+.ac-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 1000;
+  animation: drawerOverlayIn 0.2s ease;
+}
+
+.ac-detail-drawer {
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 100%;
+  max-width: 680px;
+  background: var(--color-surface-container-lowest);
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  animation: drawerIn 0.25s cubic-bezier(0.2, 0, 0, 1);
+  overflow: hidden;
+}
+
+@keyframes drawerOverlayIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes drawerIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.ac-drawer-overlay--closing {
+  animation: drawerOverlayOut 0.25s ease forwards;
+}
+
+.ac-detail-drawer--closing {
+  animation: drawerOut 0.25s cubic-bezier(0.2, 0, 0, 1) forwards;
+}
+
+@keyframes drawerOverlayOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes drawerOut {
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
+}
+
 .ac-modal--sm {
   max-width: 680px;
 }

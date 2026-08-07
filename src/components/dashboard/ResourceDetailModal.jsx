@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../api';
 import ActionBadge from '../common/ActionBadge';
 import SnapshotViewer from './SnapshotViewer';
@@ -12,6 +12,15 @@ function ResourceDetailModal({ resource, selectedClient, onClose }) {
   const [chainStatus, setChainStatus] = useState(null); // hasil verify-resource
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isClosing, setIsClosing] = useState(false);
+
+  const handleClose = useCallback(() => {
+    if (isClosing) return;
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+    }, 240); // slightly less than the 250ms CSS animation
+  }, [isClosing, onClose]);
 
   useEffect(() => {
     if (!resource) return;
@@ -43,6 +52,14 @@ function ResourceDetailModal({ resource, selectedClient, onClose }) {
 
     return () => { cancelled = true; };
   }, [resource, selectedClient]);
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') handleClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleClose]);
 
   const sortedAsc = [...logs].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   const resourceLogs = [...sortedAsc].reverse();
@@ -98,8 +115,14 @@ function ResourceDetailModal({ resource, selectedClient, onClose }) {
   };
 
   return (
-    <div className="ac-modal-overlay" onClick={onClose}>
-      <div className="ac-modal" onClick={e => e.stopPropagation()}>
+    <div className={`ac-drawer-overlay ${isClosing ? 'ac-drawer-overlay--closing' : ''}`} onClick={handleClose}>
+      <aside
+        className={`ac-detail-drawer ${isClosing ? 'ac-detail-drawer--closing' : ''}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Log History"
+        onClick={e => e.stopPropagation()}
+      >
         <div className="ac-modal__header">
           <div>
             <div className="ac-modal__title">📋 Log History</div>
@@ -110,7 +133,7 @@ function ResourceDetailModal({ resource, selectedClient, onClose }) {
             <span style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
               {loading ? 'Verifying...' : `${resourceLogs.length} logs found`}
             </span>
-            <button className="ac-modal__close" onClick={onClose}>×</button>
+            <button className="ac-modal__close" onClick={handleClose}>×</button>
           </div>
         </div>
 
@@ -195,7 +218,7 @@ function ResourceDetailModal({ resource, selectedClient, onClose }) {
             })
           )}
         </div>
-      </div>
+      </aside>
     </div>
   );
 }
