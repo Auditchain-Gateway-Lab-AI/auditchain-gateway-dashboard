@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, useDeferredValue } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import Icon from '../components/common/Icon';
@@ -6,6 +6,23 @@ import StatCards from '../components/dashboard/StatCards';
 import AuditLogTable from '../components/dashboard/AuditLogTable';
 import ResourceDetailModal from '../components/dashboard/ResourceDetailModal';
 import { parseJwt, mapRangeItemToVerifyStatus } from '../utils/formatters';
+
+const MAX_LOGS_PER_RANGE = 200;
+
+const areStatsEqual = (a = {}, b = {}) => (
+  (a.total_logs || 0) === (b.total_logs || 0) &&
+  (a.pending_logs || 0) === (b.pending_logs || 0) &&
+  (a.anchored_logs || 0) === (b.anchored_logs || 0)
+);
+
+const getLogTimestampMs = (timestamp) => {
+  if (!timestamp) return 0;
+  let tsStr = String(timestamp);
+  if (tsStr.includes(' ') && !tsStr.includes('T')) {
+    tsStr = tsStr.replace(' ', 'T');
+  }
+  return new Date(tsStr).getTime() || 0;
+};
 
 function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
   const navigate = useNavigate();
@@ -30,6 +47,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
   const [tableNames, setTableNames] = useState([]);
 
   const [searchQuery, setSearchQuery] = useState('');
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [filterAction, setFilterAction] = useState('ALL');
   const [filterVerification, setFilterVerification] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
@@ -189,7 +207,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
 
       const params = {
         page: 1,
-        page_size: 1000,
+        page_size: MAX_LOGS_PER_RANGE,
         sort_order: activeSort,
         from: fromObj.toISOString(),
         to: toObj.toISOString(),
@@ -238,11 +256,17 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
 
   // Fetch summary stats (Auto-refresh 5s & Smart Polling for Table Auto-Refresh)
   useEffect(() => {
+    let cancelled = false;
+
     const fetchSummaryStats = async () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+
       try {
         const params = selectedClient ? { client_id: selectedClient } : {};
         const statsRes = await api.get('/dashboard/stats', { params });
-        setStats(statsRes.data);
+        if (cancelled) return;
+
+        setStats(prev => areStatsEqual(prev, statsRes.data) ? prev : statsRes.data);
 
         // Smart Polling: Otomatis re-fetch tabel transaksi jika total_logs berubah & date range aktif
         const newTotal = statsRes.data.total_logs;
@@ -259,7 +283,16 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
 
     fetchSummaryStats();
     const id = setInterval(fetchSummaryStats, 5000);
-    return () => clearInterval(id);
+    const handleVisibilityChange = () => {
+      if (!document.hidden) fetchSummaryStats();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [onLogout, selectedClient]);
 
   // Fetch daftar nama tabel (Sekali saat mount / client berubah — bukan polling)
@@ -397,38 +430,36 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
 
   // Filter & pagination
   const filteredLogs = useMemo(() => {
+    const normalizedSearch = deferredSearchQuery.trim().toLowerCase();
+    const activeFrom = filterDateFrom || tempDateFrom;
+    const activeTo = filterDateTo || tempDateTo;
+    const fromTime = activeFrom ? new Date(activeFrom).getTime() : NaN;
+    let toTime = NaN;
+
+    if (activeTo) {
+      const toObj = new Date(activeTo);
+      toObj.setSeconds(59, 999);
+      toTime = toObj.getTime();
+    }
+
     const list = recentLogs.filter(log => {
-      const matchSearch =
-        (log?.source_table?.toLowerCase() || log?.resource?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-        (log?.actor?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-        (log?.source_system?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-        (log?.metadata?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-        (log?.hash_value?.toLowerCase() || '').includes(searchQuery.toLowerCase());
+      const matchSearch = !normalizedSearch || [
+        log?.source_table || log?.resource || '',
+        log?.actor || '',
+        log?.source_system || '',
+        typeof log?.metadata === 'string' ? log.metadata : JSON.stringify(log?.metadata || ''),
+        log?.hash_value || ''
+      ].some(value => String(value).toLowerCase().includes(normalizedSearch));
 
       const matchAction = filterAction === 'ALL' || log?.action === filterAction;
 
       let matchDate = true;
       if (log?.timestamp) {
-        let tsStr = String(log.timestamp);
-        if (tsStr.includes(' ') && !tsStr.includes('T')) {
-          tsStr = tsStr.replace(' ', 'T');
-        }
-        const logTime = new Date(tsStr).getTime();
-
-        const activeFrom = filterDateFrom || tempDateFrom;
-        const activeTo = filterDateTo || tempDateTo;
+        const logTime = getLogTimestampMs(log.timestamp);
 
         if (!isNaN(logTime)) {
-          if (activeFrom) {
-            const fromTime = new Date(activeFrom).getTime();
-            if (!isNaN(fromTime) && logTime < fromTime) matchDate = false;
-          }
-          if (activeTo) {
-            const toObj = new Date(activeTo);
-            toObj.setSeconds(59, 999);
-            const toTime = toObj.getTime();
-            if (!isNaN(toTime) && logTime > toTime) matchDate = false;
-          }
+          if (!isNaN(fromTime) && logTime < fromTime) matchDate = false;
+          if (!isNaN(toTime) && logTime > toTime) matchDate = false;
         }
       } else if (filterDateFrom || filterDateTo || tempDateFrom || tempDateTo) {
         matchDate = false;
@@ -453,20 +484,15 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
     // 'desc' (Newest First) -> Dari TO ke FROM (timestamp terbaru ke terlama)
     // 'asc'  (Oldest First) -> Dari FROM ke TO (timestamp terlama ke terbaru)
     return list.sort((a, b) => {
-      let tsA = String(a?.timestamp || '');
-      if (tsA.includes(' ') && !tsA.includes('T')) tsA = tsA.replace(' ', 'T');
-      let tsB = String(b?.timestamp || '');
-      if (tsB.includes(' ') && !tsB.includes('T')) tsB = tsB.replace(' ', 'T');
-
-      const timeA = new Date(tsA).getTime() || 0;
-      const timeB = new Date(tsB).getTime() || 0;
+      const timeA = getLogTimestampMs(a?.timestamp);
+      const timeB = getLogTimestampMs(b?.timestamp);
 
       if (sortOrder === 'asc') {
         return timeA - timeB;
       }
       return timeB - timeA;
     });
-  }, [recentLogs, searchQuery, filterAction, filterDateFrom, filterDateTo, tempDateFrom, tempDateTo, filterVerification, verifyStatuses, sortOrder]);
+  }, [recentLogs, deferredSearchQuery, filterAction, filterDateFrom, filterDateTo, tempDateFrom, tempDateTo, filterVerification, verifyStatuses, sortOrder]);
   const isLocalPaginated = !isServerPaginated || filterDateFrom || filterDateTo;
 
   const totalPages = isLocalPaginated
@@ -489,7 +515,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
     : (isFiltered ? filteredLogs.length : totalLogsCount);
 
   // Status badge for transaction table
-  const renderStatusBadge = (log) => {
+  const renderStatusBadge = useCallback((log) => {
     if (!log || !log.log_id || !log.hash_value) return <span className="ac-status ac-status--invalid">🚨 INVALID</span>;
     const v = verifyStatuses[log.log_id];
 
@@ -512,11 +538,11 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
     if (v.status === 'pending')
       return <span className="ac-status ac-status--pending" onClick={() => setSelectedVerifyResult(v)}>⏱️ PENDING</span>;
     return <span className="ac-status ac-status--invalid" onClick={() => setSelectedVerifyResult(v)}>🚨 INVALID</span>;
-  };
+  }, [handleVerifyLog, verifyStatuses]);
 
 
   // Pagination page numbers
-  const renderPageNumbers = () => {
+  const renderPageNumbers = useCallback(() => {
     const pages = [];
     if (totalPages <= 7) {
       for (let i = 1; i <= totalPages; i++) pages.push(i);
@@ -530,7 +556,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
       pages.push(totalPages);
     }
     return pages;
-  };
+  }, [currentPage, totalPages]);
 
   const isMobileSidebar = typeof window !== 'undefined' && window.innerWidth <= 768;
   const isSidebarExpanded = isMobileSidebar ? sidebarOpen : !sidebarCollapsed;

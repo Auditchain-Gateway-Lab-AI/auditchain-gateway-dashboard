@@ -191,5 +191,7 @@ const Icon = ({ name, size = 18, style = {} }) => {
   );
 };
 
+const MemoizedIcon = React.memo(Icon);
+
 export { Icon };
-export default Icon;
+export default MemoizedIcon;

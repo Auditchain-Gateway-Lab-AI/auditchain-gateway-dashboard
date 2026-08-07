@@ -508,5 +508,7 @@ function AuditLogTable({
   );
 }
 
+const MemoizedAuditLogTable = React.memo(AuditLogTable);
+
 export { AuditLogTable };
-export default AuditLogTable;
+export default MemoizedAuditLogTable;

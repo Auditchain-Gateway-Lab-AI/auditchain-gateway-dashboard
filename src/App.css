@@ -657,7 +657,7 @@
 
 .ac-stat-card {
   background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
+  backdrop-filter: none;
   border: 1px solid rgba(3, 40, 93, 0.06);
   border-radius: var(--radius-xl);
   padding: var(--space-lg);
@@ -1356,6 +1356,7 @@
    ================================================================ */
 .ac-table-wrap {
   overflow-x: auto;
+  contain: layout paint;
 }
 
 .ac-table {
@@ -4358,9 +4359,11 @@
   height: 72px;
   padding: 0 24px;
   background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(18px);
+  backdrop-filter: blur(8px);
   border-bottom-color: rgba(7, 52, 95, 0.1);
   box-shadow: 0 10px 30px rgba(16, 32, 51, 0.06);
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .ac-shell--user .ac-topnav__menu-btn--visible {
@@ -4513,6 +4516,8 @@
   border-right-color: rgba(7, 52, 95, 0.1);
   box-shadow: 10px 0 28px rgba(16, 32, 51, 0.04);
   transition: width 0.24s ease, transform 0.24s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .ac-shell--user .ac-sidebar__header {
@@ -5163,9 +5168,11 @@
   height: 72px;
   padding: 0 24px;
   background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(18px);
+  backdrop-filter: blur(8px);
   border-bottom-color: rgba(7, 52, 95, 0.1);
   box-shadow: 0 10px 30px rgba(16, 32, 51, 0.06);
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .ac-shell--admin .ac-topnav__menu-btn--visible {
@@ -5211,6 +5218,8 @@
   border-right-color: rgba(7, 52, 95, 0.1);
   box-shadow: 10px 0 28px rgba(16, 32, 51, 0.04);
   transition: width 0.24s ease, transform 0.24s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .ac-shell--admin .ac-sidebar__header {
@@ -6317,4 +6326,35 @@
 
 .ac-db-engine-badge--unknown {
   color: #757575;
+}
+
+/* ================================================================
+   PERFORMANCE GUARDS
+   ================================================================ */
+@supports (content-visibility: auto) {
+  .ac-main__container > .ac-card,
+  .ac-main__container > .ac-stats-grid,
+  .ac-admin-overview-grid,
+  .ac-admin-dashboard-layout,
+  .ac-admin-dashboard-layout--wide-left {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 280px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .ac-shell--user .ac-topnav,
+  .ac-shell--admin .ac-topnav {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
 }

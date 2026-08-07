@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api';
 import Icon from '../components/common/Icon';
@@ -7,6 +7,14 @@ import ConnectorStatusBadge from '../components/common/ConnectorStatusBadge';
 import { parseJwt, formatTimestamp } from '../utils/formatters';
 
 const ADMIN_TABS = ['overview', 'clients', 'users', 'kafka', 'profile'];
+
+const isSameJSON = (a, b) => {
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
+};
 
 function AdminPage({ onLogout }) {
   const navigate = useNavigate();
@@ -31,6 +39,7 @@ function AdminPage({ onLogout }) {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [showUserModal, setShowUserModal] = useState(false);
   const [authToken, setAuthToken] = useState(() => localStorage.getItem('token') || sessionStorage.getItem('token') || '');
+  const isMountedRef = useRef(true);
 
   // Modal states
   const [showClientModal, setShowClientModal] = useState(false);
@@ -159,6 +168,14 @@ function AdminPage({ onLogout }) {
   }, [setSearchParams]);
 
   useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
     localStorage.setItem('auditchain_admin_sidebar_collapsed', sidebarCollapsed ? 'true' : 'false');
   }, [sidebarCollapsed]);
 
@@ -261,6 +278,8 @@ function AdminPage({ onLogout }) {
   };
 
   const fetchData = useCallback(async () => {
+    if (typeof document !== 'undefined' && document.hidden) return;
+
     const [summaryRes, clientsRes, kafkaRes, usersRes] = await Promise.allSettled([
       api.get('/admin/summary'),
       api.get('/admin/clients'),
@@ -276,26 +295,32 @@ function AdminPage({ onLogout }) {
       return;
     }
 
+    if (!isMountedRef.current) return;
+
     if (summaryRes.status === 'fulfilled') {
-      setSummary(summaryRes.value.data || { total_clients: 0, active_streams: 0 });
+      const nextSummary = summaryRes.value.data || { total_clients: 0, active_streams: 0 };
+      setSummary(prev => isSameJSON(prev, nextSummary) ? prev : nextSummary);
     } else {
       console.error("Failed to load admin summary:", summaryRes.reason);
     }
 
     if (clientsRes.status === 'fulfilled') {
-      setClients(clientsRes.value.data || []);
+      const nextClients = clientsRes.value.data || [];
+      setClients(prev => isSameJSON(prev, nextClients) ? prev : nextClients);
     } else {
       console.error("Failed to load admin clients:", clientsRes.reason);
     }
 
     if (kafkaRes.status === 'fulfilled') {
-      setKafkaConfigs(kafkaRes.value.data || []);
+      const nextKafkaConfigs = kafkaRes.value.data || [];
+      setKafkaConfigs(prev => isSameJSON(prev, nextKafkaConfigs) ? prev : nextKafkaConfigs);
     } else {
       console.error("Failed to load admin Kafka configs:", kafkaRes.reason);
     }
 
     if (usersRes.status === 'fulfilled') {
-      setAllUsers(usersRes.value.data || []);
+      const nextUsers = usersRes.value.data || [];
+      setAllUsers(prev => isSameJSON(prev, nextUsers) ? prev : nextUsers);
     } else {
       console.error("Failed to load admin users:", usersRes.reason);
     }
@@ -304,7 +329,15 @@ function AdminPage({ onLogout }) {
   useEffect(() => {
     fetchData();
     const intervalId = setInterval(fetchData, 5000);
-    return () => clearInterval(intervalId);
+    const handleVisibilityChange = () => {
+      if (!document.hidden) fetchData();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [fetchData]);
 
   useEffect(() => {

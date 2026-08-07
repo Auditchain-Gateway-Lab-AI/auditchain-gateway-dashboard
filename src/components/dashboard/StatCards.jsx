@@ -50,5 +50,7 @@ function StatCards({ stats = { total_logs: 0, pending_logs: 0, anchored_logs: 0 
   );
 }
 
+const MemoizedStatCards = React.memo(StatCards);
+
 export { StatCards };
-export default StatCards;
+export default MemoizedStatCards;
