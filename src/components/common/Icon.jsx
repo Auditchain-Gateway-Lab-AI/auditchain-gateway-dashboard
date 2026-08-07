@@ -70,6 +70,9 @@ const Icon = ({ name, size = 18, style = {} }) => {
     chevronRight: (
       <polyline points="9 18 15 12 9 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
     ),
+    chevronLeft: (
+      <polyline points="15 18 9 12 15 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
+    ),
     chevronDown: (
       <polyline points="6 9 12 15 18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
     ),

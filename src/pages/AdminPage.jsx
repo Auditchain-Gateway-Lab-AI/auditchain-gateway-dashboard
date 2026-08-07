@@ -1,16 +1,36 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api';
 import Icon from '../components/common/Icon';
+import DBEngineBadge from '../components/common/DBEngineBadge';
+import ConnectorStatusBadge from '../components/common/ConnectorStatusBadge';
 import { parseJwt, formatTimestamp } from '../utils/formatters';
+
+const ADMIN_TABS = ['overview', 'clients', 'users', 'kafka', 'profile'];
 
 function AdminPage({ onLogout }) {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('clients');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const activeTab = ADMIN_TABS.includes(tabParam) ? tabParam : 'overview';
   const [clients, setClients] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
   const [kafkaConfigs, setKafkaConfigs] = useState([]);
-  const [summary, setSummary] = useState({ total_clients: 0, active_streams: 0 });
+  const [summary, setSummary] = useState({
+    total_clients: 0,
+    active_clients: 0,
+    inactive_clients: 0,
+    pending_clients: 0,
+    configured_clients: 0,
+    total_users: 0,
+    total_streams: 0,
+    active_streams: 0
+  });
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('auditchain_admin_sidebar_collapsed') === 'true');
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [authToken, setAuthToken] = useState(() => localStorage.getItem('token') || sessionStorage.getItem('token') || '');
 
   // Modal states
   const [showClientModal, setShowClientModal] = useState(false);
@@ -85,6 +105,24 @@ function AdminPage({ onLogout }) {
   const [newUserConfirmPassword, setNewUserConfirmPassword] = useState('');
   const [userActionLoading, setUserActionLoading] = useState(false);
   const [userActionError, setUserActionError] = useState('');
+  const [globalUserActionError, setGlobalUserActionError] = useState('');
+  const [newGlobalUser, setNewGlobalUser] = useState({
+    full_name: '',
+    username: '',
+    password: '',
+    confirm_password: ''
+  });
+  const [profileForm, setProfileForm] = useState({
+    full_name: '',
+    username: '',
+    current_password: '',
+    new_password: '',
+    confirm_password: ''
+  });
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState('');
+  const [profileSuccess, setProfileSuccess] = useState('');
 
   // Client form state
   const [clientForm, setClientForm] = useState({
@@ -97,35 +135,160 @@ function AdminPage({ onLogout }) {
     client_id: '', kafka_brokers: '', topic_prefix: '', pk_field: 'ID',
   });
 
-  const clientInfo = useMemo(() => {
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-    return parseJwt(token);
-  }, []);
+  const clientInfo = useMemo(() => parseJwt(authToken), [authToken]);
+
+  const displayName = clientInfo?.full_name || clientInfo?.username || 'Admin';
+  const initials = (displayName || 'A')
+    .split(' ')
+    .map(part => part.charAt(0))
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+
+  const handleAdminTabChange = useCallback((tab) => {
+    setSearchParams(tab === 'overview' ? {} : { tab });
+  }, [setSearchParams]);
+
+  useEffect(() => {
+    localStorage.setItem('auditchain_admin_sidebar_collapsed', sidebarCollapsed ? 'true' : 'false');
+  }, [sidebarCollapsed]);
 
   const clientStats = useMemo(() => {
     const configuredClientIds = new Set(kafkaConfigs.map(config => config.client_id));
     return {
-      active: clients.filter(client => client.status === 'active').length,
-      pending: clients.filter(client => client.status === 'pending_setup').length,
-      configured: clients.filter(client => configuredClientIds.has(client.id)).length,
+      active: summary.active_clients ?? clients.filter(client => client.status === 'active').length,
+      inactive: summary.inactive_clients ?? clients.filter(client => client.status !== 'active' && client.status !== 'pending_setup').length,
+      pending: summary.pending_clients ?? clients.filter(client => client.status === 'pending_setup').length,
+      configured: summary.configured_clients ?? clients.filter(client => configuredClientIds.has(client.id)).length,
+      totalUsers: summary.total_users ?? 0,
+      totalStreams: summary.total_streams ?? kafkaConfigs.length,
     };
-  }, [clients, kafkaConfigs]);
+  }, [clients, kafkaConfigs, summary]);
+
+  const userStats = useMemo(() => {
+    return {
+      total: allUsers.length,
+      admins: allUsers.filter(user => user.role?.toLowerCase() === 'admin').length,
+    };
+  }, [allUsers]);
+
+  const adminUsers = useMemo(() => (
+    allUsers.filter(user => user.role?.toLowerCase() === 'admin')
+  ), [allUsers]);
+
+  const overviewData = useMemo(() => {
+    const configuredClientIds = new Set(kafkaConfigs.map(config => config.client_id));
+    const recentClients = [...clients]
+      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+      .slice(0, 4);
+
+    const clientsWithoutStream = clients.filter(client => !configuredClientIds.has(client.id));
+    const inactiveStreams = kafkaConfigs.filter(config => !config.is_active);
+    const attentionItems = [
+      ...clients.filter(client => client.status === 'pending_setup').slice(0, 3).map(client => ({
+        title: client.company_name,
+        detail: 'Client is waiting for setup completion',
+        tone: 'warning'
+      })),
+      ...clientsWithoutStream.slice(0, 3).map(client => ({
+        title: client.company_name,
+        detail: 'No Kafka stream configured yet',
+        tone: 'neutral'
+      })),
+      ...inactiveStreams.slice(0, 3).map(config => ({
+        title: config.company_name || config.client_id,
+        detail: 'Kafka stream is currently inactive',
+        tone: 'danger'
+      }))
+    ].slice(0, 5);
+
+    const activeRate = summary.total_clients > 0
+      ? Math.round(((summary.active_clients ?? clientStats.active) / summary.total_clients) * 100)
+      : 0;
+    const configuredRate = summary.total_clients > 0
+      ? Math.round(((summary.configured_clients ?? clientStats.configured) / summary.total_clients) * 100)
+      : 0;
+
+    return {
+      recentClients,
+      attentionItems,
+      activeRate,
+      configuredRate,
+      clientsWithoutStream: clientsWithoutStream.length,
+      inactiveStreams: inactiveStreams.length
+    };
+  }, [clients, kafkaConfigs, summary, clientStats]);
+
+  const pageMeta = {
+    overview: {
+      kicker: 'Gateway Command Center',
+      title: 'Admin Dashboard',
+      subtitle: 'Monitor client onboarding, tenant access, and ingestion readiness across the AuditChain Gateway.'
+    },
+    clients: {
+      kicker: 'Tenant Operations',
+      title: 'Client Registry',
+      subtitle: 'Register, activate, and manage all client systems connected to the AuditChain Gateway.'
+    },
+    kafka: {
+      kicker: 'Stream Operations',
+      title: 'Kafka Configuration',
+      subtitle: 'Manage real-time ingestion streams, broker mapping, and source system connectivity per client.'
+    },
+    users: {
+      kicker: 'Access Control',
+      title: 'Admin User Management',
+      subtitle: 'Kelola akun administrator yang memiliki akses untuk mengatur gateway dashboard.'
+    },
+    profile: {
+      kicker: 'Admin Account',
+      title: 'Admin Profile',
+      subtitle: 'Update your administrator identity and password without leaving the admin workspace.'
+    }
+  }[activeTab] || {
+    kicker: 'Gateway Command Center',
+    title: 'Admin Dashboard',
+    subtitle: 'Monitor AuditChain Gateway operations.'
+  };
 
   const fetchData = useCallback(async () => {
-    try {
-      const [summaryRes, clientsRes, kafkaRes] = await Promise.all([
-        api.get('/admin/summary'),
-        api.get('/admin/clients'),
-        api.get('/admin/kafka-configs')
-      ]);
-      setSummary(summaryRes.data || { total_clients: 0, active_streams: 0 });
-      setClients(clientsRes.data || []);
-      setKafkaConfigs(kafkaRes.data || []);
-    } catch (err) {
-      console.error("Failed to load admin dashboard data:", err);
-      if (err.response?.status === 401) {
-        onLogout();
-      }
+    const [summaryRes, clientsRes, kafkaRes, usersRes] = await Promise.allSettled([
+      api.get('/admin/summary'),
+      api.get('/admin/clients'),
+      api.get('/admin/kafka-configs'),
+      api.get('/admin/users')
+    ]);
+
+    const unauthorized = [summaryRes, clientsRes, kafkaRes, usersRes]
+      .some(result => result.status === 'rejected' && result.reason?.response?.status === 401);
+
+    if (unauthorized) {
+      onLogout();
+      return;
+    }
+
+    if (summaryRes.status === 'fulfilled') {
+      setSummary(summaryRes.value.data || { total_clients: 0, active_streams: 0 });
+    } else {
+      console.error("Failed to load admin summary:", summaryRes.reason);
+    }
+
+    if (clientsRes.status === 'fulfilled') {
+      setClients(clientsRes.value.data || []);
+    } else {
+      console.error("Failed to load admin clients:", clientsRes.reason);
+    }
+
+    if (kafkaRes.status === 'fulfilled') {
+      setKafkaConfigs(kafkaRes.value.data || []);
+    } else {
+      console.error("Failed to load admin Kafka configs:", kafkaRes.reason);
+    }
+
+    if (usersRes.status === 'fulfilled') {
+      setAllUsers(usersRes.value.data || []);
+    } else {
+      console.error("Failed to load admin users:", usersRes.reason);
     }
   }, [onLogout]);
 
@@ -134,6 +297,79 @@ function AdminPage({ onLogout }) {
     const intervalId = setInterval(fetchData, 5000);
     return () => clearInterval(intervalId);
   }, [fetchData]);
+
+  useEffect(() => {
+    if (activeTab !== 'profile') return;
+
+    let cancelled = false;
+    setProfileLoading(true);
+    setProfileError('');
+
+    api.get('/auth/me')
+      .then(res => {
+        if (cancelled) return;
+        setProfileForm(form => ({
+          ...form,
+          full_name: res.data?.full_name || '',
+          username: res.data?.username || clientInfo?.username || '',
+          current_password: '',
+          new_password: '',
+          confirm_password: ''
+        }));
+      })
+      .catch(err => {
+        if (cancelled) return;
+        if (err.response?.status === 401) onLogout();
+        setProfileError(err.response?.data?.error || 'Failed to load admin profile.');
+      })
+      .finally(() => {
+        if (!cancelled) setProfileLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, clientInfo?.username, onLogout]);
+
+  const handleProfileSubmit = useCallback(async (e) => {
+    e.preventDefault();
+    setProfileError('');
+    setProfileSuccess('');
+
+    if (profileForm.new_password && profileForm.new_password !== profileForm.confirm_password) {
+      setProfileError('Password baru dan konfirmasi password belum sama.');
+      return;
+    }
+
+    try {
+      setProfileSaving(true);
+      const tokenStorage = localStorage.getItem('token') ? localStorage : sessionStorage;
+      const res = await api.put('/auth/me', {
+        full_name: profileForm.full_name,
+        username: profileForm.username,
+        current_password: profileForm.current_password,
+        new_password: profileForm.new_password
+      });
+
+      if (res.data?.token) {
+        tokenStorage.setItem('token', res.data.token);
+        setAuthToken(res.data.token);
+      }
+
+      setProfileForm(form => ({
+        ...form,
+        current_password: '',
+        new_password: '',
+        confirm_password: ''
+      }));
+      setProfileSuccess('Admin profile updated successfully.');
+    } catch (err) {
+      if (err.response?.status === 401 && !profileForm.new_password) onLogout();
+      setProfileError(err.response?.data?.error || 'Failed to update admin profile.');
+    } finally {
+      setProfileSaving(false);
+    }
+  }, [profileForm, onLogout]);
 
   const handleToggleClientStatus = useCallback(async (client) => {
     let actionText = client.status === 'active' ? 'deactivate' : 'activate';
@@ -187,6 +423,55 @@ function AdminPage({ onLogout }) {
     fetchClientUsers(client.id);
   }, [fetchClientUsers]);
 
+  const handleOpenUserModal = useCallback(() => {
+    setGlobalUserActionError('');
+    setNewGlobalUser({
+      full_name: '',
+      username: '',
+      password: '',
+      confirm_password: ''
+    });
+    setShowUserModal(true);
+  }, []);
+
+  const handleCreateGlobalUser = useCallback(async (e) => {
+    e.preventDefault();
+    setGlobalUserActionError('');
+
+    if (newGlobalUser.password !== newGlobalUser.confirm_password) {
+      setGlobalUserActionError('Passwords do not match.');
+      return;
+    }
+
+    try {
+      setUserActionLoading(true);
+      await api.post('/admin/users', {
+        full_name: newGlobalUser.full_name,
+        username: newGlobalUser.username,
+        password: newGlobalUser.password
+      });
+      setShowUserModal(false);
+      setNewGlobalUser({
+        full_name: '',
+        username: '',
+        password: '',
+        confirm_password: ''
+      });
+      fetchData();
+    } catch (err) {
+      const status = err.response?.status;
+      const apiMessage = err.response?.data?.error;
+      const fallbackMessage = status === 404
+        ? 'Admin create endpoint is not active yet. Please restart the backend service.'
+        : status
+          ? `Failed to create admin account. Backend returned HTTP ${status}.`
+          : err.message || 'Failed to create admin account.';
+      setGlobalUserActionError(apiMessage || fallbackMessage);
+    } finally {
+      setUserActionLoading(false);
+    }
+  }, [newGlobalUser, fetchData]);
+
   const handleAddClientUser = useCallback(async (e) => {
     e.preventDefault();
     if (!manageUsersClient) return;
@@ -205,13 +490,14 @@ function AdminPage({ onLogout }) {
       setNewUserPassword('');
       setNewUserConfirmPassword('');
       fetchClientUsers(manageUsersClient.id);
+      fetchData();
     } catch (err) {
       console.error("Failed to add client user:", err);
       setUserActionError(err.response?.data?.error || "Failed to create user account.");
     } finally {
       setUserActionLoading(false);
     }
-  }, [manageUsersClient, newUserUsername, newUserPassword, newUserConfirmPassword, fetchClientUsers]);
+  }, [manageUsersClient, newUserUsername, newUserPassword, newUserConfirmPassword, fetchClientUsers, fetchData]);
 
   const handleDeleteClientUser = useCallback(async (user) => {
     if (!window.confirm(`Are you sure you want to delete the user account "${user.username}"?`)) {
@@ -220,17 +506,21 @@ function AdminPage({ onLogout }) {
     try {
       setUserActionLoading(true);
       setUserActionError('');
+      setGlobalUserActionError('');
       await api.delete(`/admin/users/${user.id}`);
       if (manageUsersClient) {
         fetchClientUsers(manageUsersClient.id);
       }
+      fetchData();
     } catch (err) {
       console.error("Failed to delete client user:", err);
-      setUserActionError(err.response?.data?.error || "Failed to delete user account.");
+      const errorMessage = err.response?.data?.error || "Failed to delete user account.";
+      setUserActionError(errorMessage);
+      setGlobalUserActionError(errorMessage);
     } finally {
       setUserActionLoading(false);
     }
-  }, [manageUsersClient, fetchClientUsers]);
+  }, [manageUsersClient, fetchClientUsers, fetchData]);
 
   const handleSubmitClient = useCallback(async (e) => {
     e.preventDefault();
@@ -412,15 +702,15 @@ function AdminPage({ onLogout }) {
     }
   }, [fetchData]);
 
+  const isMobileSidebar = typeof window !== 'undefined' && window.innerWidth <= 768;
+  const isSidebarExpanded = isMobileSidebar ? sidebarOpen : !sidebarCollapsed;
+
   return (
-    <div className="ac-shell">
+    <div className={`ac-shell ac-shell--admin${sidebarCollapsed ? ' ac-shell--sidebar-collapsed' : ''}`}>
 
       {/* ======= TOP NAV ======= */}
       <header className="ac-topnav">
         <div className="ac-topnav__brand">
-          <button className="ac-topnav__menu-btn" onClick={() => setSidebarOpen(o => !o)}>
-            <Icon name="menu" size={22} />
-          </button>
           <img src="/logo/logo-with-background.png" alt="Auditchain Logo" style={{ height: 38, width: 'auto', display: 'block', flexShrink: 0, borderRadius: 6 }} />
           <div>
             <div className="ac-topnav__brand-name">Auditchain Gateway</div>
@@ -432,68 +722,123 @@ function AdminPage({ onLogout }) {
             <span className="ac-topnav__client-dot ac-admin-dot" />
             <span className="ac-topnav__client-label">SUPER ADMIN</span>
           </div>
-          <div className="ac-topnav__user">
-            <div className="ac-topnav__user-info">
-              <div className="ac-topnav__user-name">{clientInfo?.username || 'Admin'}</div>
-              <div className="ac-topnav__user-role">{clientInfo?.role || 'System Administrator'}</div>
-            </div>
-            <div className="ac-topnav__avatar">
-              {(clientInfo?.username || 'A').charAt(0).toUpperCase()}
-            </div>
+          <div className="ac-profile-menu">
+            <button
+              className="ac-topnav__profile-btn"
+              onClick={() => setProfileMenuOpen(open => !open)}
+              title="Open admin menu"
+            >
+              <span className="ac-topnav__avatar ac-topnav__avatar--compact ac-topnav__avatar--admin">{initials}</span>
+              <span className="ac-topnav__profile-copy">
+                <span className="ac-topnav__user-name">{displayName}</span>
+                <span className="ac-topnav__user-role">{clientInfo?.role || 'System Administrator'}</span>
+              </span>
+              <Icon name="chevronDown" size={14} />
+            </button>
+            {profileMenuOpen && (
+              <div className="ac-profile-menu__panel">
+                <button onClick={() => { setProfileMenuOpen(false); handleAdminTabChange('profile'); }}>
+                  <Icon name="user" size={15} />
+                  Profile
+                </button>
+                <button onClick={onLogout} className="ac-profile-menu__danger">
+                  <Icon name="logout" size={15} />
+                  Logout
+                </button>
+              </div>
+            )}
           </div>
-          <button className="ac-topnav__logout" onClick={onLogout}>
-            <Icon name="logout" size={16} />
-            Logout
-          </button>
         </div>
       </header>
 
       {/* ======= SIDEBAR ======= */}
       <aside className={`ac-sidebar${sidebarOpen ? ' ac-sidebar--open' : ''}`}>
         <div className="ac-sidebar__header">
-          <div className="ac-sidebar__section-label">Admin Panel</div>
-          <div className="ac-sidebar__section-sub">Client System Management</div>
+          <div className="ac-sidebar__header-main">
+            <img className="ac-sidebar__compact-logo" src="/logo/Mask group.png" alt="AG" />
+            <div className="ac-sidebar__header-copy">
+              <div className="ac-sidebar__section-label">Admin Panel</div>
+              <div className="ac-sidebar__section-sub">Client System Management</div>
+            </div>
+          </div>
+          <button
+            className="ac-sidebar__toggle-btn"
+            onClick={() => {
+              if (window.innerWidth <= 768) {
+                setSidebarOpen(o => !o);
+              } else {
+                setSidebarCollapsed(o => !o);
+              }
+            }}
+            title={isSidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+            aria-label={isSidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+          >
+            <Icon name={isSidebarExpanded ? 'chevronLeft' : 'chevronRight'} size={18} />
+          </button>
         </div>
         <nav className="ac-sidebar__nav">
           <button
+            className={`ac-sidebar__nav-item${activeTab === 'overview' ? ' ac-sidebar__nav-item--active' : ''}`}
+            onClick={() => { handleAdminTabChange('overview'); setSidebarOpen(false); }}
+            title="Admin Dashboard"
+          >
+            <Icon name="dashboard" size={18} />
+            <span className="ac-sidebar__nav-label">Admin Dashboard</span>
+          </button>
+
+          <button
             className={`ac-sidebar__nav-item${activeTab === 'clients' ? ' ac-sidebar__nav-item--active' : ''}`}
-            onClick={() => { setActiveTab('clients'); setSidebarOpen(false); }}
+            onClick={() => { handleAdminTabChange('clients'); setSidebarOpen(false); }}
+            title="Client Registry"
           >
             <Icon name="database" size={18} />
-            Client Registry
+            <span className="ac-sidebar__nav-label">Client Registry</span>
+          </button>
+
+          <button
+            className={`ac-sidebar__nav-item${activeTab === 'users' ? ' ac-sidebar__nav-item--active' : ''}`}
+            onClick={() => { handleAdminTabChange('users'); setSidebarOpen(false); }}
+            title="User Management"
+          >
+            <Icon name="user" size={18} />
+            <span className="ac-sidebar__nav-label">User Management</span>
           </button>
 
           <button
             className={`ac-sidebar__nav-item${activeTab === 'kafka' ? ' ac-sidebar__nav-item--active' : ''}`}
-            onClick={() => { setActiveTab('kafka'); setSidebarOpen(false); }}
+            onClick={() => { handleAdminTabChange('kafka'); setSidebarOpen(false); }}
+            title="Kafka Configuration"
           >
             <Icon name="link" size={18} />
-            Kafka Configuration
+            <span className="ac-sidebar__nav-label">Kafka Configuration</span>
           </button>
-          <div style={{ height: 1, background: 'var(--color-outline-variant)', margin: '8px 14px' }} />
-          <button className="ac-sidebar__nav-item" onClick={() => navigate('/dashboard')}>
+          <div className="ac-sidebar__divider" />
+          <button className="ac-sidebar__nav-item" onClick={() => navigate('/dashboard')} title="Auditor Dashboard">
             <Icon name="dashboard" size={18} />
-            Auditor Dashboard
+            <span className="ac-sidebar__nav-label">Auditor View</span>
           </button>
         </nav>
         <div className="ac-sidebar__footer">
           {clientInfo && (
             <div className="ac-sidebar__identity-card">
-              <div className="ac-sidebar__identity-label">Session Identity</div>
               <div className="ac-sidebar__identity-user">
                 <span className="ac-sidebar__identity-avatar">
-                  {clientInfo.username.charAt(0).toUpperCase()}
+                  {initials}
                 </span>
                 <div className="ac-sidebar__identity-details">
-                  <span className="ac-sidebar__identity-name" title={clientInfo.username}>{clientInfo.username}</span>
-                  <span className="ac-sidebar__identity-role">{clientInfo.role}</span>
+                  <span className="ac-sidebar__identity-name" title={displayName}>{displayName}</span>
+                  <span className="ac-sidebar__identity-role">{clientInfo.role?.toLowerCase() === 'admin' ? 'Super Admin' : clientInfo.role}</span>
                 </div>
+              </div>
+              <div className="ac-sidebar__identity-client">
+                <Icon name="database" size={14} />
+                <span>{clientInfo.client_id ? 'Client Workspace' : 'Admin Dashboard'}</span>
               </div>
             </div>
           )}
-          <button className="ac-sidebar__nav-item" style={{ marginTop: 6 }} onClick={onLogout}>
+          <button className="ac-sidebar__nav-item ac-sidebar__nav-item--logout" style={{ marginTop: 6 }} onClick={onLogout} title="Logout">
             <Icon name="logout" size={18} />
-            Logout
+            <span className="ac-sidebar__nav-label">Logout</span>
           </button>
         </div>
       </aside>
@@ -515,24 +860,190 @@ function AdminPage({ onLogout }) {
             <div className="ac-hero__pattern" />
             <div className="ac-hero__content">
               <div className="ac-hero__left">
-                <h1 className="ac-hero__title">⚙️ Admin Panel</h1>
-                <p className="ac-hero__subtitle">
-                  Register and manage all client systems connected to the AuditChain Gateway.
-                  Each client is provisioned with a unique API Key, Kafka stream configuration, and isolated database storage.
-                </p>
+                <span className="ac-page-kicker ac-page-kicker--admin">{pageMeta.kicker}</span>
+                <h1 className="ac-hero__title">{pageMeta.title}</h1>
+                <p className="ac-hero__subtitle">{pageMeta.subtitle}</p>
               </div>
-              <div style={{ display: 'flex', gap: 12, flexShrink: 0 }}>
+              <div className="ac-admin-hero-stats">
                 <div className="ac-admin-hero-stat">
                   <div className="ac-admin-hero-stat__val">{summary.total_clients}</div>
                   <div className="ac-admin-hero-stat__label">Registered Clients</div>
                 </div>
                 <div className="ac-admin-hero-stat">
-                  <div className="ac-admin-hero-stat__val">{summary.active_streams}</div>
-                  <div className="ac-admin-hero-stat__label">Active Streams</div>
+                  <div className="ac-admin-hero-stat__val">{userStats.admins || adminUsers.length || 0}</div>
+                  <div className="ac-admin-hero-stat__label">Admin Accounts</div>
                 </div>
               </div>
             </div>
           </section>
+
+          {activeTab === 'overview' && (
+            <>
+              <section className="ac-admin-overview-grid">
+                <div className="ac-admin-overview-stat">
+                  <span className="ac-admin-overview-stat__icon ac-admin-overview-stat__icon--blue">
+                    <Icon name="database" size={20} />
+                  </span>
+                  <div>
+                    <div className="ac-admin-overview-stat__label">Registered Clients</div>
+                    <div className="ac-admin-overview-stat__value">{summary.total_clients || clients.length}</div>
+                    <div className="ac-admin-overview-stat__sub">Total tenant systems onboarded</div>
+                  </div>
+                </div>
+                <div className="ac-admin-overview-stat">
+                  <span className="ac-admin-overview-stat__icon ac-admin-overview-stat__icon--teal">
+                    <Icon name="shield" size={20} />
+                  </span>
+                  <div>
+                    <div className="ac-admin-overview-stat__label">Active Clients</div>
+                    <div className="ac-admin-overview-stat__value">{clientStats.active}</div>
+                    <div className="ac-admin-overview-stat__sub">{overviewData.activeRate}% tenants allowed to operate</div>
+                  </div>
+                </div>
+                <div className="ac-admin-overview-stat">
+                  <span className="ac-admin-overview-stat__icon ac-admin-overview-stat__icon--amber">
+                    <Icon name="link" size={20} />
+                  </span>
+                  <div>
+                    <div className="ac-admin-overview-stat__label">Ingestion Ready</div>
+                    <div className="ac-admin-overview-stat__value">{overviewData.configuredRate}%</div>
+                    <div className="ac-admin-overview-stat__sub">{clientStats.configured}/{summary.total_clients || clients.length} clients have Kafka setup</div>
+                  </div>
+                </div>
+                <div className="ac-admin-overview-stat">
+                  <span className="ac-admin-overview-stat__icon ac-admin-overview-stat__icon--coral">
+                    <Icon name="warn" size={20} />
+                  </span>
+                  <div>
+                    <div className="ac-admin-overview-stat__label">Needs Setup</div>
+                    <div className="ac-admin-overview-stat__value">{overviewData.attentionItems.length}</div>
+                    <div className="ac-admin-overview-stat__sub">{overviewData.clientsWithoutStream} missing stream, {overviewData.inactiveStreams} inactive</div>
+                  </div>
+                </div>
+              </section>
+
+              <section className="ac-admin-dashboard-layout">
+                <div className="ac-admin-command-card">
+                  <div className="ac-admin-section-head">
+                    <div>
+                      <h2>Quick Actions</h2>
+                      <p>Common setup actions for onboarding clients and operating gateway access.</p>
+                    </div>
+                  </div>
+                  <div className="ac-admin-quick-grid">
+                    <button onClick={() => setShowClientModal(true)}>
+                      <Icon name="database" size={19} />
+                      <span>
+                        <strong>Register Client</strong>
+                        <small>Create tenant and API key</small>
+                      </span>
+                    </button>
+                    <button onClick={() => setShowKafkaModal(true)}>
+                      <Icon name="link" size={19} />
+                      <span>
+                        <strong>Configure Stream</strong>
+                        <small>Configure Kafka ingestion</small>
+                      </span>
+                    </button>
+                    <button onClick={() => handleAdminTabChange('users')}>
+                      <Icon name="user" size={19} />
+                      <span>
+                        <strong>Manage Admins</strong>
+                        <small>Create administrator accounts</small>
+                      </span>
+                    </button>
+                    <button onClick={() => handleAdminTabChange('clients')}>
+                      <Icon name="warn" size={19} />
+                      <span>
+                        <strong>Review Setup</strong>
+                        <small>Find clients missing ingestion</small>
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="ac-admin-command-card">
+                  <div className="ac-admin-section-head">
+                    <div>
+                      <h2>Operational Attention</h2>
+                      <p>Clients that still need setup before audit logs can flow reliably.</p>
+                    </div>
+                    <span className="ac-admin-attention-count">{overviewData.attentionItems.length}</span>
+                  </div>
+                  <div className="ac-admin-attention-list">
+                    {overviewData.attentionItems.length === 0 ? (
+                      <div className="ac-admin-empty-state">
+                        <Icon name="checkmark" size={18} />
+                        All tenants look ready.
+                      </div>
+                    ) : (
+                      overviewData.attentionItems.map((item, index) => (
+                        <div className={`ac-admin-attention-item ac-admin-attention-item--${item.tone}`} key={`${item.title}-${index}`}>
+                          <div>
+                            <strong>{item.title}</strong>
+                            <span>{item.detail}</span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </section>
+
+              <section className="ac-admin-dashboard-layout ac-admin-dashboard-layout--wide-left">
+                <div className="ac-admin-command-card">
+                  <div className="ac-admin-section-head">
+                    <div>
+                      <h2>Recent Clients</h2>
+                      <p>Latest tenants added to the gateway.</p>
+                    </div>
+                    <button className="ac-admin-link-btn" onClick={() => handleAdminTabChange('clients')}>View Registry</button>
+                  </div>
+                  <div className="ac-admin-recent-list">
+                    {overviewData.recentClients.length === 0 ? (
+                      <div className="ac-admin-empty-state">No clients registered yet.</div>
+                    ) : (
+                      overviewData.recentClients.map(client => (
+                        <button className="ac-admin-recent-client" key={client.id} onClick={() => handleAdminTabChange('clients')}>
+                          <span className="ac-admin-client-cell__avatar">{client.company_name?.charAt(0)?.toUpperCase() || 'C'}</span>
+                          <span>
+                            <strong>{client.company_name}</strong>
+                            <small>{client.id}</small>
+                          </span>
+                          <span className={`ac-dot-status${client.status === 'active' ? ' ac-dot-status--active' : client.status === 'pending_setup' ? ' ac-dot-status--pending' : ' ac-dot-status--inactive'}`}>
+                            {client.status || 'inactive'}
+                          </span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="ac-admin-command-card">
+                  <div className="ac-admin-section-head">
+                    <div>
+                      <h2>Stream Health</h2>
+                      <p>Kafka ingestion coverage across registered clients.</p>
+                    </div>
+                  </div>
+                  <div className="ac-admin-health-stack">
+                    <div>
+                      <span>Clients with stream</span>
+                      <strong>{clientStats.configured}/{summary.total_clients || clients.length}</strong>
+                    </div>
+                    <div>
+                      <span>Active streams</span>
+                      <strong>{summary.active_streams || 0}/{summary.total_streams || kafkaConfigs.length}</strong>
+                    </div>
+                    <div>
+                      <span>Missing stream</span>
+                      <strong>{overviewData.clientsWithoutStream}</strong>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </>
+          )}
 
           {/* ===== TAB: DAFTAR KLIEN ===== */}
           {activeTab === 'clients' && (
@@ -569,6 +1080,8 @@ function AdminPage({ onLogout }) {
                     <tr>
                       <th>Company Name</th>
                       <th>Status</th>
+                      <th>DB Engine</th>
+                      <th>Connector Status</th>
                       <th>Field Mapping</th>
                       <th>Registration Date</th>
                       <th>Actions</th>
@@ -576,10 +1089,13 @@ function AdminPage({ onLogout }) {
                   </thead>
                   <tbody>
                     {clients.length === 0 && (
-                      <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--color-outline)', padding: '32px 0' }}>No registered clients found.</td></tr>
+                      <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--color-outline)', padding: '32px 0' }}>No registered clients found.</td></tr>
                     )}
                     {clients.map(client => {
                       const matchingKafka = kafkaConfigs.find(k => k.client_id === client.id);
+                      const dbEngine = client.db_engine || matchingKafka?.db_engine || '';
+                      const connectorStatus = client.connector_status || 'unknown';
+                      
                       return (
                         <tr key={client.id}>
                           <td>
@@ -605,6 +1121,12 @@ function AdminPage({ onLogout }) {
                             </span>
                           </td>
                           <td>
+                            <DBEngineBadge engine={dbEngine} />
+                          </td>
+                          <td>
+                            <ConnectorStatusBadge status={connectorStatus} />
+                          </td>
+                          <td>
                             <div className="ac-field-map">
                               <div className="ac-field-map__item"><span className="ac-field-map__key">actor</span> {client.actor_field || '—'}</div>
                               {client.fallback_actor_field && (
@@ -616,15 +1138,14 @@ function AdminPage({ onLogout }) {
                           <td className="ac-admin-actions-cell">
                             <div className="ac-admin-action-group">
                               <button
-                                className={`ac-admin-action-btn ${client.status === 'active' ? 'ac-admin-action-btn--warning' : 'ac-admin-action-btn--success'}`}
+                                className={`ac-admin-action-btn ac-admin-action-btn--icon ${client.status === 'active' ? 'ac-admin-action-btn--warning' : 'ac-admin-action-btn--success'}`}
                                 onClick={() => handleToggleClientStatus(client)}
                                 title={client.status === 'active' ? 'Block client access' : 'Activate client access'}
                               >
                                 <Icon name={client.status === 'active' ? 'lock' : 'shield'} size={14} />
-                                <span>{client.status === 'active' ? 'Block' : 'Activate'}</span>
                               </button>
                               <button
-                                className="ac-admin-action-btn ac-admin-action-btn--neutral"
+                                className="ac-admin-action-btn ac-admin-action-btn--neutral ac-admin-action-btn--icon"
                                 onClick={() => {
                                   setSelectedQuickSetupClient(client);
                                   setShowQuickSetupModal(true);
@@ -632,23 +1153,20 @@ function AdminPage({ onLogout }) {
                                 title="View 1-Command Setup Guide"
                               >
                                 <Icon name="zap" size={14} />
-                                <span>Setup</span>
                               </button>
                               <button
-                                className="ac-admin-action-btn ac-admin-action-btn--agent"
+                                className="ac-admin-action-btn ac-admin-action-btn--agent ac-admin-action-btn--icon"
                                 onClick={() => handleOpenAgentModal(client)}
                                 title="Configure local Agent"
                               >
                                 <Icon name="link" size={14} />
-                                <span>Agent</span>
                               </button>
                               <button
-                                className="ac-admin-action-btn ac-admin-action-btn--primary"
+                                className="ac-admin-action-btn ac-admin-action-btn--primary ac-admin-action-btn--icon"
                                 onClick={() => handleManageUsers(client)}
                                 title="Manage client users"
                               >
                                 <Icon name="user" size={14} />
-                                <span>Users</span>
                               </button>
                               <button
                                 className="ac-admin-action-btn ac-admin-action-btn--danger ac-admin-action-btn--icon"
@@ -658,6 +1176,115 @@ function AdminPage({ onLogout }) {
                                 <Icon name="x" size={14} />
                               </button>
                             </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+
+          {activeTab === 'users' && (
+            <section className="ac-card ac-admin-registry-card" style={{ animation: 'fadeIn 0.3s ease' }}>
+              <div className="ac-card__header ac-admin-registry-header">
+                <div className="ac-admin-registry-header__copy">
+                  <div className="ac-card__title">Admin User Management</div>
+                  <div className="ac-admin-card-sub">Kelola akun admin yang bisa mengatur client, Kafka stream, dan akses dashboard.</div>
+                </div>
+                <div className="ac-admin-registry-header__meta">
+                  <span className="ac-admin-mini-stat">
+                    <strong>{userStats.admins}</strong>
+                    Admins
+                  </span>
+                </div>
+                <button className="ac-btn-primary ac-admin-register-btn" onClick={handleOpenUserModal}>
+                  <Icon name="user" size={15} />
+                  Add Admin
+                </button>
+              </div>
+
+              {globalUserActionError && (
+                <div className="ac-admin-inline-alert">
+                  <Icon name="warn" size={15} />
+                  {globalUserActionError}
+                </div>
+              )}
+
+              <div className="ac-admin-user-guidance">
+                <div>
+                  <strong>Khusus akun admin</strong>
+                  <span>Halaman ini hanya menampilkan dan membuat akun administrator.</span>
+                </div>
+                <div>
+                  <strong>Akun auditor</strong>
+                  <span>Akun auditor dibuat dari menu Client Registry pada client masing-masing.</span>
+                </div>
+              </div>
+
+              <div className="ac-table-wrap">
+                <table className="ac-table ac-admin-user-table">
+                  <thead>
+                    <tr>
+                      <th>User</th>
+                      <th>Role</th>
+                      <th>Workspace</th>
+                      <th>Created</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {adminUsers.length === 0 && (
+                      <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--color-outline)', padding: '32px 0' }}>No admin accounts registered yet.</td></tr>
+                    )}
+                    {adminUsers.map(user => {
+                      const userDisplayName = user.full_name || user.username || 'User';
+                      const userInitials = userDisplayName
+                        .split(' ')
+                        .map(part => part.charAt(0))
+                        .join('')
+                        .slice(0, 2)
+                        .toUpperCase();
+                      const isCurrentUser = user.id === clientInfo?.user_id;
+
+                      return (
+                        <tr key={user.id}>
+                          <td>
+                            <div className="ac-admin-user-cell">
+                              <span className="ac-admin-user-avatar ac-admin-user-avatar--admin">
+                                {userInitials}
+                              </span>
+                              <span className="ac-admin-user-cell__copy">
+                                <strong>{userDisplayName}</strong>
+                                <small>{user.username}</small>
+                              </span>
+                            </div>
+                          </td>
+                          <td>
+                            <span className="ac-admin-role-badge ac-admin-role-badge--admin">
+                              <Icon name="shield" size={13} />
+                              Admin
+                            </span>
+                          </td>
+                          <td>
+                            <div className="ac-admin-workspace-cell">
+                              <strong>{user.company_name || 'Tidak terhubung ke klien'}</strong>
+                              <small>{user.client_id || 'Admin dashboard'}</small>
+                            </div>
+                          </td>
+                          <td className="ac-table__time">{formatTimestamp(user.created_at)}</td>
+                          <td className="ac-admin-actions-cell">
+                            <button
+                              className="ac-admin-action-btn ac-admin-action-btn--danger"
+                              onClick={() => handleDeleteClientUser(user)}
+                              disabled={userActionLoading || isCurrentUser}
+                              title={isCurrentUser ? 'Current admin account cannot delete itself' : 'Delete user account'}
+                            >
+                              <Icon name="x" size={14} />
+                              <span>{isCurrentUser ? 'Current User' : 'Delete'}</span>
+                            </button>
                           </td>
                         </tr>
                       );
@@ -679,7 +1306,8 @@ function AdminPage({ onLogout }) {
                   <div className="ac-admin-card-sub">Kafka consumer configurations per client for real-time audit log ingestion</div>
                 </div>
                 <button className="ac-btn-primary" onClick={() => setShowKafkaModal(true)}>
-                  + Add Configuration
+                  <Icon name="link" size={15} />
+                  Add Configuration
                 </button>
               </div>
               <div className="ac-table-wrap">
@@ -729,7 +1357,7 @@ function AdminPage({ onLogout }) {
                             style={{ padding: '4px 10px', fontSize: '11px' }}
                             onClick={() => handleDeleteKafkaConfig(cfg.id, cfg.company_name)}
                           >
-                            🗑️ Delete
+                            Delete
                           </button>
                         </td>
                       </tr>
@@ -737,6 +1365,125 @@ function AdminPage({ onLogout }) {
                   </tbody>
                 </table>
               </div>
+            </section>
+          )}
+
+          {activeTab === 'profile' && (
+            <section className="ac-admin-profile-layout">
+              <form className="ac-profile-card ac-profile-form" onSubmit={handleProfileSubmit}>
+                <div className="ac-profile-card__header">
+                  <div>
+                    <h2>Admin Profile</h2>
+                    <p>Manage your administrator identity and login credentials.</p>
+                  </div>
+                  <span className="ac-profile-card__icon ac-profile-card__icon--teal">
+                    <Icon name="shield" size={18} />
+                  </span>
+                </div>
+
+                {profileLoading ? (
+                  <div className="ac-profile-loading">
+                    <Icon name="spinner" size={18} />
+                    Loading admin profile...
+                  </div>
+                ) : (
+                  <>
+                    {profileError && <div className="ac-profile-alert ac-profile-alert--error">{profileError}</div>}
+                    {profileSuccess && <div className="ac-profile-alert ac-profile-alert--success">{profileSuccess}</div>}
+
+                    <label className="ac-form-field">
+                      <span className="ac-form-label">Full Name</span>
+                      <input
+                        className="ac-form-input ac-form-input--lg"
+                        value={profileForm.full_name}
+                        onChange={e => setProfileForm(form => ({ ...form, full_name: e.target.value }))}
+                        placeholder="Admin display name"
+                      />
+                    </label>
+
+                    <label className="ac-form-field">
+                      <span className="ac-form-label">Username</span>
+                      <input
+                        className="ac-form-input ac-form-input--lg"
+                        value={profileForm.username}
+                        onChange={e => setProfileForm(form => ({ ...form, username: e.target.value }))}
+                        placeholder="Admin username"
+                        required
+                        minLength={4}
+                      />
+                    </label>
+
+                    <div className="ac-profile-password-grid">
+                      <label className="ac-form-field">
+                        <span className="ac-form-label">Current Password</span>
+                        <input
+                          className="ac-form-input ac-form-input--lg"
+                          type="password"
+                          value={profileForm.current_password}
+                          onChange={e => setProfileForm(form => ({ ...form, current_password: e.target.value }))}
+                          placeholder="Required for password change"
+                        />
+                      </label>
+
+                      <label className="ac-form-field">
+                        <span className="ac-form-label">New Password</span>
+                        <input
+                          className="ac-form-input ac-form-input--lg"
+                          type="password"
+                          value={profileForm.new_password}
+                          onChange={e => setProfileForm(form => ({ ...form, new_password: e.target.value }))}
+                          placeholder="Minimum 6 characters"
+                        />
+                      </label>
+                    </div>
+
+                    <label className="ac-form-field">
+                      <span className="ac-form-label">Confirm New Password</span>
+                      <input
+                        className="ac-form-input ac-form-input--lg"
+                        type="password"
+                        value={profileForm.confirm_password}
+                        onChange={e => setProfileForm(form => ({ ...form, confirm_password: e.target.value }))}
+                        placeholder="Repeat new password"
+                      />
+                    </label>
+
+                    <div className="ac-profile-actions">
+                      <button type="button" className="ac-btn-ghost-action" onClick={() => handleAdminTabChange('overview')}>
+                        Back to Overview
+                      </button>
+                      <button type="submit" className="ac-btn-primary" disabled={profileSaving}>
+                        <Icon name={profileSaving ? 'spinner' : 'checkmark'} size={15} />
+                        {profileSaving ? 'Saving...' : 'Save Changes'}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </form>
+
+              <aside className="ac-profile-card ac-profile-summary">
+                <div className="ac-profile-card__header">
+                  <div>
+                    <h2>Admin Scope</h2>
+                    <p>Current privileges in this gateway session.</p>
+                  </div>
+                  <span className="ac-profile-card__icon">
+                    <Icon name="user" size={18} />
+                  </span>
+                </div>
+                <div className="ac-profile-summary__row">
+                  <span>Role</span>
+                  <strong>{clientInfo?.role || 'Admin'}</strong>
+                </div>
+                <div className="ac-profile-summary__row">
+                  <span>Managed Clients</span>
+                  <strong>{summary.total_clients || clients.length}</strong>
+                </div>
+                <div className="ac-profile-summary__row">
+                  <span>Admin Accounts</span>
+                  <strong>{userStats.admins || adminUsers.length || 0}</strong>
+                </div>
+              </aside>
             </section>
           )}
 
@@ -1052,6 +1799,127 @@ function AdminPage({ onLogout }) {
                 <div className="ac-form-actions">
                   <button type="button" className="ac-btn-ghost-action" onClick={() => setShowKafkaModal(false)}>Cancel</button>
                   <button type="submit" className="ac-btn-primary">Add Configuration</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== MODAL: CREATE GLOBAL USER ===== */}
+      {showUserModal && (
+        <div className="ac-modal-overlay" onClick={() => setShowUserModal(false)}>
+          <div className="ac-modal ac-modal--user-register" onClick={e => e.stopPropagation()}>
+            <div className="ac-modal__header">
+              <div>
+                <div className="ac-modal__title">Create Admin Account</div>
+                <div className="ac-modal__subtitle">Buat akun administrator untuk mengelola dashboard gateway</div>
+              </div>
+              <button className="ac-modal__close" onClick={() => setShowUserModal(false)}>&times;</button>
+            </div>
+            <div className="ac-modal__body">
+              <form className="ac-register-form" onSubmit={handleCreateGlobalUser}>
+                {globalUserActionError && (
+                  <div className="ac-admin-inline-alert ac-admin-inline-alert--inside">
+                    <Icon name="warn" size={15} />
+                    {globalUserActionError}
+                  </div>
+                )}
+
+                <section className="ac-form-section">
+                  <div className="ac-form-section__head">
+                    <div className="ac-form-section__icon">
+                      <Icon name="user" size={17} />
+                    </div>
+                    <div>
+                      <div className="ac-form-section__title">Account Identity</div>
+                      <div className="ac-form-section__subtitle">Credentials used by this user to access the gateway portal.</div>
+                    </div>
+                  </div>
+                  <div className="ac-form-grid ac-form-grid--register">
+                    <div className="ac-form-field">
+                      <label className="ac-form-label">Full Name</label>
+                      <input
+                        className="ac-form-input ac-form-input--lg"
+                        placeholder="e.g. Audit Manager"
+                        value={newGlobalUser.full_name}
+                        onChange={e => setNewGlobalUser(f => ({ ...f, full_name: e.target.value }))}
+                        disabled={userActionLoading}
+                      />
+                    </div>
+                    <div className="ac-form-field">
+                      <label className="ac-form-label">Username <span style={{ color: 'var(--color-error)' }}>*</span></label>
+                      <input
+                        className="ac-form-input ac-form-input--lg"
+                        required
+                        minLength={4}
+                        placeholder="e.g. admin_ops"
+                        value={newGlobalUser.username}
+                        onChange={e => setNewGlobalUser(f => ({ ...f, username: e.target.value }))}
+                        disabled={userActionLoading}
+                      />
+                    </div>
+                    <div className="ac-form-field">
+                      <label className="ac-form-label">Password <span style={{ color: 'var(--color-error)' }}>*</span></label>
+                      <input
+                        className="ac-form-input ac-form-input--lg"
+                        type="password"
+                        required
+                        minLength={6}
+                        placeholder="Minimum 6 characters"
+                        value={newGlobalUser.password}
+                        onChange={e => setNewGlobalUser(f => ({ ...f, password: e.target.value }))}
+                        disabled={userActionLoading}
+                      />
+                    </div>
+                    <div className="ac-form-field">
+                      <label className="ac-form-label">Confirm Password <span style={{ color: 'var(--color-error)' }}>*</span></label>
+                      <input
+                        className="ac-form-input ac-form-input--lg"
+                        type="password"
+                        required
+                        minLength={6}
+                        placeholder="Repeat password"
+                        value={newGlobalUser.confirm_password}
+                        onChange={e => setNewGlobalUser(f => ({ ...f, confirm_password: e.target.value }))}
+                        disabled={userActionLoading}
+                      />
+                    </div>
+                  </div>
+                </section>
+
+                <section className="ac-form-section">
+                  <div className="ac-form-section__head">
+                    <div className="ac-form-section__icon ac-form-section__icon--teal">
+                      <Icon name="shield" size={17} />
+                    </div>
+                    <div>
+                      <div className="ac-form-section__title">Access</div>
+                      <div className="ac-form-section__subtitle">Akun ini hanya dibuat sebagai administrator dashboard.</div>
+                    </div>
+                  </div>
+                  <div className="ac-admin-role-preview">
+                    <span className="ac-admin-role-badge ac-admin-role-badge--admin">
+                      <Icon name="shield" size={13} />
+                      Admin
+                    </span>
+                    <div>
+                      <strong>Administrator</strong>
+                      <small>Dapat mengelola client, Kafka stream, dan akun admin.</small>
+                    </div>
+                  </div>
+                  <div className="ac-register-form__note">
+                    <Icon name="lock" size={15} />
+                    Admin role grants gateway-wide access. Keep this limited to trusted gateway operators.
+                  </div>
+                </section>
+
+                <div className="ac-form-actions ac-register-form__actions">
+                  <button type="button" className="ac-btn-ghost-action" onClick={() => setShowUserModal(false)}>Cancel</button>
+                  <button type="submit" className="ac-btn-primary" disabled={userActionLoading}>
+                    <Icon name={userActionLoading ? 'spinner' : 'checkmark'} size={15} />
+                    {userActionLoading ? 'Saving...' : 'Create Admin'}
+                  </button>
                 </div>
               </form>
             </div>

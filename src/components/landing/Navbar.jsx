@@ -17,7 +17,7 @@ function Navbar({
       <div className="lp-nav-inner">
         {/* Logo */}
         <div className="lp-nav-logo">
-          <img alt="Auditchain Logo" className="lp-nav-logo-img" src="/logo/logo-with-background.png" style={{ borderRadius: 6 }} />
+          <img alt="Auditchain Logo" className="lp-nav-logo-img" src="/logo/logo-ag-new.png" style={{ borderRadius: 6 }} />
           <div className="lp-nav-brand-text">
             <span className="lp-nav-brand-name">
               Auditchain <span className="lp-nav-gateway-badge">GATEWAY</span>

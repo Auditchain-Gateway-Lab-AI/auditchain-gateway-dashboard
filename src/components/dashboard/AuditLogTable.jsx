@@ -3,6 +3,7 @@ import Icon from '../common/Icon';
 import ActionBadge from '../common/ActionBadge';
 import VerificationModal from './VerificationModal';
 import { formatTimestamp, renderMetadataCell } from '../../utils/formatters';
+import DBEngineBadge from '../common/DBEngineBadge';
 
 function AuditLogTable({
   paginatedLogs = [],
@@ -16,6 +17,8 @@ function AuditLogTable({
   setSortOrder,
   filterTable = '',
   setFilterTable,
+  filterDbEngine = 'ALL',
+  setFilterDbEngine,
   tableNames = [],
   rowsPerPage = 10,
   setRowsPerPage,
@@ -47,6 +50,8 @@ function AuditLogTable({
   const [isTablePickerOpen, setIsTablePickerOpen] = React.useState(false);
   const [tableSearch, setTableSearch] = React.useState('');
   const tablePickerRef = React.useRef(null);
+  const fromDateInputRef = React.useRef(null);
+  const toDateInputRef = React.useRef(null);
   const isSortEnabled = Boolean(filterDateFrom && filterDateTo);
 
   const filteredTableNames = React.useMemo(() => {
@@ -71,6 +76,30 @@ function AuditLogTable({
     if (setCurrentPage) setCurrentPage(1);
     setIsTablePickerOpen(false);
     setTableSearch('');
+  };
+
+  const openDatePicker = (inputRef) => {
+    const input = inputRef.current;
+    if (!input) return;
+
+    input.focus({ preventScroll: true });
+
+    if (typeof input.showPicker === 'function') {
+      try {
+        input.showPicker();
+        return;
+      } catch {
+        // Fall through to click for browsers that restrict showPicker.
+      }
+    }
+
+    input.click();
+  };
+
+  const handleDateShellKeyDown = (event, inputRef) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    openDatePicker(inputRef);
   };
 
   const handleCopyResults = async () => {
@@ -185,6 +214,18 @@ function AuditLogTable({
             </div>
 
             <div className="ac-filter-select">
+              <select className="ac-select ac-select--filter" value={filterDbEngine} onChange={e => setFilterDbEngine && setFilterDbEngine(e.target.value)}>
+                <option value="ALL">All Engines</option>
+                <option value="postgres">Postgres</option>
+                <option value="mongodb">MongoDB</option>
+                <option value="mysql">MySQL</option>
+              </select>
+              <span className="ac-filter-select__chevron">
+                <Icon name="chevronDown" size={15} />
+              </span>
+            </div>
+
+            <div className="ac-filter-select">
               <select className="ac-select ac-select--filter" value={filterVerification} onChange={e => setFilterVerification(e.target.value)}>
                 <option value="ALL">All Status</option>
                 <option value="VALID">VALID</option>
@@ -241,25 +282,43 @@ function AuditLogTable({
           <div className="ac-date-range">
             <label className="ac-date-field">
               <span className="ac-date-field__label">From</span>
-              <span className="ac-date-input-shell">
+              <span
+                className="ac-date-input-shell"
+                role="button"
+                tabIndex={0}
+                aria-label="Open from date picker"
+                onClick={() => openDatePicker(fromDateInputRef)}
+                onKeyDown={event => handleDateShellKeyDown(event, fromDateInputRef)}
+              >
                 <Icon name="calendar" size={14} />
                 <input
+                  ref={fromDateInputRef}
                   type="datetime-local"
                   className="ac-date-input"
                   value={tempDateFrom || ''}
                   onChange={e => setTempDateFrom(e.target.value)}
+                  tabIndex={-1}
                 />
               </span>
             </label>
             <label className="ac-date-field">
               <span className="ac-date-field__label">To</span>
-              <span className="ac-date-input-shell">
+              <span
+                className="ac-date-input-shell"
+                role="button"
+                tabIndex={0}
+                aria-label="Open to date picker"
+                onClick={() => openDatePicker(toDateInputRef)}
+                onKeyDown={event => handleDateShellKeyDown(event, toDateInputRef)}
+              >
                 <Icon name="calendar" size={14} />
                 <input
+                  ref={toDateInputRef}
                   type="datetime-local"
                   className="ac-date-input"
                   value={tempDateTo || ''}
                   onChange={e => setTempDateTo(e.target.value)}
+                  tabIndex={-1}
                 />
               </span>
             </label>
@@ -389,6 +448,7 @@ function AuditLogTable({
               <th>Actor</th>
               <th>Action</th>
               <th>Resource</th>
+              <th>DB Engine</th>
               <th>Metadata</th>
               <th>Source System</th>
               <th>Verification</th>
@@ -397,7 +457,7 @@ function AuditLogTable({
           <tbody>
             {paginatedLogs.length === 0 ? (
               <tr>
-                <td colSpan={7}>
+                <td colSpan={8}>
                   <div className="ac-empty">
                     <div className="ac-empty__icon">
                       <Icon name="calendar" size={30} />
@@ -424,6 +484,7 @@ function AuditLogTable({
                   <td className="ac-table__actor">{log.actor}</td>
                   <td><ActionBadge action={log.action} /></td>
                   <td className="ac-table__mono">{log.source_table || log.resource || '-'}</td>
+                  <td><DBEngineBadge engine={log.db_engine} /></td>
                   <td onClick={e => e.stopPropagation()}>{renderMetadataCell(log.metadata)}</td>
                   <td className="ac-table__source-system">{log.source_system || '-'}</td>
                   <td onClick={e => e.stopPropagation()}>
