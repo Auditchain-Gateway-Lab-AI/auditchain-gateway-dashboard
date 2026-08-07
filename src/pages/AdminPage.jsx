@@ -66,19 +66,28 @@ function AdminPage({ onLogout }) {
   }, []);
 
   const handleCopySetupCmd = useCallback((cmdText) => {
-    navigator.clipboard.writeText(cmdText).then(() => {
-      setSetupCmdCopied(true);
-      setTimeout(() => setSetupCmdCopied(false), 2000);
-    }).catch(() => {
+    const fallbackCopy = () => {
       const el = document.createElement('textarea');
       el.value = cmdText;
+      el.setAttribute('readonly', '');
+      el.style.position = 'absolute';
+      el.style.left = '-9999px';
       document.body.appendChild(el);
       el.select();
       document.execCommand('copy');
       document.body.removeChild(el);
       setSetupCmdCopied(true);
       setTimeout(() => setSetupCmdCopied(false), 2000);
-    });
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(cmdText).then(() => {
+        setSetupCmdCopied(true);
+        setTimeout(() => setSetupCmdCopied(false), 2000);
+      }).catch(fallbackCopy);
+    } else {
+      fallbackCopy();
+    }
   }, []);
 
   // Agent Lapis 3 Modal states
@@ -573,19 +582,28 @@ function AdminPage({ onLogout }) {
   }, [fetchData]);
 
   const handleCopyApiKey = useCallback(() => {
-    navigator.clipboard.writeText(newApiKey).then(() => {
-      setApiKeyCopied(true);
-      setTimeout(() => setApiKeyCopied(false), 2000);
-    }).catch(() => {
+    const fallbackCopy = () => {
       const el = document.createElement('textarea');
       el.value = newApiKey;
+      el.setAttribute('readonly', '');
+      el.style.position = 'absolute';
+      el.style.left = '-9999px';
       document.body.appendChild(el);
       el.select();
       document.execCommand('copy');
       document.body.removeChild(el);
       setApiKeyCopied(true);
       setTimeout(() => setApiKeyCopied(false), 2000);
-    });
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(newApiKey).then(() => {
+        setApiKeyCopied(true);
+        setTimeout(() => setApiKeyCopied(false), 2000);
+      }).catch(fallbackCopy);
+    } else {
+      fallbackCopy();
+    }
   }, [newApiKey]);
 
   // ======= AGENT LAPIS 3 HANDLERS =======
