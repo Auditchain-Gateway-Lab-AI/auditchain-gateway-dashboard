@@ -4356,6 +4356,10 @@
 
 .ac-sidebar__header-copy {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
 }
 
 .ac-sidebar__toggle-btn {
@@ -4406,7 +4410,7 @@
 }
 
 .ac-shell--user .ac-sidebar__header-main .ac-sidebar__compact-logo {
-  display: block;
+  display: none;
 }
 
 .ac-shell--user .ac-sidebar__nav {
@@ -5097,7 +5101,7 @@
 }
 
 .ac-shell--admin .ac-sidebar__header-main .ac-sidebar__compact-logo {
-  display: block;
+  display: none;
 }
 
 .ac-shell--admin .ac-sidebar__toggle-btn {
