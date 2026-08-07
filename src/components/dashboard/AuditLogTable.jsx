@@ -49,7 +49,6 @@ function AuditLogTable({
   const tablePickerRef = React.useRef(null);
   const fromDateInputRef = React.useRef(null);
   const toDateInputRef = React.useRef(null);
-  const isSortEnabled = Boolean(filterDateFrom && filterDateTo);
 
   const filteredTableNames = React.useMemo(() => {
     const query = tableSearch.trim().toLowerCase();
@@ -223,16 +222,16 @@ function AuditLogTable({
 
             <button
               type="button"
-              className={`ac-btn-ghost ac-sort-toggle${isSortEnabled && sortOrder === 'desc' ? ' ac-btn-ghost--active' : ''}`}
-              disabled={!isSortEnabled || isLogsLoading}
+              className={`ac-btn-ghost ac-sort-toggle${sortOrder === 'desc' ? ' ac-btn-ghost--active' : ''}`}
+              disabled={isLogsLoading}
               onClick={() => {
-                if (!isSortEnabled || isLogsLoading) return;
+                if (isLogsLoading) return;
                 if (setSortOrder) setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc');
               }}
               title={
-                isSortEnabled
-                  ? (sortOrder === 'desc' ? 'Sort selected range by newest logs first' : 'Sort selected range by oldest logs first')
-                  : 'Select From and To date range before sorting logs'
+                sortOrder === 'desc'
+                  ? 'Sort logs by newest first'
+                  : 'Sort logs by oldest first'
               }
             >
               <Icon name={sortOrder === 'desc' ? 'arrowDown' : 'arrowUp'} size={14} />
@@ -240,7 +239,12 @@ function AuditLogTable({
             </button>
 
             <div className="ac-filter-select ac-filter-select--rows">
-              <select className="ac-select ac-select--filter" value={rowsPerPage} onChange={e => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}>
+              <select
+                className="ac-select ac-select--filter"
+                value={rowsPerPage}
+                disabled={isLogsLoading}
+                onChange={e => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+              >
                 <option value={5}>5 Rows</option>
                 <option value={10}>10 Rows</option>
                 <option value={20}>20 Rows</option>
@@ -417,7 +421,13 @@ function AuditLogTable({
         )}
       </div>
 
-      <div className="ac-table-wrap">
+      <div className={`ac-table-wrap${isLogsLoading ? ' ac-table-wrap--loading' : ''}`}>
+        {isLogsLoading && paginatedLogs.length > 0 && (
+          <div className="ac-table-loading" role="status" aria-live="polite">
+            <Icon name="spinner" size={18} />
+            Loading transaction logs...
+          </div>
+        )}
         <table className="ac-table">
           <thead>
             <tr>
@@ -431,25 +441,36 @@ function AuditLogTable({
             </tr>
           </thead>
           <tbody>
-            {paginatedLogs.length === 0 ? (
+            {isLogsLoading && paginatedLogs.length === 0 ? (
+              <tr>
+                <td colSpan={7}>
+                  <div className="ac-empty ac-empty--loading">
+                    <div className="ac-empty__icon">
+                      <Icon name="spinner" size={30} />
+                    </div>
+                    <span style={{ fontWeight: '600', color: 'var(--color-on-surface)' }}>
+                      Loading latest transaction logs...
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            ) : paginatedLogs.length === 0 ? (
               <tr>
                 <td colSpan={7}>
                   <div className="ac-empty">
                     <div className="ac-empty__icon">
                       <Icon name="calendar" size={30} />
                     </div>
-                    {!filterDateFrom || !filterDateTo ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                        <span style={{ fontWeight: '600', color: 'var(--color-on-surface)' }}>
-                          Please select a date range (From & To) to view transaction history
-                        </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ fontWeight: '600', color: 'var(--color-on-surface)' }}>
+                        No transactions match the selected filter.
+                      </span>
+                      {!filterDateFrom || !filterDateTo ? (
                         <span style={{ fontSize: '13px', color: 'var(--color-on-surface-variant)' }}>
-                          Transactions are not loaded automatically to ensure optimal performance.
+                          The dashboard loads the latest logs on demand.
                         </span>
-                      </div>
-                    ) : (
-                      'No transactions match the selected filter.'
-                    )}
+                      ) : null}
+                    </div>
                   </div>
                 </td>
               </tr>
@@ -481,7 +502,7 @@ function AuditLogTable({
         <div className="ac-pagination__controls">
           <button
             className="ac-pagination__btn"
-            disabled={currentPage === 1}
+            disabled={isLogsLoading || currentPage === 1}
             onClick={() => setCurrentPage(p => p - 1)}
           >
             Prev
@@ -492,15 +513,23 @@ function AuditLogTable({
               : <button
                 key={p}
                 className={`ac-pagination__page${currentPage === p ? ' ac-pagination__page--active' : ''}`}
+                disabled={isLogsLoading}
                 onClick={() => setCurrentPage(p)}
               >{p}</button>
           )}
           <button
-            className="ac-pagination__btn"
-            disabled={currentPage === totalPages}
+            className={`ac-pagination__btn${isLogsLoading ? ' ac-pagination__btn--loading' : ''}`}
+            disabled={isLogsLoading || currentPage === totalPages}
             onClick={() => setCurrentPage(p => p + 1)}
           >
-            Next
+            {isLogsLoading ? (
+              <>
+                <Icon name="spinner" size={13} />
+                Loading
+              </>
+            ) : (
+              'Next'
+            )}
           </button>
         </div>
       </div>

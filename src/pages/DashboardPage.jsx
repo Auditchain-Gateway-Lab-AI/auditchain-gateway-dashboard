@@ -7,8 +7,6 @@ import AuditLogTable from '../components/dashboard/AuditLogTable';
 import ResourceDetailModal from '../components/dashboard/ResourceDetailModal';
 import { parseJwt, mapRangeItemToVerifyStatus } from '../utils/formatters';
 
-const MAX_LOGS_PER_RANGE = 200;
-
 const areStatsEqual = (a = {}, b = {}) => (
   (a.total_logs || 0) === (b.total_logs || 0) &&
   (a.pending_logs || 0) === (b.pending_logs || 0) &&
@@ -31,13 +29,6 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
   const [verifyStatuses, setVerifyStatuses] = useState({});
   const [selectedVerifyResult, setSelectedVerifyResult] = useState(null);
   const [totalLogsCount, setTotalLogsCount] = useState(0);
-  const [isServerPaginated, setIsServerPaginated] = useState(false);
-
-  const verifyStatusesRef = useRef(verifyStatuses);
-
-  useEffect(() => {
-    verifyStatusesRef.current = verifyStatuses;
-  }, [verifyStatuses]);
 
   const [selectedResource, setSelectedResource] = useState(null);
 
@@ -59,6 +50,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
   const [tempDateTo, setTempDateTo] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
+  const logsRequestSeq = useRef(0);
 
   // Decode JWT info for Workspace Context Indicator
   const token = localStorage.getItem('token') || sessionStorage.getItem('token');
@@ -185,32 +177,24 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
 
   const [isLogsLoading, setIsLogsLoading] = useState(false);
 
-  // Fetch logs transaksi SECARA ON-DEMAND saat rentang tanggal ditentukan
-  const handleApplyLogsRange = useCallback(async (fromDate, toDate, overrideSort, overrideTable) => {
-    const fromVal = fromDate || tempDateFrom;
-    const toVal = toDate || tempDateTo;
-    if (!fromVal || !toVal) return;
-
+  // Fetch transaction logs on demand. The table uses server pagination so it
+  // loads the newest 10 rows by default and only fetches again after user input.
+  const fetchTransactionLogs = useCallback(async ({
+    page = 1,
+    pageSize = 10,
+    fromDate = '',
+    toDate = '',
+    activeSort = 'desc',
+    activeTable = ''
+  } = {}) => {
+    const requestId = logsRequestSeq.current + 1;
+    logsRequestSeq.current = requestId;
     setIsLogsLoading(true);
-    setFilterDateFrom(fromVal);
-    setFilterDateTo(toVal);
-    setCurrentPage(1);
-
-    const activeSort = overrideSort !== undefined ? overrideSort : sortOrder;
-    const activeTable = overrideTable !== undefined ? overrideTable : filterTable;
-
     try {
-      const fromObj = new Date(fromVal);
-      const toObj = new Date(toVal);
-      // Sertakan detik & milidetik terakhir pada tanggal TO (:59.999) agar transaksi menit tersebut tidak terpotong
-      toObj.setSeconds(59, 999);
-
       const params = {
-        page: 1,
-        page_size: MAX_LOGS_PER_RANGE,
+        page,
+        page_size: pageSize,
         sort_order: activeSort,
-        from: fromObj.toISOString(),
-        to: toObj.toISOString(),
       };
       if (activeTable) {
         params.source_table = activeTable;
@@ -218,43 +202,56 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
       if (selectedClient) {
         params.client_id = selectedClient;
       }
+      if (fromDate && toDate) {
+        const fromObj = new Date(fromDate);
+        const toObj = new Date(toDate);
+        // Include the last selected second on the To field.
+        toObj.setSeconds(59, 999);
+        params.from = fromObj.toISOString();
+        params.to = toObj.toISOString();
+      }
 
       const logsRes = await api.get('/dashboard/logs', { params });
+      if (requestId !== logsRequestSeq.current) return;
+
       let logsArray = [];
       let serverTotal = 0;
-      let serverPaginated = false;
 
       if (Array.isArray(logsRes.data)) {
         logsArray = logsRes.data;
         serverTotal = logsRes.data.length;
-        serverPaginated = false;
       } else if (logsRes.data?.data) {
         logsArray = logsRes.data.data;
         serverTotal = logsRes.data.pagination?.total_items ?? logsRes.data.data.length;
-        serverPaginated = true;
       }
 
       setRecentLogs(logsArray);
       setTotalLogsCount(serverTotal);
-      setIsServerPaginated(serverPaginated);
     } catch (err) {
+      if (requestId !== logsRequestSeq.current) return;
       console.error("Failed to load transaction logs:", err);
       if (err.response?.status === 401) onLogout();
     } finally {
-      setIsLogsLoading(false);
+      if (requestId === logsRequestSeq.current) {
+        setIsLogsLoading(false);
+      }
     }
-  }, [tempDateFrom, tempDateTo, selectedClient, onLogout, sortOrder, filterTable]);
+  }, [selectedClient, onLogout]);
 
-  const prevTotalLogsRef = useRef(null);
-  const filterDateFromRef = useRef(filterDateFrom);
-  const filterDateToRef = useRef(filterDateTo);
-  const handleApplyLogsRangeRef = useRef(handleApplyLogsRange);
+  useEffect(() => {
+    if (view !== 'dashboard') return;
 
-  useEffect(() => { filterDateFromRef.current = filterDateFrom; }, [filterDateFrom]);
-  useEffect(() => { filterDateToRef.current = filterDateTo; }, [filterDateTo]);
-  useEffect(() => { handleApplyLogsRangeRef.current = handleApplyLogsRange; }, [handleApplyLogsRange]);
+    fetchTransactionLogs({
+      page: currentPage,
+      pageSize: rowsPerPage,
+      fromDate: filterDateFrom,
+      toDate: filterDateTo,
+      activeSort: sortOrder,
+      activeTable: filterTable
+    });
+  }, [view, fetchTransactionLogs, currentPage, rowsPerPage, filterDateFrom, filterDateTo, sortOrder, filterTable]);
 
-  // Fetch summary stats (Auto-refresh 5s & Smart Polling for Table Auto-Refresh)
+  // Fetch summary stats only. The transaction table is loaded on demand.
   useEffect(() => {
     let cancelled = false;
 
@@ -268,14 +265,6 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
 
         setStats(prev => areStatsEqual(prev, statsRes.data) ? prev : statsRes.data);
 
-        // Smart Polling: Otomatis re-fetch tabel transaksi jika total_logs berubah & date range aktif
-        const newTotal = statsRes.data.total_logs;
-        if (prevTotalLogsRef.current !== null &&
-            newTotal !== prevTotalLogsRef.current &&
-            filterDateFromRef.current && filterDateToRef.current) {
-          handleApplyLogsRangeRef.current(filterDateFromRef.current, filterDateToRef.current);
-        }
-        prevTotalLogsRef.current = newTotal;
       } catch (err) {
         if (err.response?.status === 401) onLogout();
       }
@@ -314,28 +303,31 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
 
   const handleSortOrderChange = (newSort) => {
     setSortOrder(newSort);
-    const fDate = filterDateFrom || tempDateFrom;
-    const tDate = filterDateTo || tempDateTo;
-    if (fDate && tDate) {
-      handleApplyLogsRange(fDate, tDate, newSort, filterTable);
-    }
+    setCurrentPage(1);
   };
 
   const handleFilterTableChange = (newTable) => {
     setFilterTable(newTable);
-    const fDate = filterDateFrom || tempDateFrom;
-    const tDate = filterDateTo || tempDateTo;
-    if (fDate && tDate) {
-      handleApplyLogsRange(fDate, tDate, sortOrder, newTable);
-    }
+    setCurrentPage(1);
   };
 
-  // Auto-trigger logs fetch ketika kedua tanggal (From & To) dipilih
+  // Auto-trigger logs fetch ketika kedua tanggal (From & To) dipilih.
   useEffect(() => {
     if (tempDateFrom && tempDateTo) {
-      handleApplyLogsRange(tempDateFrom, tempDateTo);
+      setFilterDateFrom(tempDateFrom);
+      setFilterDateTo(tempDateTo);
+      setCurrentPage(1);
     }
-  }, [tempDateFrom, tempDateTo, handleApplyLogsRange]);
+  }, [tempDateFrom, tempDateTo]);
+
+  const handleApplyLogsRange = useCallback((fromDate, toDate) => {
+    const fromVal = fromDate || tempDateFrom;
+    const toVal = toDate || tempDateTo;
+    if (!fromVal || !toVal) return;
+    setFilterDateFrom(fromVal);
+    setFilterDateTo(toVal);
+    setCurrentPage(1);
+  }, [tempDateFrom, tempDateTo]);
 
   const [rangeVerifyResult, setRangeVerifyResult] = useState(null);
   const [isVerifyRangeLoading, setIsVerifyRangeLoading] = useState(false);
@@ -346,8 +338,6 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
     setTempDateTo('');
     setFilterDateFrom('');
     setFilterDateTo('');
-    setRecentLogs([]);
-    setTotalLogsCount(0);
     setRangeVerifyResult(null);
     setFilterVerification('ALL');
     setSortOrder('desc');
@@ -493,26 +483,17 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
       return timeB - timeA;
     });
   }, [recentLogs, deferredSearchQuery, filterAction, filterDateFrom, filterDateTo, tempDateFrom, tempDateTo, filterVerification, verifyStatuses, sortOrder]);
-  const isLocalPaginated = !isServerPaginated || filterDateFrom || filterDateTo;
-
-  const totalPages = isLocalPaginated
-    ? (Math.ceil(filteredLogs.length / rowsPerPage) || 1)
-    : (Math.ceil(totalLogsCount / rowsPerPage) || 1);
-
-  const paginatedLogs = isLocalPaginated
-    ? filteredLogs.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage)
-    : filteredLogs;
+  const totalPages = Math.ceil(totalLogsCount / rowsPerPage) || 1;
+  const paginatedLogs = filteredLogs;
 
   useEffect(() => {
     if (currentPage > totalPages) {
       setCurrentPage(1);
     }
-  }, [isLocalPaginated, totalLogsCount, filteredLogs.length, currentPage, totalPages]);
+  }, [currentPage, totalPages]);
 
-  const isFiltered = searchQuery || filterAction !== 'ALL' || filterDateFrom || filterDateTo;
-  const displayTotal = isLocalPaginated
-    ? filteredLogs.length
-    : (isFiltered ? filteredLogs.length : totalLogsCount);
+  const hasLocalFilter = searchQuery || filterAction !== 'ALL' || filterVerification !== 'ALL';
+  const displayTotal = hasLocalFilter ? filteredLogs.length : totalLogsCount;
 
   // Status badge for transaction table
   const renderStatusBadge = useCallback((log) => {
@@ -576,7 +557,10 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
           {clientInfo && clientInfo.role?.toLowerCase() === 'admin' ? (
             <select
               value={selectedClient}
-              onChange={e => setSelectedClient(e.target.value)}
+              onChange={e => {
+                setSelectedClient(e.target.value);
+                setCurrentPage(1);
+              }}
               className="ac-topnav__client-select"
               style={{
                 background: 'rgba(3,40,93,0.05)',
@@ -613,11 +597,6 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
                 })
               )}
             </select>
-          ) : clientInfo ? (
-            <div className="ac-topnav__client-pill">
-              <span className="ac-topnav__client-dot" style={{ background: '#008862' }} />
-              <span className="ac-topnav__client-label">{clientInfo.client_id}</span>
-            </div>
           ) : null}
           {clientInfo && (
             <div className="ac-profile-menu">
@@ -713,13 +692,15 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
                   </span>
                 </div>
               </div>
-              <div className="ac-sidebar__identity-client">
-                <Icon name="database" size={14} />
-                <span className="ac-sidebar__identity-workspace">
-                  <strong>{adminClients.find(c => c.id === clientInfo.client_id)?.company_name || clientInfo.company_name || 'Client Workspace'}</strong>
-                  <small title={clientInfo.client_id}>{clientInfo.client_id}</small>
-                </span>
-              </div>
+              {clientInfo.role?.toLowerCase() === 'admin' && (
+                <div className="ac-sidebar__identity-client">
+                  <Icon name="database" size={14} />
+                  <span className="ac-sidebar__identity-workspace">
+                    <strong>{adminClients.find(c => c.id === clientInfo.client_id)?.company_name || clientInfo.company_name || 'Client Workspace'}</strong>
+                    <small title={clientInfo.client_id}>{clientInfo.client_id}</small>
+                  </span>
+                </div>
+              )}
             </div>
           )}
           <button className="ac-sidebar__nav-item ac-sidebar__nav-item--logout" style={{ marginTop: 6 }} onClick={onLogout} title="Logout">

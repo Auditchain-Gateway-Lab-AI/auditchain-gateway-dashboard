@@ -1208,7 +1208,10 @@
 }
 
 .ac-date-panel__loading svg,
-.ac-date-action-btn--primary:disabled svg {
+.ac-date-action-btn--primary:disabled svg,
+.ac-table-loading svg,
+.ac-empty--loading svg,
+.ac-pagination__btn--loading svg {
   animation: spin 1s linear infinite;
 }
 
@@ -1357,6 +1360,28 @@
 .ac-table-wrap {
   overflow-x: auto;
   contain: layout paint;
+  position: relative;
+  min-height: 220px;
+}
+
+.ac-table-wrap--loading .ac-table tbody {
+  opacity: 0.55;
+}
+
+.ac-table-loading {
+  position: absolute;
+  inset: 46px 0 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--color-primary);
+  font-size: 13px;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(2px);
+  pointer-events: none;
 }
 
 .ac-table {
@@ -2056,6 +2081,11 @@
   font-size: 40px;
   margin-bottom: 10px;
   opacity: 0.4;
+}
+
+.ac-empty--loading .ac-empty__icon {
+  color: var(--color-primary);
+  opacity: 0.8;
 }
 
 /* ================================================================
