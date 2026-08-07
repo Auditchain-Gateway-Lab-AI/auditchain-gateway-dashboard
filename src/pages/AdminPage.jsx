@@ -1093,7 +1093,7 @@ function AdminPage({ onLogout }) {
                     )}
                     {clients.map(client => {
                       const matchingKafka = kafkaConfigs.find(k => k.client_id === client.id);
-                      const dbEngine = client.db_engine || matchingKafka?.db_engine || '';
+                      const dbEngine = client.db_engine || matchingKafka?.db_engine || matchingKafka?.source_system || '';
                       const connectorStatus = client.connector_status || 'unknown';
                       
                       return (

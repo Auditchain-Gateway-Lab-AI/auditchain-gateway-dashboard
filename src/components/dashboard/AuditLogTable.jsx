@@ -3,7 +3,6 @@ import Icon from '../common/Icon';
 import ActionBadge from '../common/ActionBadge';
 import VerificationModal from './VerificationModal';
 import { formatTimestamp, renderMetadataCell } from '../../utils/formatters';
-import DBEngineBadge from '../common/DBEngineBadge';
 
 function AuditLogTable({
   paginatedLogs = [],
@@ -17,8 +16,6 @@ function AuditLogTable({
   setSortOrder,
   filterTable = '',
   setFilterTable,
-  filterDbEngine = 'ALL',
-  setFilterDbEngine,
   tableNames = [],
   rowsPerPage = 10,
   setRowsPerPage,
@@ -214,18 +211,6 @@ function AuditLogTable({
             </div>
 
             <div className="ac-filter-select">
-              <select className="ac-select ac-select--filter" value={filterDbEngine} onChange={e => setFilterDbEngine && setFilterDbEngine(e.target.value)}>
-                <option value="ALL">All Engines</option>
-                <option value="postgres">Postgres</option>
-                <option value="mongodb">MongoDB</option>
-                <option value="mysql">MySQL</option>
-              </select>
-              <span className="ac-filter-select__chevron">
-                <Icon name="chevronDown" size={15} />
-              </span>
-            </div>
-
-            <div className="ac-filter-select">
               <select className="ac-select ac-select--filter" value={filterVerification} onChange={e => setFilterVerification(e.target.value)}>
                 <option value="ALL">All Status</option>
                 <option value="VALID">VALID</option>
@@ -385,31 +370,23 @@ function AuditLogTable({
         )}
 
         {rangeVerifyResult && rangeVerifyResult.summary && (
-          <div style={{
-            background: 'var(--color-surface-container-high, #f4f6f9)',
-            border: '1px solid var(--color-outline-variant, #e0e0e0)',
-            borderRadius: 'var(--radius-md, 8px)',
-            padding: '16px',
-            marginTop: '8px',
-            animation: 'fadeIn 0.3s ease'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div className="ac-range-summary">
+            <div className="ac-range-summary__header">
+              <div className="ac-range-summary__title">
                 <span className="ac-card__icon ac-card__icon--soft">
                   <Icon name="chart" size={17} />
                 </span>
                 <div>
-                  <div style={{ fontSize: '14px', fontWeight: '700', color: 'var(--color-on-surface)' }}>
+                  <div className="ac-range-summary__heading">
                     Range Verification Inspection Summary
                   </div>
-                  <div style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
+                  <div className="ac-range-summary__sub">
                     Checked logs from {formatTimestamp(rangeVerifyResult.range.from)} to {formatTimestamp(rangeVerifyResult.range.to)}
                   </div>
                 </div>
               </div>
               <button
-                className="ac-btn-ghost-action"
-                style={{ padding: '4px 8px', fontSize: '12px' }}
+                className="ac-btn-ghost-action ac-range-summary__close"
                 onClick={() => setRangeVerifyResult && setRangeVerifyResult(null)}
                 title="Dismiss Inspection Banner"
               >
@@ -418,22 +395,22 @@ function AuditLogTable({
               </button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '12px', textAlign: 'center' }}>
-              <div style={{ background: '#fff', padding: '10px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#1e293b' }}>{rangeVerifyResult.summary.total}</div>
-                <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600' }}>Total Checked</div>
+            <div className="ac-range-summary__stats">
+              <div className="ac-range-summary__stat">
+                <div className="ac-range-summary__value ac-range-summary__value--total">{rangeVerifyResult.summary.total}</div>
+                <div className="ac-range-summary__label ac-range-summary__label--total">Total Checked</div>
               </div>
-              <div style={{ background: '#fff', padding: '10px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#16a34a' }}>{rangeVerifyResult.summary.valid}</div>
-                <div style={{ fontSize: '11px', color: '#16a34a', fontWeight: '600' }}>Valid</div>
+              <div className="ac-range-summary__stat">
+                <div className="ac-range-summary__value ac-range-summary__value--valid">{rangeVerifyResult.summary.valid}</div>
+                <div className="ac-range-summary__label ac-range-summary__label--valid">Valid</div>
               </div>
-              <div style={{ background: '#fff', padding: '10px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#dc2626' }}>{rangeVerifyResult.summary.invalid}</div>
-                <div style={{ fontSize: '11px', color: '#dc2626', fontWeight: '600' }}>Invalid</div>
+              <div className="ac-range-summary__stat">
+                <div className="ac-range-summary__value ac-range-summary__value--invalid">{rangeVerifyResult.summary.invalid}</div>
+                <div className="ac-range-summary__label ac-range-summary__label--invalid">Invalid</div>
               </div>
-              <div style={{ background: '#fff', padding: '10px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#d97706' }}>{rangeVerifyResult.summary.pending}</div>
-                <div style={{ fontSize: '11px', color: '#d97706', fontWeight: '600' }}>Pending</div>
+              <div className="ac-range-summary__stat">
+                <div className="ac-range-summary__value ac-range-summary__value--pending">{rangeVerifyResult.summary.pending}</div>
+                <div className="ac-range-summary__label ac-range-summary__label--pending">Pending</div>
               </div>
             </div>
           </div>
@@ -448,7 +425,6 @@ function AuditLogTable({
               <th>Actor</th>
               <th>Action</th>
               <th>Resource</th>
-              <th>DB Engine</th>
               <th>Metadata</th>
               <th>Source System</th>
               <th>Verification</th>
@@ -457,7 +433,7 @@ function AuditLogTable({
           <tbody>
             {paginatedLogs.length === 0 ? (
               <tr>
-                <td colSpan={8}>
+                <td colSpan={7}>
                   <div className="ac-empty">
                     <div className="ac-empty__icon">
                       <Icon name="calendar" size={30} />
@@ -484,7 +460,6 @@ function AuditLogTable({
                   <td className="ac-table__actor">{log.actor}</td>
                   <td><ActionBadge action={log.action} /></td>
                   <td className="ac-table__mono">{log.source_table || log.resource || '-'}</td>
-                  <td><DBEngineBadge engine={log.db_engine} /></td>
                   <td onClick={e => e.stopPropagation()}>{renderMetadataCell(log.metadata)}</td>
                   <td className="ac-table__source-system">{log.source_system || '-'}</td>
                   <td onClick={e => e.stopPropagation()}>
