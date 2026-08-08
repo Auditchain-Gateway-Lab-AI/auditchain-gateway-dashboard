@@ -1132,7 +1132,7 @@ function AdminPage({ onLogout }) {
                       <th>Company Name</th>
                       <th>Status</th>
                       <th>DB Engine</th>
-                      <th>Connector Status</th>
+
                       <th>Field Mapping</th>
                       <th>Registration Date</th>
                       <th>Actions</th>
@@ -1140,7 +1140,7 @@ function AdminPage({ onLogout }) {
                   </thead>
                   <tbody>
                     {clients.length === 0 && (
-                      <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--color-outline)', padding: '32px 0' }}>No registered clients found.</td></tr>
+                      <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--color-outline)', padding: '32px 0' }}>No registered clients found.</td></tr>
                     )}
                     {clients.map(client => {
                       const matchingKafka = kafkaConfigs.find(k => k.client_id === client.id);
@@ -1173,9 +1173,6 @@ function AdminPage({ onLogout }) {
                           </td>
                           <td>
                             <DBEngineBadge engine={dbEngine} />
-                          </td>
-                          <td>
-                            <ConnectorStatusBadge status={connectorStatus} />
                           </td>
                           <td>
                             <div className="ac-field-map">

@@ -30,7 +30,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
   const [selectedVerifyResult, setSelectedVerifyResult] = useState(null);
   const [totalLogsCount, setTotalLogsCount] = useState(0);
 
-  const [selectedResource, setSelectedResource] = useState(null);
+  const [selectedLog, setSelectedLog] = useState(null);
 
   // State Plan V12: Table Filter, Sort Order, & Table Names
   const [sortOrder, setSortOrder] = useState('desc');
@@ -916,7 +916,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
               isVerifyRangeLoading={isVerifyRangeLoading}
               selectedVerifyResult={selectedVerifyResult}
               setSelectedVerifyResult={setSelectedVerifyResult}
-              onSelectResource={setSelectedResource}
+              onSelectResource={setSelectedLog}
               renderStatusBadge={renderStatusBadge}
               displayTotal={displayTotal}
               currentPage={currentPage}
@@ -931,11 +931,11 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
       </main>
 
       {/* MODAL LEVEL 2: Resource Log History */}
-      {selectedResource && (
+      {selectedLog && (
         <ResourceDetailModal
-          resource={selectedResource}
+          log={selectedLog}
           selectedClient={selectedClient}
-          onClose={() => setSelectedResource(null)}
+          onClose={() => setSelectedLog(null)}
         />
       )}
     </div>

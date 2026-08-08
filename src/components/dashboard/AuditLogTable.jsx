@@ -476,7 +476,7 @@ function AuditLogTable({
               </tr>
             ) : paginatedLogs.map(log => {
               return (
-                <tr key={log.log_id} onClick={() => onSelectResource(log.source_table || log.resource)}>
+                <tr key={log.log_id} onClick={() => onSelectResource(log)}>
                   <td className="ac-table__time">{formatTimestamp(log.timestamp)}</td>
                   <td className="ac-table__actor">{log.actor}</td>
                   <td><ActionBadge action={log.action} /></td>
