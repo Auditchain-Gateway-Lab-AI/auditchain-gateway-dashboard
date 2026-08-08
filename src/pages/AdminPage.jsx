@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api';
 import Icon from '../components/common/Icon';
+import AppearanceMenu from '../components/common/AppearanceMenu';
 import DBEngineBadge from '../components/common/DBEngineBadge';
 import ConnectorStatusBadge from '../components/common/ConnectorStatusBadge';
 import { parseJwt, formatTimestamp } from '../utils/formatters';
@@ -16,7 +17,7 @@ const isSameJSON = (a, b) => {
   }
 };
 
-function AdminPage({ onLogout }) {
+function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'light', onThemeChange }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
@@ -792,6 +793,11 @@ function AdminPage({ onLogout }) {
                   <Icon name="user" size={15} />
                   Profile
                 </button>
+                <AppearanceMenu
+                  themePreference={themePreference}
+                  resolvedTheme={resolvedTheme}
+                  onThemeChange={onThemeChange}
+                />
                 <button onClick={onLogout} className="ac-profile-menu__danger">
                   <Icon name="logout" size={15} />
                   Logout

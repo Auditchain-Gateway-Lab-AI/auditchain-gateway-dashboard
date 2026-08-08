@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import './App.css';
 
@@ -7,6 +7,19 @@ import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import AdminPage from './pages/AdminPage';
 import { parseJwt } from './utils/formatters';
+
+const THEME_STORAGE_KEY = 'auditchain_appearance';
+const THEME_OPTIONS = ['light', 'dark', 'system'];
+
+const getStoredThemePreference = () => {
+  const stored = localStorage.getItem(THEME_STORAGE_KEY);
+  return THEME_OPTIONS.includes(stored) ? stored : 'system';
+};
+
+const getSystemTheme = () => {
+  if (typeof window === 'undefined' || !window.matchMedia) return 'light';
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+};
 
 function ProtectedRoute({ isAuthenticated, children }) {
   if (!isAuthenticated) {
@@ -20,6 +33,8 @@ function App() {
     return !!(localStorage.getItem('token') || sessionStorage.getItem('token'));
   });
   const [, setAuthVersion] = useState(0);
+  const [themePreference, setThemePreference] = useState(getStoredThemePreference);
+  const [systemTheme, setSystemTheme] = useState(getSystemTheme);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -39,6 +54,28 @@ function App() {
   }, [isAuthenticated, token]);
 
   const isAdmin = clientInfo?.role?.toLowerCase() === 'admin';
+  const resolvedTheme = themePreference === 'system' ? systemTheme : themePreference;
+
+  useEffect(() => {
+    if (!window.matchMedia) return undefined;
+
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = (event) => setSystemTheme(event.matches ? 'dark' : 'light');
+
+    if (media.addEventListener) {
+      media.addEventListener('change', handleChange);
+      return () => media.removeEventListener('change', handleChange);
+    }
+
+    media.addListener(handleChange);
+    return () => media.removeListener(handleChange);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(THEME_STORAGE_KEY, themePreference);
+    document.documentElement.setAttribute('data-ac-theme', resolvedTheme);
+    document.documentElement.setAttribute('data-ac-theme-preference', themePreference);
+  }, [themePreference, resolvedTheme]);
 
   return (
     <Router>
@@ -58,7 +95,13 @@ function App() {
           path="/dashboard"
           element={
             <ProtectedRoute isAuthenticated={isAuthenticated}>
-              <DashboardPage onLogout={handleLogout} onProfileUpdated={handleAuthRefresh} />
+              <DashboardPage
+                onLogout={handleLogout}
+                onProfileUpdated={handleAuthRefresh}
+                themePreference={themePreference}
+                resolvedTheme={resolvedTheme}
+                onThemeChange={setThemePreference}
+              />
             </ProtectedRoute>
           }
         />
@@ -66,7 +109,14 @@ function App() {
           path="/profile"
           element={
             <ProtectedRoute isAuthenticated={isAuthenticated}>
-              <DashboardPage view="profile" onLogout={handleLogout} onProfileUpdated={handleAuthRefresh} />
+              <DashboardPage
+                view="profile"
+                onLogout={handleLogout}
+                onProfileUpdated={handleAuthRefresh}
+                themePreference={themePreference}
+                resolvedTheme={resolvedTheme}
+                onThemeChange={setThemePreference}
+              />
             </ProtectedRoute>
           }
         />
@@ -75,7 +125,12 @@ function App() {
           element={
             <ProtectedRoute isAuthenticated={isAuthenticated}>
               {isAdmin ? (
-                <AdminPage onLogout={handleLogout} />
+                <AdminPage
+                  onLogout={handleLogout}
+                  themePreference={themePreference}
+                  resolvedTheme={resolvedTheme}
+                  onThemeChange={setThemePreference}
+                />
               ) : (
                 <Navigate to="/dashboard" replace />
               )}

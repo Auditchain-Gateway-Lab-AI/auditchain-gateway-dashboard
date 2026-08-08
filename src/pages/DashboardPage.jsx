@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback, useDeferredVa
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import Icon from '../components/common/Icon';
+import AppearanceMenu from '../components/common/AppearanceMenu';
 import StatCards from '../components/dashboard/StatCards';
 import AuditLogTable from '../components/dashboard/AuditLogTable';
 import ResourceDetailModal from '../components/dashboard/ResourceDetailModal';
@@ -22,7 +23,7 @@ const getLogTimestampMs = (timestamp) => {
   return new Date(tsStr).getTime() || 0;
 };
 
-function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
+function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePreference = 'system', resolvedTheme = 'light', onThemeChange }) {
   const navigate = useNavigate();
   const [stats, setStats] = useState({ total_logs: 0, pending_logs: 0, anchored_logs: 0 });
   const [recentLogs, setRecentLogs] = useState([]);
@@ -618,6 +619,11 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
                     <Icon name="user" size={15} />
                     Profile
                   </button>
+                  <AppearanceMenu
+                    themePreference={themePreference}
+                    resolvedTheme={resolvedTheme}
+                    onThemeChange={onThemeChange}
+                  />
                   <button onClick={onLogout} className="ac-profile-menu__danger">
                     <Icon name="logout" size={15} />
                     Logout
@@ -852,12 +858,12 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
                   </div>
                 </aside>
               </div>
-              <div style={{ marginTop: '30px', background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-                <h3 style={{ marginBottom: '16px', color: '#03285D' }}>Notification Settings</h3>
+              <div className="ac-profile-card ac-profile-settings-card">
+                <h3>Notification Settings</h3>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
                     <input type="checkbox" style={{ marginRight: '8px', width: '16px', height: '16px' }} defaultChecked />
-                    <span style={{ fontSize: '14px', color: '#4b5563' }}>Enable Email Alerts</span>
+                    <span>Enable Email Alerts</span>
                   </label>
                 </div>
               </div>

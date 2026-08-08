@@ -14,6 +14,32 @@ const Icon = ({ name, size = 18, style = {} }) => {
         <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
       </>
     ),
+    palette: (
+      <>
+        <circle cx="13.5" cy="6.5" r="1.5" fill="currentColor" />
+        <circle cx="8" cy="8" r="1.5" fill="currentColor" />
+        <circle cx="6.5" cy="13" r="1.5" fill="currentColor" />
+        <path d="M12 3a9 9 0 0 0 0 18h1.5a2.5 2.5 0 0 0 1.77-4.27 1.5 1.5 0 0 1 1.06-2.56H17a4 4 0 0 0 0-8h-.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
+      </>
+    ),
+    sun: (
+      <>
+        <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2" fill="none" />
+        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </>
+    ),
+    moon: (
+      <path d="M21 14.5A8.5 8.5 0 0 1 9.5 3 7 7 0 1 0 21 14.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    ),
+    monitor: (
+      <>
+        <rect x="3" y="4" width="18" height="12" rx="2" stroke="currentColor" strokeWidth="2" fill="none" />
+        <path d="M8 21h8M12 16v5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </>
+    ),
+    check: (
+      <polyline points="20 6 9 17 4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    ),
     lock: (
       <>
         <rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" strokeWidth="2" fill="none" />
