@@ -1,36 +1,45 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, useDeferredValue } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import Icon from '../components/common/Icon';
+import AppearanceMenu from '../components/common/AppearanceMenu';
 import StatCards from '../components/dashboard/StatCards';
 import AuditLogTable from '../components/dashboard/AuditLogTable';
 import ResourceDetailModal from '../components/dashboard/ResourceDetailModal';
 import { parseJwt, mapRangeItemToVerifyStatus } from '../utils/formatters';
 
-function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
+const areStatsEqual = (a = {}, b = {}) => (
+  (a.total_logs || 0) === (b.total_logs || 0) &&
+  (a.pending_logs || 0) === (b.pending_logs || 0) &&
+  (a.anchored_logs || 0) === (b.anchored_logs || 0)
+);
+
+const getLogTimestampMs = (timestamp) => {
+  if (!timestamp) return 0;
+  let tsStr = String(timestamp);
+  if (tsStr.includes(' ') && !tsStr.includes('T')) {
+    tsStr = tsStr.replace(' ', 'T');
+  }
+  return new Date(tsStr).getTime() || 0;
+};
+
+function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePreference = 'system', resolvedTheme = 'light', onThemeChange }) {
   const navigate = useNavigate();
   const [stats, setStats] = useState({ total_logs: 0, pending_logs: 0, anchored_logs: 0 });
   const [recentLogs, setRecentLogs] = useState([]);
   const [verifyStatuses, setVerifyStatuses] = useState({});
   const [selectedVerifyResult, setSelectedVerifyResult] = useState(null);
   const [totalLogsCount, setTotalLogsCount] = useState(0);
-  const [isServerPaginated, setIsServerPaginated] = useState(false);
 
-  const verifyStatusesRef = useRef(verifyStatuses);
-
-  useEffect(() => {
-    verifyStatusesRef.current = verifyStatuses;
-  }, [verifyStatuses]);
-
-  const [selectedResource, setSelectedResource] = useState(null);
+  const [selectedLog, setSelectedLog] = useState(null);
 
   // State Plan V12: Table Filter, Sort Order, & Table Names
   const [sortOrder, setSortOrder] = useState('desc');
   const [filterTable, setFilterTable] = useState('');
   const [tableNames, setTableNames] = useState([]);
-  const [filterDbEngine, setFilterDbEngine] = useState('ALL');
 
   const [searchQuery, setSearchQuery] = useState('');
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [filterAction, setFilterAction] = useState('ALL');
   const [filterVerification, setFilterVerification] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
@@ -42,6 +51,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
   const [tempDateTo, setTempDateTo] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
+  const logsRequestSeq = useRef(0);
 
   // Decode JWT info for Workspace Context Indicator
   const token = localStorage.getItem('token') || sessionStorage.getItem('token');
@@ -168,95 +178,94 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
 
   const [isLogsLoading, setIsLogsLoading] = useState(false);
 
-  // Fetch logs transaksi SECARA ON-DEMAND saat rentang tanggal ditentukan
-  const handleApplyLogsRange = useCallback(async (fromDate, toDate, overrideSort, overrideTable, overrideDbEngine) => {
-    const fromVal = fromDate || tempDateFrom;
-    const toVal = toDate || tempDateTo;
-    if (!fromVal || !toVal) return;
-
+  // Fetch transaction logs on demand. The table uses server pagination so it
+  // loads the newest 10 rows by default and only fetches again after user input.
+  const fetchTransactionLogs = useCallback(async ({
+    page = 1,
+    pageSize = 10,
+    fromDate = '',
+    toDate = '',
+    activeSort = 'desc',
+    activeTable = ''
+  } = {}) => {
+    const requestId = logsRequestSeq.current + 1;
+    logsRequestSeq.current = requestId;
     setIsLogsLoading(true);
-    setFilterDateFrom(fromVal);
-    setFilterDateTo(toVal);
-    setCurrentPage(1);
-
-    const activeSort = overrideSort !== undefined ? overrideSort : sortOrder;
-    const activeTable = overrideTable !== undefined ? overrideTable : filterTable;
-    const activeDbEngine = overrideDbEngine !== undefined ? overrideDbEngine : filterDbEngine;
-
     try {
-      const fromObj = new Date(fromVal);
-      const toObj = new Date(toVal);
-      // Sertakan detik & milidetik terakhir pada tanggal TO (:59.999) agar transaksi menit tersebut tidak terpotong
-      toObj.setSeconds(59, 999);
-
       const params = {
-        page: 1,
-        page_size: 1000,
+        page,
+        page_size: pageSize,
         sort_order: activeSort,
-        from: fromObj.toISOString(),
-        to: toObj.toISOString(),
       };
       if (activeTable) {
         params.source_table = activeTable;
       }
-      if (activeDbEngine && activeDbEngine !== 'ALL') {
-        params.db_engine = activeDbEngine.toLowerCase();
-      }
       if (selectedClient) {
         params.client_id = selectedClient;
       }
+      if (fromDate && toDate) {
+        const fromObj = new Date(fromDate);
+        const toObj = new Date(toDate);
+        // Include the last selected second on the To field.
+        toObj.setSeconds(59, 999);
+        params.from = fromObj.toISOString();
+        params.to = toObj.toISOString();
+      }
 
       const logsRes = await api.get('/dashboard/logs', { params });
+      if (requestId !== logsRequestSeq.current) return;
+
       let logsArray = [];
       let serverTotal = 0;
-      let serverPaginated = false;
 
       if (Array.isArray(logsRes.data)) {
         logsArray = logsRes.data;
         serverTotal = logsRes.data.length;
-        serverPaginated = false;
       } else if (logsRes.data?.data) {
         logsArray = logsRes.data.data;
         serverTotal = logsRes.data.pagination?.total_items ?? logsRes.data.data.length;
-        serverPaginated = true;
       }
 
       setRecentLogs(logsArray);
       setTotalLogsCount(serverTotal);
-      setIsServerPaginated(serverPaginated);
     } catch (err) {
+      if (requestId !== logsRequestSeq.current) return;
       console.error("Failed to load transaction logs:", err);
       if (err.response?.status === 401) onLogout();
     } finally {
-      setIsLogsLoading(false);
+      if (requestId === logsRequestSeq.current) {
+        setIsLogsLoading(false);
+      }
     }
-  }, [tempDateFrom, tempDateTo, selectedClient, onLogout, sortOrder, filterTable, filterDbEngine]);
+  }, [selectedClient, onLogout]);
 
-  const prevTotalLogsRef = useRef(null);
-  const filterDateFromRef = useRef(filterDateFrom);
-  const filterDateToRef = useRef(filterDateTo);
-  const handleApplyLogsRangeRef = useRef(handleApplyLogsRange);
-
-  useEffect(() => { filterDateFromRef.current = filterDateFrom; }, [filterDateFrom]);
-  useEffect(() => { filterDateToRef.current = filterDateTo; }, [filterDateTo]);
-  useEffect(() => { handleApplyLogsRangeRef.current = handleApplyLogsRange; }, [handleApplyLogsRange]);
-
-  // Fetch summary stats (Auto-refresh 5s & Smart Polling for Table Auto-Refresh)
   useEffect(() => {
+    if (view !== 'dashboard') return;
+
+    fetchTransactionLogs({
+      page: currentPage,
+      pageSize: rowsPerPage,
+      fromDate: filterDateFrom,
+      toDate: filterDateTo,
+      activeSort: sortOrder,
+      activeTable: filterTable
+    });
+  }, [view, fetchTransactionLogs, currentPage, rowsPerPage, filterDateFrom, filterDateTo, sortOrder, filterTable]);
+
+  // Fetch summary stats only. The transaction table is loaded on demand.
+  useEffect(() => {
+    let cancelled = false;
+
     const fetchSummaryStats = async () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+
       try {
         const params = selectedClient ? { client_id: selectedClient } : {};
         const statsRes = await api.get('/dashboard/stats', { params });
-        setStats(statsRes.data);
+        if (cancelled) return;
 
-        // Smart Polling: Otomatis re-fetch tabel transaksi jika total_logs berubah & date range aktif
-        const newTotal = statsRes.data.total_logs;
-        if (prevTotalLogsRef.current !== null &&
-            newTotal !== prevTotalLogsRef.current &&
-            filterDateFromRef.current && filterDateToRef.current) {
-          handleApplyLogsRangeRef.current(filterDateFromRef.current, filterDateToRef.current);
-        }
-        prevTotalLogsRef.current = newTotal;
+        setStats(prev => areStatsEqual(prev, statsRes.data) ? prev : statsRes.data);
+
       } catch (err) {
         if (err.response?.status === 401) onLogout();
       }
@@ -264,7 +273,16 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
 
     fetchSummaryStats();
     const id = setInterval(fetchSummaryStats, 5000);
-    return () => clearInterval(id);
+    const handleVisibilityChange = () => {
+      if (!document.hidden) fetchSummaryStats();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [onLogout, selectedClient]);
 
   // Fetch daftar nama tabel (Sekali saat mount / client berubah — bukan polling)
@@ -286,38 +304,31 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
 
   const handleSortOrderChange = (newSort) => {
     setSortOrder(newSort);
-    const fDate = filterDateFrom || tempDateFrom;
-    const tDate = filterDateTo || tempDateTo;
-    if (fDate && tDate) {
-      handleApplyLogsRange(fDate, tDate, newSort, filterTable, filterDbEngine);
-    }
+    setCurrentPage(1);
   };
 
   const handleFilterTableChange = (newTable) => {
     setFilterTable(newTable);
-    const fDate = filterDateFrom || tempDateFrom;
-    const tDate = filterDateTo || tempDateTo;
-    if (fDate && tDate) {
-      handleApplyLogsRange(fDate, tDate, sortOrder, newTable, filterDbEngine);
-    }
-  };
-
-  const handleFilterDbEngineChange = (nextEngine) => {
-    setFilterDbEngine(nextEngine);
     setCurrentPage(1);
-    const fDate = filterDateFrom || tempDateFrom;
-    const tDate = filterDateTo || tempDateTo;
-    if (fDate && tDate) {
-      handleApplyLogsRange(fDate, tDate, sortOrder, filterTable, nextEngine);
-    }
   };
 
-  // Auto-trigger logs fetch ketika kedua tanggal (From & To) dipilih
+  // Auto-trigger logs fetch ketika kedua tanggal (From & To) dipilih.
   useEffect(() => {
     if (tempDateFrom && tempDateTo) {
-      handleApplyLogsRange(tempDateFrom, tempDateTo);
+      setFilterDateFrom(tempDateFrom);
+      setFilterDateTo(tempDateTo);
+      setCurrentPage(1);
     }
-  }, [tempDateFrom, tempDateTo, handleApplyLogsRange]);
+  }, [tempDateFrom, tempDateTo]);
+
+  const handleApplyLogsRange = useCallback((fromDate, toDate) => {
+    const fromVal = fromDate || tempDateFrom;
+    const toVal = toDate || tempDateTo;
+    if (!fromVal || !toVal) return;
+    setFilterDateFrom(fromVal);
+    setFilterDateTo(toVal);
+    setCurrentPage(1);
+  }, [tempDateFrom, tempDateTo]);
 
   const [rangeVerifyResult, setRangeVerifyResult] = useState(null);
   const [isVerifyRangeLoading, setIsVerifyRangeLoading] = useState(false);
@@ -328,11 +339,8 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
     setTempDateTo('');
     setFilterDateFrom('');
     setFilterDateTo('');
-    setRecentLogs([]);
-    setTotalLogsCount(0);
     setRangeVerifyResult(null);
     setFilterVerification('ALL');
-    setFilterDbEngine('ALL');
     setSortOrder('desc');
     setCurrentPage(1);
   }, []);
@@ -413,38 +421,36 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
 
   // Filter & pagination
   const filteredLogs = useMemo(() => {
+    const normalizedSearch = deferredSearchQuery.trim().toLowerCase();
+    const activeFrom = filterDateFrom || tempDateFrom;
+    const activeTo = filterDateTo || tempDateTo;
+    const fromTime = activeFrom ? new Date(activeFrom).getTime() : NaN;
+    let toTime = NaN;
+
+    if (activeTo) {
+      const toObj = new Date(activeTo);
+      toObj.setSeconds(59, 999);
+      toTime = toObj.getTime();
+    }
+
     const list = recentLogs.filter(log => {
-      const matchSearch =
-        (log?.source_table?.toLowerCase() || log?.resource?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-        (log?.actor?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-        (log?.source_system?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-        (log?.metadata?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-        (log?.hash_value?.toLowerCase() || '').includes(searchQuery.toLowerCase());
+      const matchSearch = !normalizedSearch || [
+        log?.source_table || log?.resource || '',
+        log?.actor || '',
+        log?.source_system || '',
+        typeof log?.metadata === 'string' ? log.metadata : JSON.stringify(log?.metadata || ''),
+        log?.hash_value || ''
+      ].some(value => String(value).toLowerCase().includes(normalizedSearch));
 
       const matchAction = filterAction === 'ALL' || log?.action === filterAction;
 
       let matchDate = true;
       if (log?.timestamp) {
-        let tsStr = String(log.timestamp);
-        if (tsStr.includes(' ') && !tsStr.includes('T')) {
-          tsStr = tsStr.replace(' ', 'T');
-        }
-        const logTime = new Date(tsStr).getTime();
-
-        const activeFrom = filterDateFrom || tempDateFrom;
-        const activeTo = filterDateTo || tempDateTo;
+        const logTime = getLogTimestampMs(log.timestamp);
 
         if (!isNaN(logTime)) {
-          if (activeFrom) {
-            const fromTime = new Date(activeFrom).getTime();
-            if (!isNaN(fromTime) && logTime < fromTime) matchDate = false;
-          }
-          if (activeTo) {
-            const toObj = new Date(activeTo);
-            toObj.setSeconds(59, 999);
-            const toTime = toObj.getTime();
-            if (!isNaN(toTime) && logTime > toTime) matchDate = false;
-          }
+          if (!isNaN(fromTime) && logTime < fromTime) matchDate = false;
+          if (!isNaN(toTime) && logTime > toTime) matchDate = false;
         }
       } else if (filterDateFrom || filterDateTo || tempDateFrom || tempDateTo) {
         matchDate = false;
@@ -462,62 +468,36 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
         }
       }
 
-      // DB Engine filter (Dropdown: ALL | POSTGRES | MONGODB | MYSQL)
-      const normalizeDbEngine = (e) => {
-        if (!e) return 'unknown';
-        const lower = e.toLowerCase();
-        if (lower === 'postgresql' || lower === 'postgres') return 'postgres';
-        if (lower === 'mongodb' || lower === 'mongo') return 'mongodb';
-        if (lower === 'mysql' || lower === 'mariadb') return 'mysql';
-        return 'unknown';
-      };
-      
-      const matchDbEngine = filterDbEngine === 'ALL' || normalizeDbEngine(log?.db_engine) === filterDbEngine.toLowerCase();
-
-      return matchSearch && matchAction && matchDate && matchVerification && matchDbEngine;
+      return matchSearch && matchAction && matchDate && matchVerification;
     });
 
     // Urutkan data secara aman berdasarkan sortOrder:
     // 'desc' (Newest First) -> Dari TO ke FROM (timestamp terbaru ke terlama)
     // 'asc'  (Oldest First) -> Dari FROM ke TO (timestamp terlama ke terbaru)
     return list.sort((a, b) => {
-      let tsA = String(a?.timestamp || '');
-      if (tsA.includes(' ') && !tsA.includes('T')) tsA = tsA.replace(' ', 'T');
-      let tsB = String(b?.timestamp || '');
-      if (tsB.includes(' ') && !tsB.includes('T')) tsB = tsB.replace(' ', 'T');
-
-      const timeA = new Date(tsA).getTime() || 0;
-      const timeB = new Date(tsB).getTime() || 0;
+      const timeA = getLogTimestampMs(a?.timestamp);
+      const timeB = getLogTimestampMs(b?.timestamp);
 
       if (sortOrder === 'asc') {
         return timeA - timeB;
       }
       return timeB - timeA;
     });
-  }, [recentLogs, searchQuery, filterAction, filterDateFrom, filterDateTo, tempDateFrom, tempDateTo, filterVerification, verifyStatuses, sortOrder, filterDbEngine]);
-  const isLocalPaginated = !isServerPaginated || filterDateFrom || filterDateTo;
-
-  const totalPages = isLocalPaginated
-    ? (Math.ceil(filteredLogs.length / rowsPerPage) || 1)
-    : (Math.ceil(totalLogsCount / rowsPerPage) || 1);
-
-  const paginatedLogs = isLocalPaginated
-    ? filteredLogs.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage)
-    : filteredLogs;
+  }, [recentLogs, deferredSearchQuery, filterAction, filterDateFrom, filterDateTo, tempDateFrom, tempDateTo, filterVerification, verifyStatuses, sortOrder]);
+  const totalPages = Math.ceil(totalLogsCount / rowsPerPage) || 1;
+  const paginatedLogs = filteredLogs;
 
   useEffect(() => {
     if (currentPage > totalPages) {
       setCurrentPage(1);
     }
-  }, [isLocalPaginated, totalLogsCount, filteredLogs.length, currentPage, totalPages]);
+  }, [currentPage, totalPages]);
 
-  const isFiltered = searchQuery || filterAction !== 'ALL' || filterDateFrom || filterDateTo;
-  const displayTotal = isLocalPaginated
-    ? filteredLogs.length
-    : (isFiltered ? filteredLogs.length : totalLogsCount);
+  const hasLocalFilter = searchQuery || filterAction !== 'ALL' || filterVerification !== 'ALL';
+  const displayTotal = hasLocalFilter ? filteredLogs.length : totalLogsCount;
 
   // Status badge for transaction table
-  const renderStatusBadge = (log) => {
+  const renderStatusBadge = useCallback((log) => {
     if (!log || !log.log_id || !log.hash_value) return <span className="ac-status ac-status--invalid">🚨 INVALID</span>;
     const v = verifyStatuses[log.log_id];
 
@@ -540,11 +520,11 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
     if (v.status === 'pending')
       return <span className="ac-status ac-status--pending" onClick={() => setSelectedVerifyResult(v)}>⏱️ PENDING</span>;
     return <span className="ac-status ac-status--invalid" onClick={() => setSelectedVerifyResult(v)}>🚨 INVALID</span>;
-  };
+  }, [handleVerifyLog, verifyStatuses]);
 
 
   // Pagination page numbers
-  const renderPageNumbers = () => {
+  const renderPageNumbers = useCallback(() => {
     const pages = [];
     if (totalPages <= 7) {
       for (let i = 1; i <= totalPages; i++) pages.push(i);
@@ -558,7 +538,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
       pages.push(totalPages);
     }
     return pages;
-  };
+  }, [currentPage, totalPages]);
 
   const isMobileSidebar = typeof window !== 'undefined' && window.innerWidth <= 768;
   const isSidebarExpanded = isMobileSidebar ? sidebarOpen : !sidebarCollapsed;
@@ -578,7 +558,10 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
           {clientInfo && clientInfo.role?.toLowerCase() === 'admin' ? (
             <select
               value={selectedClient}
-              onChange={e => setSelectedClient(e.target.value)}
+              onChange={e => {
+                setSelectedClient(e.target.value);
+                setCurrentPage(1);
+              }}
               className="ac-topnav__client-select"
               style={{
                 background: 'rgba(3,40,93,0.05)',
@@ -615,11 +598,6 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
                 })
               )}
             </select>
-          ) : clientInfo ? (
-            <div className="ac-topnav__client-pill">
-              <span className="ac-topnav__client-dot" style={{ background: '#008862' }} />
-              <span className="ac-topnav__client-label">{clientInfo.client_id}</span>
-            </div>
           ) : null}
           {clientInfo && (
             <div className="ac-profile-menu">
@@ -641,6 +619,11 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
                     <Icon name="user" size={15} />
                     Profile
                   </button>
+                  <AppearanceMenu
+                    themePreference={themePreference}
+                    resolvedTheme={resolvedTheme}
+                    onThemeChange={onThemeChange}
+                  />
                   <button onClick={onLogout} className="ac-profile-menu__danger">
                     <Icon name="logout" size={15} />
                     Logout
@@ -715,13 +698,15 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
                   </span>
                 </div>
               </div>
-              <div className="ac-sidebar__identity-client">
-                <Icon name="database" size={14} />
-                <span className="ac-sidebar__identity-workspace">
-                  <strong>{adminClients.find(c => c.id === clientInfo.client_id)?.company_name || clientInfo.company_name || 'Client Workspace'}</strong>
-                  <small title={clientInfo.client_id}>{clientInfo.client_id}</small>
-                </span>
-              </div>
+              {clientInfo.role?.toLowerCase() === 'admin' && (
+                <div className="ac-sidebar__identity-client">
+                  <Icon name="database" size={14} />
+                  <span className="ac-sidebar__identity-workspace">
+                    <strong>{adminClients.find(c => c.id === clientInfo.client_id)?.company_name || clientInfo.company_name || 'Client Workspace'}</strong>
+                    <small title={clientInfo.client_id}>{clientInfo.client_id}</small>
+                  </span>
+                </div>
+              )}
             </div>
           )}
           <button className="ac-sidebar__nav-item ac-sidebar__nav-item--logout" style={{ marginTop: 6 }} onClick={onLogout} title="Logout">
@@ -873,12 +858,12 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
                   </div>
                 </aside>
               </div>
-              <div style={{ marginTop: '30px', background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-                <h3 style={{ marginBottom: '16px', color: '#03285D' }}>Notification Settings</h3>
+              <div className="ac-profile-card ac-profile-settings-card">
+                <h3>Notification Settings</h3>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
                     <input type="checkbox" style={{ marginRight: '8px', width: '16px', height: '16px' }} defaultChecked />
-                    <span style={{ fontSize: '14px', color: '#4b5563' }}>Enable Email Alerts</span>
+                    <span>Enable Email Alerts</span>
                   </label>
                 </div>
               </div>
@@ -917,8 +902,6 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
               setSortOrder={handleSortOrderChange}
               filterTable={filterTable}
               setFilterTable={handleFilterTableChange}
-              filterDbEngine={filterDbEngine}
-              setFilterDbEngine={handleFilterDbEngineChange}
               tableNames={tableNames}
               rowsPerPage={rowsPerPage}
               setRowsPerPage={setRowsPerPage}
@@ -939,7 +922,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
               isVerifyRangeLoading={isVerifyRangeLoading}
               selectedVerifyResult={selectedVerifyResult}
               setSelectedVerifyResult={setSelectedVerifyResult}
-              onSelectResource={setSelectedResource}
+              onSelectResource={setSelectedLog}
               renderStatusBadge={renderStatusBadge}
               displayTotal={displayTotal}
               currentPage={currentPage}
@@ -954,11 +937,11 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard' }) {
       </main>
 
       {/* MODAL LEVEL 2: Resource Log History */}
-      {selectedResource && (
+      {selectedLog && (
         <ResourceDetailModal
-          resource={selectedResource}
+          log={selectedLog}
           selectedClient={selectedClient}
-          onClose={() => setSelectedResource(null)}
+          onClose={() => setSelectedLog(null)}
         />
       )}
     </div>

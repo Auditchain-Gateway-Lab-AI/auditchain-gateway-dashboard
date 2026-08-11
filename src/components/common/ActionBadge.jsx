@@ -10,5 +10,7 @@ function ActionBadge({ action }) {
   return <span className={`ac-badge ${cls}`}>{action}</span>;
 }
 
+const MemoizedActionBadge = React.memo(ActionBadge);
+
 export { ActionBadge };
-export default ActionBadge;
+export default MemoizedActionBadge;

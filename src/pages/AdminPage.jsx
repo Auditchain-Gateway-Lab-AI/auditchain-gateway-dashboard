@@ -1,14 +1,23 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api';
 import Icon from '../components/common/Icon';
+import AppearanceMenu from '../components/common/AppearanceMenu';
 import DBEngineBadge from '../components/common/DBEngineBadge';
 import ConnectorStatusBadge from '../components/common/ConnectorStatusBadge';
 import { parseJwt, formatTimestamp } from '../utils/formatters';
 
 const ADMIN_TABS = ['overview', 'clients', 'users', 'kafka', 'profile'];
 
-function AdminPage({ onLogout }) {
+const isSameJSON = (a, b) => {
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
+};
+
+function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'light', onThemeChange }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
@@ -31,6 +40,7 @@ function AdminPage({ onLogout }) {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [showUserModal, setShowUserModal] = useState(false);
   const [authToken, setAuthToken] = useState(() => localStorage.getItem('token') || sessionStorage.getItem('token') || '');
+  const isMountedRef = useRef(true);
 
   // Modal states
   const [showClientModal, setShowClientModal] = useState(false);
@@ -66,19 +76,28 @@ function AdminPage({ onLogout }) {
   }, []);
 
   const handleCopySetupCmd = useCallback((cmdText) => {
-    navigator.clipboard.writeText(cmdText).then(() => {
-      setSetupCmdCopied(true);
-      setTimeout(() => setSetupCmdCopied(false), 2000);
-    }).catch(() => {
+    const fallbackCopy = () => {
       const el = document.createElement('textarea');
       el.value = cmdText;
+      el.setAttribute('readonly', '');
+      el.style.position = 'absolute';
+      el.style.left = '-9999px';
       document.body.appendChild(el);
       el.select();
       document.execCommand('copy');
       document.body.removeChild(el);
       setSetupCmdCopied(true);
       setTimeout(() => setSetupCmdCopied(false), 2000);
-    });
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(cmdText).then(() => {
+        setSetupCmdCopied(true);
+        setTimeout(() => setSetupCmdCopied(false), 2000);
+      }).catch(fallbackCopy);
+    } else {
+      fallbackCopy();
+    }
   }, []);
 
   // Agent Lapis 3 Modal states
@@ -148,6 +167,14 @@ function AdminPage({ onLogout }) {
   const handleAdminTabChange = useCallback((tab) => {
     setSearchParams(tab === 'overview' ? {} : { tab });
   }, [setSearchParams]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('auditchain_admin_sidebar_collapsed', sidebarCollapsed ? 'true' : 'false');
@@ -252,6 +279,8 @@ function AdminPage({ onLogout }) {
   };
 
   const fetchData = useCallback(async () => {
+    if (typeof document !== 'undefined' && document.hidden) return;
+
     const [summaryRes, clientsRes, kafkaRes, usersRes] = await Promise.allSettled([
       api.get('/admin/summary'),
       api.get('/admin/clients'),
@@ -267,26 +296,32 @@ function AdminPage({ onLogout }) {
       return;
     }
 
+    if (!isMountedRef.current) return;
+
     if (summaryRes.status === 'fulfilled') {
-      setSummary(summaryRes.value.data || { total_clients: 0, active_streams: 0 });
+      const nextSummary = summaryRes.value.data || { total_clients: 0, active_streams: 0 };
+      setSummary(prev => isSameJSON(prev, nextSummary) ? prev : nextSummary);
     } else {
       console.error("Failed to load admin summary:", summaryRes.reason);
     }
 
     if (clientsRes.status === 'fulfilled') {
-      setClients(clientsRes.value.data || []);
+      const nextClients = clientsRes.value.data || [];
+      setClients(prev => isSameJSON(prev, nextClients) ? prev : nextClients);
     } else {
       console.error("Failed to load admin clients:", clientsRes.reason);
     }
 
     if (kafkaRes.status === 'fulfilled') {
-      setKafkaConfigs(kafkaRes.value.data || []);
+      const nextKafkaConfigs = kafkaRes.value.data || [];
+      setKafkaConfigs(prev => isSameJSON(prev, nextKafkaConfigs) ? prev : nextKafkaConfigs);
     } else {
       console.error("Failed to load admin Kafka configs:", kafkaRes.reason);
     }
 
     if (usersRes.status === 'fulfilled') {
-      setAllUsers(usersRes.value.data || []);
+      const nextUsers = usersRes.value.data || [];
+      setAllUsers(prev => isSameJSON(prev, nextUsers) ? prev : nextUsers);
     } else {
       console.error("Failed to load admin users:", usersRes.reason);
     }
@@ -295,7 +330,15 @@ function AdminPage({ onLogout }) {
   useEffect(() => {
     fetchData();
     const intervalId = setInterval(fetchData, 5000);
-    return () => clearInterval(intervalId);
+    const handleVisibilityChange = () => {
+      if (!document.hidden) fetchData();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [fetchData]);
 
   useEffect(() => {
@@ -573,19 +616,28 @@ function AdminPage({ onLogout }) {
   }, [fetchData]);
 
   const handleCopyApiKey = useCallback(() => {
-    navigator.clipboard.writeText(newApiKey).then(() => {
-      setApiKeyCopied(true);
-      setTimeout(() => setApiKeyCopied(false), 2000);
-    }).catch(() => {
+    const fallbackCopy = () => {
       const el = document.createElement('textarea');
       el.value = newApiKey;
+      el.setAttribute('readonly', '');
+      el.style.position = 'absolute';
+      el.style.left = '-9999px';
       document.body.appendChild(el);
       el.select();
       document.execCommand('copy');
       document.body.removeChild(el);
       setApiKeyCopied(true);
       setTimeout(() => setApiKeyCopied(false), 2000);
-    });
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(newApiKey).then(() => {
+        setApiKeyCopied(true);
+        setTimeout(() => setApiKeyCopied(false), 2000);
+      }).catch(fallbackCopy);
+    } else {
+      fallbackCopy();
+    }
   }, [newApiKey]);
 
   // ======= AGENT LAPIS 3 HANDLERS =======
@@ -741,6 +793,11 @@ function AdminPage({ onLogout }) {
                   <Icon name="user" size={15} />
                   Profile
                 </button>
+                <AppearanceMenu
+                  themePreference={themePreference}
+                  resolvedTheme={resolvedTheme}
+                  onThemeChange={onThemeChange}
+                />
                 <button onClick={onLogout} className="ac-profile-menu__danger">
                   <Icon name="logout" size={15} />
                   Logout
@@ -1081,7 +1138,7 @@ function AdminPage({ onLogout }) {
                       <th>Company Name</th>
                       <th>Status</th>
                       <th>DB Engine</th>
-                      <th>Connector Status</th>
+
                       <th>Field Mapping</th>
                       <th>Registration Date</th>
                       <th>Actions</th>
@@ -1089,11 +1146,11 @@ function AdminPage({ onLogout }) {
                   </thead>
                   <tbody>
                     {clients.length === 0 && (
-                      <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--color-outline)', padding: '32px 0' }}>No registered clients found.</td></tr>
+                      <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--color-outline)', padding: '32px 0' }}>No registered clients found.</td></tr>
                     )}
                     {clients.map(client => {
                       const matchingKafka = kafkaConfigs.find(k => k.client_id === client.id);
-                      const dbEngine = client.db_engine || matchingKafka?.db_engine || '';
+                      const dbEngine = client.db_engine || matchingKafka?.db_engine || matchingKafka?.source_system || '';
                       const connectorStatus = client.connector_status || 'unknown';
                       
                       return (
@@ -1122,9 +1179,6 @@ function AdminPage({ onLogout }) {
                           </td>
                           <td>
                             <DBEngineBadge engine={dbEngine} />
-                          </td>
-                          <td>
-                            <ConnectorStatusBadge status={connectorStatus} />
                           </td>
                           <td>
                             <div className="ac-field-map">
