@@ -5,6 +5,7 @@ import Icon from '../components/common/Icon';
 import AppearanceMenu from '../components/common/AppearanceMenu';
 import StatCards from '../components/dashboard/StatCards';
 import AuditLogTable from '../components/dashboard/AuditLogTable';
+import WebUsersView from '../components/dashboard/WebUsersView';
 import ResourceDetailModal from '../components/dashboard/ResourceDetailModal';
 import { parseJwt, mapRangeItemToVerifyStatus } from '../utils/formatters';
 
@@ -670,6 +671,15 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
             <span className="ac-sidebar__nav-label">Dashboard</span>
           </button>
 
+          <button
+            className={`ac-sidebar__nav-item${view === 'web-users' ? ' ac-sidebar__nav-item--active' : ''}`}
+            onClick={() => { navigate('/web-users'); setSidebarOpen(false); }}
+            title="Web Users"
+          >
+            <Icon name="user" size={18} />
+            <span className="ac-sidebar__nav-label">Web Users</span>
+          </button>
+
           {clientInfo && clientInfo.role?.toLowerCase() === 'admin' && (
             <button
               className="ac-sidebar__nav-item"
@@ -868,6 +878,8 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
                 </div>
               </div>
             </section>
+          ) : view === 'web-users' ? (
+            <WebUsersView />
           ) : (
           <>
             {/* Hero Section */}
