@@ -571,7 +571,7 @@ function AuditLogTable({
             <span className="ac-card__icon ac-card__icon--soft">
               <Icon name="history" size={18} />
             </span>
-            <span className="ac-card__title">All Transaction History</span>
+            <span className="ac-card__title">Audit Logs</span>
           </div>
 
           <div className="ac-toolbar">
