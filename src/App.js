@@ -136,6 +136,21 @@ function App() {
           }
         />
         <Route
+          path="/audit-logs"
+          element={
+            <ProtectedRoute isAuthenticated={isAuthenticated}>
+              <DashboardPage
+                view="audit-logs"
+                onLogout={handleLogout}
+                onProfileUpdated={handleAuthRefresh}
+                themePreference={themePreference}
+                resolvedTheme={resolvedTheme}
+                onThemeChange={setThemePreference}
+              />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/admin"
           element={
             <ProtectedRoute isAuthenticated={isAuthenticated}>

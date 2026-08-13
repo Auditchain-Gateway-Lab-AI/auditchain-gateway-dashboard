@@ -38,9 +38,14 @@ export const formatTimestamp = (dateString) => {
 export const mapRangeItemToVerifyStatus = (item) => {
   const statusMap = {
     success: 'success',
+    valid: 'valid',
     pending: 'pending',
     failed_local: 'failed_local',
     failed_onchain: 'failed_onchain',
+    failed: 'failed',
+    tampered: 'tampered',
+    error: 'error',
+    unreachable: 'unreachable',
   };
   const status = statusMap[item.verify_status] || 'failed';
 
@@ -49,7 +54,7 @@ export const mapRangeItemToVerifyStatus = (item) => {
     message: item.message,
     data: {
       log_id: item.log_id,
-      is_valid: status === 'success',
+      is_valid: status === 'success' || status === 'valid',
       message: item.message,
       expected_hash: item.expected_hash || item.hash_value,
       actual_hash: item.actual_hash,
