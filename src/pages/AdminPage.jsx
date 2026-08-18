@@ -4,10 +4,9 @@ import api from '../api';
 import Icon from '../components/common/Icon';
 import AppearanceMenu from '../components/common/AppearanceMenu';
 import DBEngineBadge from '../components/common/DBEngineBadge';
-import ConnectorStatusBadge from '../components/common/ConnectorStatusBadge';
 import { parseJwt, formatTimestamp } from '../utils/formatters';
 
-const ADMIN_TABS = ['overview', 'clients', 'users', 'kafka', 'profile'];
+const ADMIN_TABS = ['overview', 'clients', 'client-users', 'users', 'kafka', 'profile'];
 
 const isSameJSON = (a, b) => {
   try {
@@ -15,6 +14,29 @@ const isSameJSON = (a, b) => {
   } catch {
     return false;
   }
+};
+
+const splitListValue = (value = '') => String(value || '')
+  .split(',')
+  .map(item => item.trim())
+  .filter(Boolean);
+
+const getLatestUserActivity = (users = []) => {
+  const latest = users.reduce((currentLatest, user) => {
+    const rawValue = user.last_seen_at || user.lastSeenAt || user.updated_at || user.updatedAt || user.created_at || user.createdAt;
+    if (!rawValue) return currentLatest;
+
+    const time = new Date(rawValue).getTime();
+    if (Number.isNaN(time)) return currentLatest;
+
+    if (!currentLatest || time > currentLatest.time) {
+      return { rawValue, time };
+    }
+
+    return currentLatest;
+  }, null);
+
+  return latest?.rawValue || '';
 };
 
 function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'light', onThemeChange }) {
@@ -37,6 +59,7 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('auditchain_admin_sidebar_collapsed') === 'true');
+  const [sidebarHoverOpen, setSidebarHoverOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [showUserModal, setShowUserModal] = useState(false);
   const [authToken, setAuthToken] = useState(() => localStorage.getItem('token') || sessionStorage.getItem('token') || '');
@@ -48,32 +71,26 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [newApiKey, setNewApiKey] = useState('');
   const [apiKeyCopied, setApiKeyCopied] = useState(false);
-  const [customTailscaleKey, setCustomTailscaleKey] = useState('');
   const [setupCmdCopied, setSetupCmdCopied] = useState(false);
 
-  // Quick Setup Modal states (for existing clients)
-  const [showQuickSetupModal, setShowQuickSetupModal] = useState(false);
-  const [selectedQuickSetupClient, setSelectedQuickSetupClient] = useState(null);
-
   // Installer Script Helpers
-  const getInstallerScriptUrl = useCallback(() => {
+  const getApiBaseUrl = useCallback(() => {
     const baseURL = api.defaults.baseURL || 'http://localhost:8080/api';
-    const cleanBase = baseURL.replace(/\/$/, '');
-    return `${cleanBase}/install.sh`;
+    return baseURL.replace(/\/$/, '');
   }, []);
 
-  const buildInstallCommand = useCallback((apiKey, tailscaleKey) => {
-    const baseURL = api.defaults.baseURL || 'http://localhost:8081/api';
-    const cleanBase = baseURL.replace(/\/$/, '');
-    const gatewayHost = cleanBase.replace(/\/api\/?$/, '');
-    const scriptUrl = `${cleanBase}/install.sh`;
-    const key = apiKey || '<YOUR_CLIENT_API_KEY>';
+  const getGatewayBaseUrl = useCallback(() => {
+    return getApiBaseUrl().replace(/\/api\/?$/, '');
+  }, [getApiBaseUrl]);
 
-    if (tailscaleKey && tailscaleKey.trim()) {
-      return `GATEWAY_URL="${gatewayHost}" CLIENT_KEY="${key}" TAILSCALE_AUTHKEY="${tailscaleKey.trim()}" sudo -E bash -c "$(curl -fsSL ${scriptUrl})"`;
-    }
-    return `curl -fsSL ${scriptUrl} | sudo bash -s -- ${gatewayHost} ${key}`;
-  }, []);
+  const getInstallerScriptUrl = useCallback(() => {
+    return `${getApiBaseUrl()}/install.sh`;
+  }, [getApiBaseUrl]);
+
+  const buildInstallCommand = useCallback((apiKey) => {
+    const key = apiKey?.trim() || '<YOUR_CLIENT_API_KEY>';
+    return `curl -fsSL ${getInstallerScriptUrl()} | sudo bash -s -- ${getGatewayBaseUrl()} ${key}`;
+  }, [getGatewayBaseUrl, getInstallerScriptUrl]);
 
   const handleCopySetupCmd = useCallback((cmdText) => {
     const fallbackCopy = () => {
@@ -110,11 +127,30 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
   const [agentActionSuccess, setAgentActionSuccess] = useState('');
   const [agentPingLoading, setAgentPingLoading] = useState(false);
   const [agentPingResult, setAgentPingResult] = useState(null);
+  const [agentAdvancedOpen, setAgentAdvancedOpen] = useState(false);
   const [agentForm, setAgentForm] = useState({
     agent_url: '',
     verify_token: '',
     timeout_seconds: 5,
   });
+
+  // CDC client users state
+  const [cdcClientUsers, setCdcClientUsers] = useState([]);
+  const [clientCdcDetails, setClientCdcDetails] = useState({});
+  const [cdcActionError, setCdcActionError] = useState('');
+  const [userTableModalClient, setUserTableModalClient] = useState(null);
+  const [userTableLoading, setUserTableLoading] = useState(false);
+  const [userTableSaving, setUserTableSaving] = useState(false);
+  const [userTableNotice, setUserTableNotice] = useState(null);
+  const [userTableForm, setUserTableForm] = useState({
+    user_table_name: '',
+    user_column_name: '',
+  });
+  const [watchedTablesClient, setWatchedTablesClient] = useState(null);
+  const [watchedTablesClosing, setWatchedTablesClosing] = useState(false);
+  const [watchedTablesLoading, setWatchedTablesLoading] = useState(false);
+  const [watchedTableSearch, setWatchedTableSearch] = useState('');
+  const watchedTablesCloseTimerRef = useRef(null);
 
   // Manage client users state
   const [manageUsersClient, setManageUsersClient] = useState(null);
@@ -173,6 +209,9 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
 
     return () => {
       isMountedRef.current = false;
+      if (watchedTablesCloseTimerRef.current) {
+        clearTimeout(watchedTablesCloseTimerRef.current);
+      }
     };
   }, []);
 
@@ -202,6 +241,28 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
   const adminUsers = useMemo(() => (
     allUsers.filter(user => user.role?.toLowerCase() === 'admin')
   ), [allUsers]);
+
+  const cdcUsersByClientId = useMemo(() => {
+    const map = new Map();
+    cdcClientUsers.forEach(item => {
+      if (item?.client_id) map.set(item.client_id, item);
+    });
+    return map;
+  }, [cdcClientUsers]);
+
+  const cdcStats = useMemo(() => {
+    const totalUsers = cdcClientUsers.reduce((sum, item) => sum + (item.users?.length || 0), 0);
+    const activeSources = cdcClientUsers.filter(item => (item.users?.length || 0) > 0).length;
+    const monitoredTables = Object.values(clientCdcDetails).reduce((sum, detail) => (
+      sum + splitListValue(detail?.agent_config?.db_tables).length
+    ), 0);
+    return {
+      totalUsers,
+      activeSources,
+      configuredClients: cdcClientUsers.length,
+      monitoredTables,
+    };
+  }, [cdcClientUsers, clientCdcDetails]);
 
   const overviewData = useMemo(() => {
     const configuredClientIds = new Set(kafkaConfigs.map(config => config.client_id));
@@ -257,6 +318,11 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
       title: 'Client Registry',
       subtitle: 'Register, activate, and manage all client systems connected to the AuditChain Gateway.'
     },
+    'client-users': {
+      kicker: 'Client Identity Feed',
+      title: 'Client Users CDC',
+      subtitle: 'Review users discovered from client databases and configure the user table watched by the remote agent.'
+    },
     kafka: {
       kicker: 'Stream Operations',
       title: 'Kafka Configuration',
@@ -281,14 +347,15 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
   const fetchData = useCallback(async () => {
     if (typeof document !== 'undefined' && document.hidden) return;
 
-    const [summaryRes, clientsRes, kafkaRes, usersRes] = await Promise.allSettled([
+    const [summaryRes, clientsRes, kafkaRes, usersRes, cdcUsersRes] = await Promise.allSettled([
       api.get('/admin/summary'),
       api.get('/admin/clients'),
       api.get('/admin/kafka-configs'),
-      api.get('/admin/users')
+      api.get('/admin/users'),
+      api.get('/admin/client-cdc-users')
     ]);
 
-    const unauthorized = [summaryRes, clientsRes, kafkaRes, usersRes]
+    const unauthorized = [summaryRes, clientsRes, kafkaRes, usersRes, cdcUsersRes]
       .some(result => result.status === 'rejected' && result.reason?.response?.status === 401);
 
     if (unauthorized) {
@@ -325,6 +392,15 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
     } else {
       console.error("Failed to load admin users:", usersRes.reason);
     }
+
+    if (cdcUsersRes.status === 'fulfilled') {
+      const nextCdcUsers = cdcUsersRes.value.data || [];
+      setCdcClientUsers(prev => isSameJSON(prev, nextCdcUsers) ? prev : nextCdcUsers);
+      setCdcActionError('');
+    } else {
+      console.error("Failed to load CDC client users:", cdcUsersRes.reason);
+      setCdcActionError(cdcUsersRes.reason?.response?.data?.error || 'Failed to load client CDC users.');
+    }
   }, [onLogout]);
 
   useEffect(() => {
@@ -340,6 +416,37 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [fetchData]);
+
+  useEffect(() => {
+    if (activeTab !== 'client-users' || clients.length === 0) {
+      if (activeTab !== 'client-users') setClientCdcDetails({});
+      return;
+    }
+
+    let cancelled = false;
+
+    Promise.allSettled(
+      clients.map(client => api.get(`/admin/clients/${client.id}/detail`))
+    ).then(results => {
+      if (cancelled) return;
+
+      const nextDetails = {};
+      results.forEach((result, index) => {
+        const client = clients[index];
+        if (!client) return;
+        if (result.status === 'fulfilled') {
+          nextDetails[client.id] = result.value.data || {};
+        }
+      });
+      setClientCdcDetails(prev => isSameJSON(prev, nextDetails) ? prev : nextDetails);
+    }).catch(err => {
+      if (!cancelled) console.error('Failed to load client CDC details:', err);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, clients]);
 
   useEffect(() => {
     if (activeTab !== 'profile') return;
@@ -647,6 +754,7 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
       setAgentActionError('');
       const res = await api.get(`/admin/clients/${clientId}/agent-config`);
       setAgentConfig(res.data);
+      setAgentAdvancedOpen(false);
       setAgentForm({
         agent_url: res.data.agent_url || '',
         verify_token: '',
@@ -655,6 +763,7 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
     } catch (err) {
       if (err.response?.status === 404) {
         setAgentConfig(null);
+        setAgentAdvancedOpen(true);
         setAgentForm({ agent_url: '', verify_token: '', timeout_seconds: 5 });
       } else {
         console.error("Failed to load agent config:", err);
@@ -670,6 +779,7 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
     setShowAgentModal(true);
     setAgentConfig(null);
     setAgentPingResult(null);
+    setAgentAdvancedOpen(false);
     setAgentActionError('');
     setAgentActionSuccess('');
     fetchAgentConfig(client.id);
@@ -741,6 +851,115 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
     }
   }, [selectedAgentClient]);
 
+  const handleOpenUserTableConfig = useCallback(async (client) => {
+    setUserTableModalClient(client);
+    setUserTableNotice(null);
+    setCdcActionError('');
+    setUserTableForm({
+      user_table_name: '',
+      user_column_name: '',
+    });
+
+    try {
+      setUserTableLoading(true);
+      const res = await api.get(`/admin/clients/${client.id}/detail`);
+      setClientCdcDetails(prev => ({
+        ...prev,
+        [client.id]: res.data || {},
+      }));
+      const cfg = res.data?.agent_config || {};
+      setUserTableForm({
+        user_table_name: cfg.user_table_name || '',
+        user_column_name: cfg.user_column_name || '',
+      });
+      if (!cfg.agent_url) {
+        setUserTableNotice({
+          tone: 'warning',
+          message: 'Agent config belum terdeteksi untuk client ini. Simpan tetap bisa dicoba setelah agent/telemetry tersedia.',
+        });
+      }
+    } catch (err) {
+      console.error("Failed to load user table config:", err);
+      setUserTableNotice({
+        tone: 'warning',
+        message: err.response?.data?.error || 'Existing user table config could not be loaded. You can still fill it manually.',
+      });
+    } finally {
+      setUserTableLoading(false);
+    }
+  }, []);
+
+  const handleOpenWatchedTables = useCallback(async (client) => {
+    if (watchedTablesCloseTimerRef.current) {
+      clearTimeout(watchedTablesCloseTimerRef.current);
+      watchedTablesCloseTimerRef.current = null;
+    }
+    setWatchedTablesClosing(false);
+    setWatchedTablesClient(client);
+    setWatchedTableSearch('');
+
+    try {
+      setWatchedTablesLoading(true);
+      const res = await api.get(`/admin/clients/${client.id}/detail`);
+      setClientCdcDetails(prev => ({
+        ...prev,
+        [client.id]: res.data || {},
+      }));
+    } catch (err) {
+      console.error("Failed to load watched tables:", err);
+      setCdcActionError(err.response?.data?.error || 'Failed to load watched table details.');
+    } finally {
+      setWatchedTablesLoading(false);
+    }
+  }, []);
+
+  const handleCloseWatchedTables = useCallback((afterClose) => {
+    if (watchedTablesCloseTimerRef.current) {
+      clearTimeout(watchedTablesCloseTimerRef.current);
+    }
+
+    if (!watchedTablesClient) {
+      if (afterClose) afterClose();
+      return;
+    }
+
+    setWatchedTablesClosing(true);
+    watchedTablesCloseTimerRef.current = setTimeout(() => {
+      setWatchedTablesClient(null);
+      setWatchedTablesClosing(false);
+      watchedTablesCloseTimerRef.current = null;
+      if (afterClose) afterClose();
+    }, 260);
+  }, [watchedTablesClient]);
+
+  const handleSubmitUserTableConfig = useCallback(async (e) => {
+    e.preventDefault();
+    if (!userTableModalClient) return;
+
+    try {
+      setUserTableSaving(true);
+      setUserTableNotice(null);
+      const res = await api.put(`/admin/clients/${userTableModalClient.id}/user-table-config`, {
+        user_table_name: userTableForm.user_table_name.trim(),
+        user_column_name: userTableForm.user_column_name.trim(),
+      });
+      const status = res.data?.status;
+      setUserTableNotice({
+        tone: status === 'success_full' ? 'success' : 'warning',
+        message: res.data?.message || 'User table configuration saved.',
+      });
+      fetchData();
+    } catch (err) {
+      console.error("Failed to save user table config:", err);
+      setUserTableNotice({
+        tone: 'error',
+        message: err.response?.data?.error || 'Failed to save user table configuration.',
+      });
+    } finally {
+      setUserTableSaving(false);
+    }
+  }, [fetchData, userTableForm, userTableModalClient]);
+
   const handleDeleteKafkaConfig = useCallback(async (configId, companyName) => {
     if (!window.confirm(`Are you sure you want to delete Kafka configuration for "${companyName || 'client'}"?`)) {
       return;
@@ -755,10 +974,20 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
   }, [fetchData]);
 
   const isMobileSidebar = typeof window !== 'undefined' && window.innerWidth <= 768;
-  const isSidebarExpanded = isMobileSidebar ? sidebarOpen : !sidebarCollapsed;
+  const isSidebarPreviewOpen = !isMobileSidebar && sidebarCollapsed && sidebarHoverOpen;
+
+  const handleSidebarModeToggle = useCallback(() => {
+    if (window.innerWidth <= 768) {
+      setSidebarOpen(o => !o);
+      return;
+    }
+
+    setSidebarHoverOpen(false);
+    setSidebarCollapsed(collapsed => !collapsed);
+  }, []);
 
   return (
-    <div className={`ac-shell ac-shell--admin${sidebarCollapsed ? ' ac-shell--sidebar-collapsed' : ''}`}>
+    <div className={`ac-shell ac-shell--admin${sidebarCollapsed ? ' ac-shell--sidebar-collapsed' : ''}${isSidebarPreviewOpen ? ' ac-shell--sidebar-hover-open' : ''}`}>
 
       {/* ======= TOP NAV ======= */}
       <header className="ac-topnav">
@@ -809,7 +1038,15 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
       </header>
 
       {/* ======= SIDEBAR ======= */}
-      <aside className={`ac-sidebar${sidebarOpen ? ' ac-sidebar--open' : ''}`}>
+      <aside
+        className={`ac-sidebar${sidebarOpen ? ' ac-sidebar--open' : ''}${isSidebarPreviewOpen ? ' ac-sidebar--hover-open' : ''}`}
+        onMouseEnter={() => {
+          if (window.innerWidth > 768 && sidebarCollapsed) setSidebarHoverOpen(true);
+        }}
+        onMouseLeave={() => {
+          if (window.innerWidth > 768 && sidebarCollapsed) setSidebarHoverOpen(false);
+        }}
+      >
         <div className="ac-sidebar__header">
           <div className="ac-sidebar__header-main">
             <img className="ac-sidebar__compact-logo" src="/logo/Mask group.png" alt="AG" />
@@ -818,20 +1055,6 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
               <div className="ac-sidebar__section-sub">Client System Management</div>
             </div>
           </div>
-          <button
-            className="ac-sidebar__toggle-btn"
-            onClick={() => {
-              if (window.innerWidth <= 768) {
-                setSidebarOpen(o => !o);
-              } else {
-                setSidebarCollapsed(o => !o);
-              }
-            }}
-            title={isSidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
-            aria-label={isSidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
-          >
-            <Icon name={isSidebarExpanded ? 'chevronLeft' : 'chevronRight'} size={18} />
-          </button>
         </div>
         <nav className="ac-sidebar__nav">
           <button
@@ -859,6 +1082,15 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
           >
             <Icon name="user" size={18} />
             <span className="ac-sidebar__nav-label">User Management</span>
+          </button>
+
+          <button
+            className={`ac-sidebar__nav-item${activeTab === 'client-users' ? ' ac-sidebar__nav-item--active' : ''}`}
+            onClick={() => { handleAdminTabChange('client-users'); setSidebarOpen(false); }}
+            title="Client Users CDC"
+          >
+            <Icon name="list" size={18} />
+            <span className="ac-sidebar__nav-label">Client Users CDC</span>
           </button>
 
           <button
@@ -893,9 +1125,14 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
               </div>
             </div>
           )}
-          <button className="ac-sidebar__nav-item ac-sidebar__nav-item--logout" style={{ marginTop: 6 }} onClick={onLogout} title="Logout">
-            <Icon name="logout" size={18} />
-            <span className="ac-sidebar__nav-label">Logout</span>
+          <button
+            type="button"
+            className={`ac-sidebar__mode-toggle${!sidebarCollapsed ? ' ac-sidebar__mode-toggle--pinned' : ''}`}
+            onClick={handleSidebarModeToggle}
+            title={sidebarCollapsed ? 'Pin sidebar open' : 'Use auto-collapse sidebar'}
+            aria-label={sidebarCollapsed ? 'Pin sidebar open' : 'Use auto-collapse sidebar'}
+          >
+            <Icon name="sidebarPanel" size={17} />
           </button>
         </div>
       </aside>
@@ -1151,8 +1388,7 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                     {clients.map(client => {
                       const matchingKafka = kafkaConfigs.find(k => k.client_id === client.id);
                       const dbEngine = client.db_engine || matchingKafka?.db_engine || matchingKafka?.source_system || '';
-                      const connectorStatus = client.connector_status || 'unknown';
-                      
+
                       return (
                         <tr key={client.id}>
                           <td>
@@ -1199,21 +1435,18 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                                 <Icon name={client.status === 'active' ? 'lock' : 'shield'} size={14} />
                               </button>
                               <button
-                                className="ac-admin-action-btn ac-admin-action-btn--neutral ac-admin-action-btn--icon"
-                                onClick={() => {
-                                  setSelectedQuickSetupClient(client);
-                                  setShowQuickSetupModal(true);
-                                }}
-                                title="View 1-Command Setup Guide"
-                              >
-                                <Icon name="zap" size={14} />
-                              </button>
-                              <button
                                 className="ac-admin-action-btn ac-admin-action-btn--agent ac-admin-action-btn--icon"
                                 onClick={() => handleOpenAgentModal(client)}
                                 title="Configure local Agent"
                               >
                                 <Icon name="link" size={14} />
+                              </button>
+                              <button
+                                className="ac-admin-action-btn ac-admin-action-btn--neutral ac-admin-action-btn--icon"
+                                onClick={() => handleOpenUserTableConfig(client)}
+                                title="Configure client user source table"
+                              >
+                                <Icon name="database" size={14} />
                               </button>
                               <button
                                 className="ac-admin-action-btn ac-admin-action-btn--primary ac-admin-action-btn--icon"
@@ -1237,6 +1470,128 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                   </tbody>
                 </table>
               </div>
+            </section>
+          )}
+
+
+          {activeTab === 'client-users' && (
+            <section className="ac-admin-cdc-page" style={{ animation: 'fadeIn 0.3s ease' }}>
+              <div className="ac-admin-cdc-summary">
+                <div className="ac-admin-overview-stat">
+                  <span className="ac-admin-overview-stat__icon ac-admin-overview-stat__icon--teal">
+                    <Icon name="user" size={20} />
+                  </span>
+                  <div>
+                    <div className="ac-admin-overview-stat__label">Discovered Users</div>
+                    <div className="ac-admin-overview-stat__value">{cdcStats.totalUsers}</div>
+                    <div className="ac-admin-overview-stat__sub">Users captured from client-side CDC</div>
+                  </div>
+                </div>
+                <div className="ac-admin-overview-stat">
+                  <span className="ac-admin-overview-stat__icon ac-admin-overview-stat__icon--blue">
+                    <Icon name="database" size={20} />
+                  </span>
+                  <div>
+                    <div className="ac-admin-overview-stat__label">Clients With Users</div>
+                    <div className="ac-admin-overview-stat__value">{cdcStats.activeSources}</div>
+                    <div className="ac-admin-overview-stat__sub">Sources returning user records</div>
+                  </div>
+                </div>
+                <div className="ac-admin-overview-stat">
+                  <span className="ac-admin-overview-stat__icon ac-admin-overview-stat__icon--amber">
+                    <Icon name="link" size={20} />
+                  </span>
+                  <div>
+                    <div className="ac-admin-overview-stat__label">Watched Tables</div>
+                    <div className="ac-admin-overview-stat__value">{cdcStats.monitoredTables}</div>
+                    <div className="ac-admin-overview-stat__sub">Tables listed by client agent configs</div>
+                  </div>
+                </div>
+              </div>
+
+              {cdcActionError && (
+                <div className="ac-admin-inline-alert">
+                  <Icon name="warn" size={15} />
+                  {cdcActionError}
+                </div>
+              )}
+
+              <section className="ac-card ac-admin-registry-card">
+                <div className="ac-card__header ac-admin-registry-header">
+                  <div className="ac-admin-registry-header__copy">
+                    <div className="ac-card__title">Client Database Users</div>
+                    <div className="ac-admin-card-sub">Data from <code>GET /api/admin/client-cdc-users</code>. Configure the watched table when a client has no detected users yet.</div>
+                  </div>
+                  <button className="ac-btn-ghost-action" onClick={fetchData}>
+                    <Icon name="history" size={15} />
+                    Refresh
+                  </button>
+                </div>
+                <div className="ac-table-wrap">
+                  <table className="ac-table ac-admin-cdc-table">
+                    <thead>
+                      <tr>
+                        <th>Client</th>
+                        <th>Detected Users</th>
+                        <th>Latest Activity</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {clients.length === 0 && (
+                        <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--color-outline)', padding: '32px 0' }}>No registered clients found.</td></tr>
+                      )}
+                      {clients.map(client => {
+                        const cdcEntry = cdcUsersByClientId.get(client.id);
+                        const detectedUsers = cdcEntry?.users || [];
+                        const latestSeen = getLatestUserActivity(detectedUsers);
+
+                        return (
+                          <tr key={client.id}>
+                            <td>
+                              <div className="ac-admin-client-cell">
+                                <div className="ac-admin-client-cell__avatar">
+                                  {client.company_name?.charAt(0)?.toUpperCase() || 'C'}
+                                </div>
+                                <div className="ac-admin-client-cell__content">
+                                  <div className="ac-admin-client-cell__name">{client.company_name}</div>
+                                  <div className="ac-admin-client-cell__id">{client.id}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td>
+                              <span className={`ac-cdc-count-badge${detectedUsers.length > 0 ? ' ac-cdc-count-badge--active' : ''}`}>
+                                {detectedUsers.length}
+                              </span>
+                            </td>
+                            <td className="ac-table__time">
+                              {latestSeen ? formatTimestamp(latestSeen) : 'No activity yet'}
+                            </td>
+                            <td className="ac-admin-actions-cell">
+                              <div className="ac-admin-action-group">
+                                <button
+                                  className="ac-admin-action-btn ac-admin-action-btn--neutral"
+                                  onClick={() => handleOpenWatchedTables(client)}
+                                >
+                                  <Icon name="list" size={14} />
+                                  <span>View Tables</span>
+                                </button>
+                                <button
+                                  className="ac-admin-action-btn ac-admin-action-btn--primary"
+                                  onClick={() => handleOpenUserTableConfig(client)}
+                                >
+                                  <Icon name="database" size={14} />
+                                  <span>Configure</span>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
             </section>
           )}
 
@@ -1549,11 +1904,18 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
         <div className="ac-modal-overlay" onClick={() => setShowClientModal(false)}>
           <div className="ac-modal ac-modal--client-register" onClick={e => e.stopPropagation()}>
             <div className="ac-modal__header">
-              <div>
-                <div className="ac-modal__title">🏢 Register New Client</div>
-                <div className="ac-modal__subtitle">Fill in the details for the new client company to establish connection</div>
+              <div className="ac-modal-title-lockup">
+                <span className="ac-modal__title-icon">
+                  <Icon name="building" size={18} />
+                </span>
+                <div>
+                  <div className="ac-modal__title">Register New Client</div>
+                  <div className="ac-modal__subtitle">Fill in the details for the new client company to establish connection</div>
+                </div>
               </div>
-              <button className="ac-modal__close" onClick={() => setShowClientModal(false)}>×</button>
+              <button className="ac-modal__close" onClick={() => setShowClientModal(false)} aria-label="Close client registration">
+                <Icon name="x" size={18} />
+              </button>
             </div>
             <div className="ac-modal__body">
               <form className="ac-register-form" onSubmit={handleSubmitClient}>
@@ -1567,22 +1929,22 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                       <div className="ac-form-section__subtitle">Basic tenant data used across the admin and auditor dashboards.</div>
                     </div>
                   </div>
-                <div className="ac-form-grid ac-form-grid--register">
-                  <div className="ac-form-field ac-form-field--wide">
-                    <label className="ac-form-label">Company Name <span style={{ color: 'var(--color-error)' }}>*</span></label>
-                    <input className="ac-form-input ac-form-input--lg" required placeholder="e.g. Acme Corporation"
-                      value={clientForm.company_name}
-                      onChange={e => setClientForm(f => ({ ...f, company_name: e.target.value }))} />
+                  <div className="ac-form-grid ac-form-grid--register">
+                    <div className="ac-form-field ac-form-field--wide">
+                      <label className="ac-form-label">Company Name <span style={{ color: 'var(--color-error)' }}>*</span></label>
+                      <input className="ac-form-input ac-form-input--lg" required placeholder="e.g. Acme Corporation"
+                        value={clientForm.company_name}
+                        onChange={e => setClientForm(f => ({ ...f, company_name: e.target.value }))} />
+                    </div>
+                    <div className="ac-form-field">
+                      <label className="ac-form-label">Status</label>
+                      <select className="ac-form-input ac-form-input--lg" value={clientForm.status}
+                        onChange={e => setClientForm(f => ({ ...f, status: e.target.value }))}>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                      </select>
+                    </div>
                   </div>
-                  <div className="ac-form-field">
-                    <label className="ac-form-label">Status</label>
-                    <select className="ac-form-input ac-form-input--lg" value={clientForm.status}
-                      onChange={e => setClientForm(f => ({ ...f, status: e.target.value }))}>
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                    </select>
-                  </div>
-                </div>
                 </section>
 
                 <section className="ac-form-section">
@@ -1595,20 +1957,20 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                       <div className="ac-form-section__subtitle">Map the primary source field used to identify the actor in audit logs.</div>
                     </div>
                   </div>
-                <div className="ac-form-grid ac-form-grid--register">
-                  <div className="ac-form-field ac-form-field--wide">
-                    <label className="ac-form-label">Actor Field</label>
-                    <input className="ac-form-input ac-form-input--lg" placeholder="actor"
-                      value={clientForm.actor_field}
-                      onChange={e => setClientForm(f => ({ ...f, actor_field: e.target.value }))} />
+                  <div className="ac-form-grid ac-form-grid--register">
+                    <div className="ac-form-field ac-form-field--wide">
+                      <label className="ac-form-label">Actor Field</label>
+                      <input className="ac-form-input ac-form-input--lg" placeholder="actor"
+                        value={clientForm.actor_field}
+                        onChange={e => setClientForm(f => ({ ...f, actor_field: e.target.value }))} />
+                    </div>
+                    <div className="ac-form-field">
+                      <label className="ac-form-label">Fallback Actor Field</label>
+                      <input className="ac-form-input ac-form-input--lg" placeholder="Optional, e.g. db_user"
+                        value={clientForm.fallback_actor_field}
+                        onChange={e => setClientForm(f => ({ ...f, fallback_actor_field: e.target.value }))} />
+                    </div>
                   </div>
-                  <div className="ac-form-field">
-                    <label className="ac-form-label">Fallback Actor Field</label>
-                    <input className="ac-form-input ac-form-input--lg" placeholder="Optional, e.g. db_user"
-                      value={clientForm.fallback_actor_field}
-                      onChange={e => setClientForm(f => ({ ...f, fallback_actor_field: e.target.value }))} />
-                  </div>
-                </div>
                 </section>
 
                 <div className="ac-register-form__note">
@@ -1634,17 +1996,23 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
         <div className="ac-modal-overlay">
           <div className="ac-modal" style={{ maxWidth: '680px', width: '92%' }} onClick={e => e.stopPropagation()}>
             <div className="ac-modal__header">
-              <div>
-                <div className="ac-modal__title">🎉 Client Successfully Registered!</div>
-                <div className="ac-modal__subtitle">Copy and run the 1-command installer script on the client server</div>
+              <div className="ac-modal-title-lockup">
+                <span className="ac-modal__title-icon ac-modal__title-icon--success">
+                  <Icon name="checkCircle" size={18} />
+                </span>
+                <div>
+                  <div className="ac-modal__title">Client Successfully Registered!</div>
+                  <div className="ac-modal__subtitle">Copy and run the 1-command installer script on the client server</div>
+                </div>
               </div>
             </div>
             <div className="ac-modal__body" style={{ maxHeight: '80vh', overflowY: 'auto' }}>
-              
+
               {/* 1-Command Installer Script Box (PRIMARY) */}
               <div>
                 <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-on-surface)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                  🚀 1-Command Automated Agent & CDC Installer
+                  <Icon name="rocket" size={15} />
+                  1-Command Automated Agent & CDC Installer
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--color-outline)', marginBottom: '12px' }}>
                   Copy and run this command on the Client's Linux VPS/Server terminal as Root/Sudo:
@@ -1653,31 +2021,24 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                 <div className="ac-terminal-box">
                   <div className="ac-terminal-box__header">
                     <div className="ac-terminal-box__title">
-                      <span>💻 BASH ONE-LINER (AUTO-CONFIGURED)</span>
+                      <Icon name="terminal" size={14} />
+                      <span>BASH ONE-LINER (AUTO-CONFIGURED)</span>
                     </div>
                     <span style={{ fontSize: '10px', color: '#8b949e', fontFamily: 'var(--font-mono)' }}>Ready to paste</span>
                   </div>
                   <div className="ac-terminal-box__code" style={{ fontSize: '12px', lineHeight: 1.5, wordBreak: 'break-all' }}>
-                    {buildInstallCommand(newApiKey, customTailscaleKey)}
+                    {buildInstallCommand(newApiKey)}
                   </div>
                   <div className="ac-terminal-box__actions" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <button
                       type="button"
                       className={`ac-btn-primary ${setupCmdCopied ? 'ac-btn-primary--success' : ''}`}
                       style={{ padding: '8px 16px', fontSize: '12px', fontWeight: 700 }}
-                      onClick={() => handleCopySetupCmd(buildInstallCommand(newApiKey, customTailscaleKey))}
+                      onClick={() => handleCopySetupCmd(buildInstallCommand(newApiKey))}
                     >
-                      {setupCmdCopied ? '✅ Command Copied!' : '📋 Copy Setup Command'}
+                      <Icon name={setupCmdCopied ? 'checkCircle' : 'copy'} size={14} />
+                      {setupCmdCopied ? 'Command Copied!' : 'Copy Setup Command'}
                     </button>
-                    <a
-                      href={getInstallerScriptUrl()}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="ac-btn-ghost-action"
-                      style={{ padding: '6px 12px', fontSize: '11px', textDecoration: 'none', color: '#79c0ff', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                    >
-                      📥 Download install.sh
-                    </a>
                   </div>
                 </div>
 
@@ -1695,7 +2056,7 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                 }}>
                   <div style={{ overflow: 'hidden' }}>
                     <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-outline)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                      🔑 Generated API Key Reference
+                      Generated API Key Reference
                     </div>
                     <div style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--color-on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {newApiKey}
@@ -1708,27 +2069,10 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                     onClick={handleCopyApiKey}
                     title="Copy Raw API Key"
                   >
-                    {apiKeyCopied ? '✅ Copied' : '📋 Copy Key'}
+                    <Icon name={apiKeyCopied ? 'checkCircle' : 'copy'} size={13} />
+                    {apiKeyCopied ? 'Copied' : 'Copy Key'}
                   </button>
                 </div>
-
-                {/* Advanced Customization (Custom Tailscale Auth Key) */}
-                <details className="ac-adv-customization" style={{ marginTop: '14px' }}>
-                  <summary>⚙️ Advanced Customization (Custom Tailscale Auth Key)</summary>
-                  <div style={{ marginTop: '10px' }}>
-                    <label className="ac-form-label" style={{ fontSize: '11px' }}>Custom Tailscale Auth Key (Optional)</label>
-                    <input
-                      className="ac-form-input"
-                      style={{ fontSize: '12px', padding: '6px 10px' }}
-                      placeholder="tskey-auth-xxxx"
-                      value={customTailscaleKey}
-                      onChange={e => setCustomTailscaleKey(e.target.value)}
-                    />
-                    <div className="ac-security-warning">
-                      ⚠️ <strong>Network Security Warning:</strong> Leaving this field empty uses the default VPN mesh authkey in <code>install.sh</code>. For production deployments, inject your organization's custom Tailscale Auth Key.
-                    </div>
-                  </div>
-                </details>
 
               </div>
 
@@ -1739,70 +2083,11 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                   onClick={() => {
                     setShowApiKeyModal(false);
                     setNewApiKey('');
-                    setCustomTailscaleKey('');
                   }}
                 >
-                  I Have Copied — Close
+                  <Icon name="checkmark" size={15} />
+                  I Have Copied - Close
                 </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ===== MODAL: QUICK SETUP GUIDE (FOR EXISTING CLIENTS) ===== */}
-      {showQuickSetupModal && selectedQuickSetupClient && (
-        <div className="ac-modal-overlay" onClick={() => setShowQuickSetupModal(false)}>
-          <div className="ac-modal" style={{ maxWidth: '640px', width: '90%' }} onClick={e => e.stopPropagation()}>
-            <div className="ac-modal__header">
-              <div>
-                <div className="ac-modal__title">⚡ Installer Command — {selectedQuickSetupClient.company_name}</div>
-                <div className="ac-modal__subtitle">Client ID: {selectedQuickSetupClient.id} | Prefix: {selectedQuickSetupClient.api_key_prefix}</div>
-              </div>
-              <button className="ac-modal__close" onClick={() => setShowQuickSetupModal(false)}>×</button>
-            </div>
-            <div className="ac-modal__body" style={{ padding: '20px 24px' }}>
-              
-              <div style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)', lineHeight: 1.6, marginBottom: '14px' }}>
-                Run the 1-command installer script below on the client server terminal. Replace <code>&lt;YOUR_CLIENT_API_KEY&gt;</code> with the original API Key generated during client creation.
-              </div>
-
-              <div className="ac-terminal-box">
-                <div className="ac-terminal-box__header">
-                  <div className="ac-terminal-box__title">
-                    <span>💻 BASH INSTALLER COMMAND</span>
-                  </div>
-                </div>
-                <div className="ac-terminal-box__code">
-                  {buildInstallCommand('<YOUR_CLIENT_API_KEY>', customTailscaleKey)}
-                </div>
-                <div className="ac-terminal-box__actions">
-                  <button
-                    type="button"
-                    className={`ac-btn-primary ${setupCmdCopied ? 'ac-btn-primary--success' : ''}`}
-                    style={{ padding: '6px 12px', fontSize: '11px' }}
-                    onClick={() => handleCopySetupCmd(buildInstallCommand('<YOUR_CLIENT_API_KEY>', customTailscaleKey))}
-                  >
-                    {setupCmdCopied ? '✅ Command Copied!' : '📋 Copy Command Template'}
-                  </button>
-                  <a
-                    href={getInstallerScriptUrl()}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="ac-btn-ghost-action"
-                    style={{ padding: '6px 12px', fontSize: '11px', textDecoration: 'none', color: '#79c0ff', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                  >
-                    📥 Download install.sh
-                  </a>
-                </div>
-              </div>
-
-              <div className="ac-api-key-box__warning" style={{ marginTop: '14px' }}>
-                ℹ️ <strong>Note:</strong> API Keys are single-use credentials displayed only once at registration. For security, full keys cannot be retrieved later.
-              </div>
-
-              <div style={{ marginTop: '20px', textAlign: 'right' }}>
-                <button className="ac-btn-ghost-action" onClick={() => setShowQuickSetupModal(false)}>Close</button>
               </div>
             </div>
           </div>
@@ -1814,11 +2099,18 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
         <div className="ac-modal-overlay" onClick={() => setShowKafkaModal(false)}>
           <div className="ac-modal ac-modal--sm" onClick={e => e.stopPropagation()}>
             <div className="ac-modal__header">
-              <div>
-                <div className="ac-modal__title">⚙️ Add Kafka Configuration</div>
-                <div className="ac-modal__subtitle">Establish a connection between the client and a Kafka stream for log ingestion</div>
+              <div className="ac-modal-title-lockup">
+                <span className="ac-modal__title-icon ac-modal__title-icon--teal">
+                  <Icon name="settings" size={18} />
+                </span>
+                <div>
+                  <div className="ac-modal__title">Add Kafka Configuration</div>
+                  <div className="ac-modal__subtitle">Establish a connection between the client and a Kafka stream for log ingestion</div>
+                </div>
               </div>
-              <button className="ac-modal__close" onClick={() => setShowKafkaModal(false)}>×</button>
+              <button className="ac-modal__close" onClick={() => setShowKafkaModal(false)} aria-label="Close Kafka configuration">
+                <Icon name="x" size={18} />
+              </button>
             </div>
             <div className="ac-modal__body">
               <form onSubmit={handleSubmitKafka}>
@@ -1865,11 +2157,18 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
         <div className="ac-modal-overlay" onClick={() => setShowUserModal(false)}>
           <div className="ac-modal ac-modal--user-register" onClick={e => e.stopPropagation()}>
             <div className="ac-modal__header">
-              <div>
-                <div className="ac-modal__title">Create Admin Account</div>
-                <div className="ac-modal__subtitle">Buat akun administrator untuk mengelola dashboard gateway</div>
+              <div className="ac-modal-title-lockup">
+                <span className="ac-modal__title-icon ac-modal__title-icon--amber">
+                  <Icon name="shield" size={18} />
+                </span>
+                <div>
+                  <div className="ac-modal__title">Create Admin Account</div>
+                  <div className="ac-modal__subtitle">Buat akun administrator untuk mengelola dashboard gateway</div>
+                </div>
               </div>
-              <button className="ac-modal__close" onClick={() => setShowUserModal(false)}>&times;</button>
+              <button className="ac-modal__close" onClick={() => setShowUserModal(false)} aria-label="Close admin account form">
+                <Icon name="x" size={18} />
+              </button>
             </div>
             <div className="ac-modal__body">
               <form className="ac-register-form" onSubmit={handleCreateGlobalUser}>
@@ -1986,38 +2285,49 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
         <div className="ac-modal-overlay" onClick={() => setManageUsersClient(null)}>
           <div className="ac-modal" style={{ maxWidth: '800px', width: '90%' }} onClick={e => e.stopPropagation()}>
             <div className="ac-modal__header">
-              <div>
-                <div className="ac-modal__title">👥 Manage Users: {manageUsersClient.company_name}</div>
-                <div className="ac-modal__subtitle">Add or remove auditor accounts for this client to access the gateway dashboard</div>
+              <div className="ac-modal-title-lockup">
+                <span className="ac-modal__title-icon ac-modal__title-icon--teal">
+                  <Icon name="users" size={18} />
+                </span>
+                <div>
+                  <div className="ac-modal__title">Manage Users: {manageUsersClient.company_name}</div>
+                  <div className="ac-modal__subtitle">Add or remove auditor accounts for this client to access the gateway dashboard</div>
+                </div>
               </div>
-              <button className="ac-modal__close" onClick={() => setManageUsersClient(null)}>×</button>
+              <button className="ac-modal__close" onClick={() => setManageUsersClient(null)} aria-label="Close user management">
+                <Icon name="x" size={18} />
+              </button>
             </div>
-            
+
             <div className="ac-modal__body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', padding: '20px 24px' }}>
               {/* Form Add User */}
               <div style={{ borderRight: '1px solid var(--color-outline-variant)', paddingRight: '24px' }}>
                 <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-primary)', marginBottom: '16px' }}>Create New User Account</div>
-                
+
                 {userActionError && (
-                  <div style={{ 
-                    padding: '10px 14px', 
-                    borderRadius: 'var(--radius-sm)', 
-                    backgroundColor: 'rgba(186, 26, 26, 0.1)', 
-                    color: 'var(--color-error)', 
-                    fontSize: '12px', 
+                  <div style={{
+                    padding: '10px 14px',
+                    borderRadius: 'var(--radius-sm)',
+                    backgroundColor: 'rgba(186, 26, 26, 0.1)',
+                    color: 'var(--color-error)',
+                    fontSize: '12px',
                     fontWeight: 600,
-                    marginBottom: '16px'
+                    marginBottom: '16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
                   }}>
-                    ⚠️ {userActionError}
+                    <Icon name="warn" size={14} />
+                    {userActionError}
                   </div>
                 )}
-                
+
                 <form onSubmit={handleAddClientUser}>
                   <div className="ac-form-field" style={{ marginBottom: '12px' }}>
                     <label className="ac-form-label">Username <span style={{ color: 'var(--color-error)' }}>*</span></label>
-                    <input 
-                      className="ac-form-input" 
-                      required 
+                    <input
+                      className="ac-form-input"
+                      required
                       minLength={4}
                       placeholder="e.g. auditor_senior"
                       value={newUserUsername}
@@ -2027,12 +2337,12 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                   </div>
                   <div className="ac-form-field" style={{ marginBottom: '12px' }}>
                     <label className="ac-form-label">Password <span style={{ color: 'var(--color-error)' }}>*</span></label>
-                    <input 
-                      className="ac-form-input" 
+                    <input
+                      className="ac-form-input"
                       type="password"
-                      required 
+                      required
                       minLength={6}
-                      placeholder="••••••"
+                      placeholder="******"
                       value={newUserPassword}
                       onChange={e => setNewUserPassword(e.target.value)}
                       disabled={userActionLoading}
@@ -2040,20 +2350,20 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                   </div>
                   <div className="ac-form-field" style={{ marginBottom: '20px' }}>
                     <label className="ac-form-label">Confirm Password <span style={{ color: 'var(--color-error)' }}>*</span></label>
-                    <input 
-                      className="ac-form-input" 
+                    <input
+                      className="ac-form-input"
                       type="password"
-                      required 
+                      required
                       minLength={6}
-                      placeholder="••••••"
+                      placeholder="******"
                       value={newUserConfirmPassword}
                       onChange={e => setNewUserConfirmPassword(e.target.value)}
                       disabled={userActionLoading}
                     />
                   </div>
-                  <button 
-                    type="submit" 
-                    className="ac-btn-primary" 
+                  <button
+                    type="submit"
+                    className="ac-btn-primary"
                     style={{ width: '100%', justifyContent: 'center' }}
                     disabled={userActionLoading}
                   >
@@ -2095,7 +2405,7 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                               <span className="ac-status ac-status--pending" style={{ fontSize: '10px', padding: '2px 6px' }}>{user.role}</span>
                             </td>
                             <td style={{ textAlign: 'center' }}>
-                              <button 
+                              <button
                                 className="ac-btn-primary ac-btn-primary--danger"
                                 style={{ padding: '4px 8px', fontSize: '11px' }}
                                 onClick={() => handleDeleteClientUser(user)}
@@ -2116,16 +2426,258 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
         </div>
       )}
 
+      {/* ===== DRAWER: WATCHED TABLES DETAIL ===== */}
+      {watchedTablesClient && (() => {
+        const cdcEntry = cdcUsersByClientId.get(watchedTablesClient.id);
+        const detectedUsers = cdcEntry?.users || [];
+        const detail = clientCdcDetails[watchedTablesClient.id] || {};
+        const agentCfg = detail.agent_config || {};
+        const watchedTables = splitListValue(agentCfg.db_tables);
+        const filteredTables = watchedTables.filter(table => (
+          table.toLowerCase().includes(watchedTableSearch.trim().toLowerCase())
+        ));
+        const sourceCounts = detectedUsers.reduce((acc, user) => {
+          const key = user.source_table || agentCfg.user_table_name || 'Unknown source';
+          acc[key] = (acc[key] || 0) + 1;
+          return acc;
+        }, {});
+
+        return (
+          <div
+            className={`ac-drawer-overlay${watchedTablesClosing ? ' ac-drawer-overlay--closing' : ''}`}
+            onClick={() => handleCloseWatchedTables()}
+          >
+            <aside
+              className={`ac-detail-drawer ac-admin-watched-drawer${watchedTablesClosing ? ' ac-detail-drawer--closing' : ''}`}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="ac-modal__header" style={{ flexDirection: 'column', alignItems: 'stretch', padding: '0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '20px 24px 14px' }}>
+                  <div>
+                    <div className="ac-modal__title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Icon name="database" size={18} />
+                      Watched Tables
+                    </div>
+                    <div className="ac-modal__subtitle">{watchedTablesClient.company_name}</div>
+                  </div>
+                  <button className="ac-modal__close" onClick={() => handleCloseWatchedTables()} aria-label="Close watched tables">
+                    <Icon name="x" size={18} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="ac-modal__body ac-drawer-tab-content">
+                <div className="ac-watched-drawer-summary">
+                  <div>
+                    <span>Monitored Tables</span>
+                    <strong>{watchedTables.length}</strong>
+                  </div>
+                  <div>
+                    <span>Detected Users</span>
+                    <strong>{detectedUsers.length}</strong>
+                  </div>
+                  <div>
+                    <span>Connector</span>
+                    <strong>{agentCfg.connector_status || 'unknown'}</strong>
+                  </div>
+                </div>
+
+                <section className="ac-watched-drawer-section">
+                  <div className="ac-watched-drawer-section__head">
+                    <div>
+                      <h3>User Source</h3>
+                      <p>{agentCfg.db_engine || 'Unknown engine'} · {agentCfg.db_name || 'No database metadata'}</p>
+                    </div>
+                    <button
+                      type="button"
+                      className="ac-btn-ghost-action"
+                      onClick={() => {
+                        const client = watchedTablesClient;
+                        handleCloseWatchedTables(() => handleOpenUserTableConfig(client));
+                      }}
+                    >
+                      <Icon name="database" size={14} />
+                      Configure
+                    </button>
+                  </div>
+                  <div className="ac-watched-source-card">
+                    <span>Table</span>
+                    <code>{agentCfg.user_table_name || 'Not configured'}</code>
+                    <span>Column</span>
+                    <code>{agentCfg.user_column_name || 'Not configured'}</code>
+                  </div>
+                </section>
+
+                <section className="ac-watched-drawer-section">
+                  <div className="ac-watched-drawer-section__head">
+                    <div>
+                      <h3>All Monitored Tables</h3>
+                      <p>Tables listed in the client agent config from install/telemetry.</p>
+                    </div>
+                  </div>
+                  <label className="ac-watched-search">
+                    <Icon name="search" size={15} />
+                    <input
+                      value={watchedTableSearch}
+                      onChange={e => setWatchedTableSearch(e.target.value)}
+                      placeholder="Search table name..."
+                    />
+                  </label>
+
+                  {watchedTablesLoading ? (
+                    <div className="ac-profile-loading">
+                      <Icon name="spinner" size={18} />
+                      Loading watched tables...
+                    </div>
+                  ) : filteredTables.length > 0 ? (
+                    <div className="ac-watched-table-list">
+                      {filteredTables.map((table, index) => {
+                        const isUserSource = table === agentCfg.user_table_name;
+                        return (
+                          <div className={`ac-watched-table-row${isUserSource ? ' ac-watched-table-row--source' : ''}`} key={`${watchedTablesClient.id}-${table}-${index}`}>
+                            <span>{index + 1}</span>
+                            <code>{table}</code>
+                            {isUserSource && <em>User Source</em>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="ac-admin-empty-state">
+                      {watchedTableSearch.trim() ? 'No table matched your search.' : 'No monitored table metadata yet.'}
+                    </div>
+                  )}
+                </section>
+
+                <section className="ac-watched-drawer-section">
+                  <div className="ac-watched-drawer-section__head">
+                    <div>
+                      <h3>Detected User Sources</h3>
+                      <p>Grouped from CDC user records when source table data is available.</p>
+                    </div>
+                  </div>
+                  {Object.keys(sourceCounts).length > 0 ? (
+                    <div className="ac-watched-source-list">
+                      {Object.entries(sourceCounts).map(([source, count]) => (
+                        <div key={`${watchedTablesClient.id}-${source}`}>
+                          <code>{source}</code>
+                          <strong>{count}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="ac-admin-empty-state">No detected users yet.</div>
+                  )}
+                </section>
+              </div>
+            </aside>
+          </div>
+        );
+      })()}
+
+      {/* ===== MODAL: USER TABLE CDC CONFIG ===== */}
+      {userTableModalClient && (
+        <div className="ac-modal-overlay" onClick={() => setUserTableModalClient(null)}>
+          <div className="ac-modal" style={{ maxWidth: '620px', width: '90%' }} onClick={e => e.stopPropagation()}>
+            <div className="ac-modal__header">
+              <div>
+                <div className="ac-modal__title">Client User Source: {userTableModalClient.company_name}</div>
+                <div className="ac-modal__subtitle">Point CDC to the table and column that identify users in the client database.</div>
+              </div>
+              <button className="ac-modal__close" onClick={() => setUserTableModalClient(null)} aria-label="Close user source">
+                <Icon name="x" size={18} />
+              </button>
+            </div>
+            <div className="ac-modal__body" style={{ padding: '20px 24px' }}>
+              {userTableNotice && (
+                <div className={`ac-cdc-config-notice ac-cdc-config-notice--${userTableNotice.tone}`}>
+                  {userTableNotice.message}
+                </div>
+              )}
+
+              {userTableLoading ? (
+                <div className="ac-profile-loading">
+                  <Icon name="spinner" size={18} />
+                  Loading user table config...
+                </div>
+              ) : (
+                <form onSubmit={handleSubmitUserTableConfig}>
+                  {(() => {
+                    const detail = clientCdcDetails[userTableModalClient.id] || {};
+                    const agentCfg = detail.agent_config || {};
+                    const watchedTables = splitListValue(agentCfg.db_tables);
+                    if (watchedTables.length === 0 && !agentCfg.db_name && !agentCfg.connector_status) return null;
+
+                    return (
+                      <div className="ac-cdc-config-context">
+                        <div>
+                          <strong>{agentCfg.db_engine || 'Unknown engine'}</strong>
+                          <span>{agentCfg.db_name || 'No database name'} · {agentCfg.connector_status || 'unknown connector'}</span>
+                        </div>
+                        {watchedTables.length > 0 && (
+                          <div className="ac-cdc-table-chips">
+                            {watchedTables.map(table => <code key={`${userTableModalClient.id}-modal-${table}`}>{table}</code>)}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                  <div className="ac-form-grid">
+                    <label className="ac-form-field">
+                      <span className="ac-form-label">User Table Name</span>
+                      <input
+                        className="ac-form-input ac-form-input--lg"
+                        value={userTableForm.user_table_name}
+                        onChange={e => setUserTableForm(form => ({ ...form, user_table_name: e.target.value }))}
+                        placeholder="public.users or account"
+                        required
+                      />
+                    </label>
+                    <label className="ac-form-field">
+                      <span className="ac-form-label">User Column Name</span>
+                      <input
+                        className="ac-form-input ac-form-input--lg"
+                        value={userTableForm.user_column_name}
+                        onChange={e => setUserTableForm(form => ({ ...form, user_column_name: e.target.value }))}
+                        placeholder="username or email"
+                        required
+                      />
+                    </label>
+                  </div>
+                  <div className="ac-cdc-config-help">
+                    This saves locally first, then asks the remote client agent through VPN to include the user table in Debezium. Offline clients return a warning while keeping the local config.
+                  </div>
+                  <div className="ac-form-actions" style={{ marginTop: 20, justifyContent: 'flex-end' }}>
+                    <button type="button" className="ac-btn-ghost-action" onClick={() => setUserTableModalClient(null)}>Close</button>
+                    <button type="submit" className="ac-btn-primary" disabled={userTableSaving}>
+                      <Icon name={userTableSaving ? 'spinner' : 'checkmark'} size={15} />
+                      {userTableSaving ? 'Saving...' : 'Save User Source'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ===== MODAL: KONFIGURASI AGENT LAPIS 3 ===== */}
       {showAgentModal && selectedAgentClient && (
         <div className="ac-modal-overlay" onClick={() => setShowAgentModal(false)}>
           <div className="ac-modal" style={{ maxWidth: '650px', width: '90%' }} onClick={e => e.stopPropagation()}>
             <div className="ac-modal__header">
-              <div>
-                <div className="ac-modal__title">🤖 Agent Lapis 3: {selectedAgentClient.company_name}</div>
-                <div className="ac-modal__subtitle">Configure organization's local Agent for Gateway verification & integration</div>
+              <div className="ac-modal-title-lockup">
+                <span className="ac-modal__title-icon ac-modal__title-icon--teal">
+                  <Icon name="bot" size={18} />
+                </span>
+                <div>
+                  <div className="ac-modal__title">Agent Lapis 3: {selectedAgentClient.company_name}</div>
+                  <div className="ac-modal__subtitle">Configure organization's local Agent for Gateway verification & integration</div>
+                </div>
               </div>
-              <button className="ac-modal__close" onClick={() => setShowAgentModal(false)}>×</button>
+              <button className="ac-modal__close" onClick={() => setShowAgentModal(false)} aria-label="Close agent configuration">
+                <Icon name="x" size={18} />
+              </button>
             </div>
 
             <div className="ac-modal__body" style={{ padding: '20px 24px' }}>
@@ -2142,8 +2694,9 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                 marginBottom: '16px'
               }}>
                 <div>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
-                    {agentConfig ? '✅ Agent Registered & Active' : '⚠️ No Registered Agent'}
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-on-surface)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Icon name={agentConfig ? 'checkCircle' : 'warn'} size={15} />
+                    {agentConfig ? 'Agent Registered & Active' : 'No Registered Agent'}
                   </div>
                   <div style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: 2 }}>
                     {agentConfig ? `URL: ${agentConfig.agent_url} | Timeout: ${agentConfig.timeout_seconds}s` : 'Register local Agent URL below.'}
@@ -2158,7 +2711,8 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                     onClick={handlePingAgent}
                     disabled={agentPingLoading}
                   >
-                    {agentPingLoading ? '📡 Testing Connection...' : '📡 Test Connection'}
+                    <Icon name={agentPingLoading ? 'spinner' : 'wifi'} size={14} />
+                    {agentPingLoading ? 'Testing Connection...' : 'Test Connection'}
                   </button>
                 )}
               </div>
@@ -2175,7 +2729,8 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                   fontSize: '12px'
                 }}>
                   <div style={{ fontWeight: 700, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    {agentPingResult.reachable ? '🟢 Agent Connected Successfully!' : '🔴 Connection Failed / Unreachable'}
+                    <Icon name={agentPingResult.reachable ? 'checkCircle' : 'xCircle'} size={15} />
+                    {agentPingResult.reachable ? 'Agent Connected Successfully!' : 'Connection Failed / Unreachable'}
                   </div>
                   <div><strong>Target URL:</strong> {agentPingResult.agent_url}</div>
                   {agentPingResult.http_status && <div><strong>HTTP Status:</strong> {agentPingResult.http_status}</div>}
@@ -2188,13 +2743,15 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
 
               {/* Action Alerts */}
               {agentActionError && (
-                <div style={{ padding: '10px 14px', borderRadius: '6px', backgroundColor: 'rgba(186,26,26,0.1)', color: 'var(--color-error)', fontSize: '12px', fontWeight: 600, marginBottom: '16px' }}>
-                  ⚠️ {agentActionError}
+                <div style={{ padding: '10px 14px', borderRadius: '6px', backgroundColor: 'rgba(186,26,26,0.1)', color: 'var(--color-error)', fontSize: '12px', fontWeight: 600, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Icon name="warn" size={14} />
+                  {agentActionError}
                 </div>
               )}
               {agentActionSuccess && (
-                <div style={{ padding: '10px 14px', borderRadius: '6px', backgroundColor: 'rgba(76,175,80,0.1)', color: '#2e7d32', fontSize: '12px', fontWeight: 600, marginBottom: '16px' }}>
-                  ✅ {agentActionSuccess}
+                <div style={{ padding: '10px 14px', borderRadius: '6px', backgroundColor: 'rgba(76,175,80,0.1)', color: '#2e7d32', fontSize: '12px', fontWeight: 600, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Icon name="checkCircle" size={14} />
+                  {agentActionSuccess}
                 </div>
               )}
 
@@ -2202,73 +2759,90 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
               {agentLoading ? (
                 <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--color-outline)' }}>Loading Agent configuration...</div>
               ) : (
-                <form onSubmit={handleSaveAgentConfig}>
-                  <div className="ac-form-grid">
-                    <div className="ac-form-field" style={{ gridColumn: '1 / -1' }}>
-                      <label className="ac-form-label">Agent Server URL <span style={{ color: 'var(--color-error)' }}>*</span></label>
-                      <input
-                        className="ac-form-input"
-                        required
-                        placeholder="http://192.168.11.50:9090"
-                        value={agentForm.agent_url}
-                        onChange={e => setAgentForm(f => ({ ...f, agent_url: e.target.value }))}
-                        disabled={agentActionLoading}
-                      />
-                      <div style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: 4 }}>
-                        HTTP/HTTPS endpoint for the client organization's local Layer-3 Agent.
-                      </div>
-                    </div>
-
-                    <div className="ac-form-field">
-                      <label className="ac-form-label">Secret Verify Token <span style={{ color: 'var(--color-error)' }}>*</span></label>
-                      <input
-                        className="ac-form-input"
-                        type="password"
-                        required
-                        placeholder="Secret verification token"
-                        value={agentForm.verify_token}
-                        onChange={e => setAgentForm(f => ({ ...f, verify_token: e.target.value }))}
-                        disabled={agentActionLoading}
-                      />
-                    </div>
-
-                    <div className="ac-form-field">
-                      <label className="ac-form-label">Timeout (Seconds)</label>
-                      <input
-                        className="ac-form-input"
-                        type="number"
-                        min={1}
-                        max={30}
-                        placeholder="5"
-                        value={agentForm.timeout_seconds}
-                        onChange={e => setAgentForm(f => ({ ...f, timeout_seconds: e.target.value }))}
-                        disabled={agentActionLoading}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="ac-form-actions" style={{ marginTop: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <>
+                  <div className="ac-agent-advanced-toggle">
                     <div>
-                      {agentConfig && (
-                        <button
-                          type="button"
-                          className="ac-btn-primary ac-btn-primary--danger"
-                          style={{ padding: '8px 14px', fontSize: '12px' }}
-                          onClick={handleDeleteAgentConfig}
-                          disabled={agentActionLoading}
-                        >
-                          🗑️ Revoke Agent
-                        </button>
-                      )}
+                      <strong>{agentConfig ? 'Agent config is already stored.' : 'Agent config is required before connection testing.'}</strong>
+                      <span>{agentConfig ? 'Open advanced settings only when you need to change URL, token, timeout, or revoke the agent.' : 'Register the agent URL and verify token once, then use Test Connection for routine checks.'}</span>
                     </div>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button type="button" className="ac-btn-ghost-action" onClick={() => setShowAgentModal(false)}>Cancel</button>
-                      <button type="submit" className="ac-btn-primary" disabled={agentActionLoading}>
-                        {agentActionLoading ? 'Saving...' : (agentConfig ? 'Update Agent Config' : 'Register Agent')}
-                      </button>
-                    </div>
+                    <button type="button" className="ac-btn-ghost-action" onClick={() => setAgentAdvancedOpen(open => !open)}>
+                      {agentAdvancedOpen ? 'Hide Advanced Config' : (agentConfig ? 'Advanced Config' : 'Register Agent')}
+                    </button>
                   </div>
-                </form>
+
+                  {agentAdvancedOpen && (
+                    <form onSubmit={handleSaveAgentConfig}>
+                      <div className="ac-form-grid">
+                        <div className="ac-form-field" style={{ gridColumn: '1 / -1' }}>
+                          <label className="ac-form-label">Agent Server URL <span style={{ color: 'var(--color-error)' }}>*</span></label>
+                          <input
+                            className="ac-form-input"
+                            required
+                            placeholder="http://192.168.11.50:9090"
+                            value={agentForm.agent_url}
+                            onChange={e => setAgentForm(f => ({ ...f, agent_url: e.target.value }))}
+                            disabled={agentActionLoading}
+                          />
+                          <div style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: 4 }}>
+                            HTTP/HTTPS endpoint for the client organization's local Layer-3 Agent.
+                          </div>
+                        </div>
+
+                        <div className="ac-form-field">
+                          <label className="ac-form-label">Secret Verify Token <span style={{ color: 'var(--color-error)' }}>*</span></label>
+                          <input
+                            className="ac-form-input"
+                            type="password"
+                            required
+                            placeholder="Secret verification token"
+                            value={agentForm.verify_token}
+                            onChange={e => setAgentForm(f => ({ ...f, verify_token: e.target.value }))}
+                            disabled={agentActionLoading}
+                          />
+                          <div style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: 4 }}>
+                            Required when saving because the backend does not return the stored token.
+                          </div>
+                        </div>
+
+                        <div className="ac-form-field">
+                          <label className="ac-form-label">Timeout (Seconds)</label>
+                          <input
+                            className="ac-form-input"
+                            type="number"
+                            min={1}
+                            max={30}
+                            placeholder="5"
+                            value={agentForm.timeout_seconds}
+                            onChange={e => setAgentForm(f => ({ ...f, timeout_seconds: e.target.value }))}
+                            disabled={agentActionLoading}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="ac-form-actions" style={{ marginTop: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          {agentConfig && (
+                            <button
+                              type="button"
+                              className="ac-btn-primary ac-btn-primary--danger"
+                              style={{ padding: '8px 14px', fontSize: '12px' }}
+                              onClick={handleDeleteAgentConfig}
+                              disabled={agentActionLoading}
+                            >
+                              🗑️ Revoke Agent
+                            </button>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button type="button" className="ac-btn-ghost-action" onClick={() => setShowAgentModal(false)}>Cancel</button>
+                          <button type="submit" className="ac-btn-primary" disabled={agentActionLoading}>
+                            {agentActionLoading ? 'Saving...' : (agentConfig ? 'Update Agent Config' : 'Register Agent')}
+                          </button>
+                        </div>
+                      </div>
+                    </form>
+                  )}
+                </>
               )}
 
             </div>

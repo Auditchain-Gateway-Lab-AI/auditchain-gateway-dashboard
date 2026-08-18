@@ -2086,37 +2086,42 @@
 }
 
 .ac-web-users-table tbody tr {
-  cursor: default;
+  cursor: pointer;
+}
+
+.ac-web-users-table tbody tr:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
 }
 
 .ac-web-users-table th:nth-child(1),
 .ac-web-users-table td:nth-child(1) {
-  width: 29%;
+  width: 22%;
 }
 
 .ac-web-users-table th:nth-child(2),
 .ac-web-users-table td:nth-child(2) {
-  width: 21%;
+  width: 18%;
 }
 
 .ac-web-users-table th:nth-child(3),
 .ac-web-users-table td:nth-child(3) {
-  width: 22%;
+  width: 20%;
 }
 
 .ac-web-users-table th:nth-child(4),
 .ac-web-users-table td:nth-child(4) {
-  width: 14%;
+  width: 18%;
 }
 
 .ac-web-users-table th:nth-child(5),
 .ac-web-users-table td:nth-child(5) {
-  width: 10%;
+  width: 12%;
 }
 
 .ac-web-users-table th:nth-child(6),
 .ac-web-users-table td:nth-child(6) {
-  width: 48px;
+  width: 10%;
 }
 
 .ac-web-users-table-wrap {
@@ -2159,6 +2164,29 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ac-web-users-activity-cell {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ac-web-users-activity-cell small {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-on-surface-variant);
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ac-web-users-muted {
+  color: var(--color-on-surface-variant);
+  font-size: 12px;
+  font-weight: 750;
 }
 
 .ac-hero--legacy-dashboard {
@@ -2930,6 +2958,26 @@
   color: #a15d09;
 }
 
+.ac-detected-user-status--success {
+  background: rgba(7, 134, 111, 0.12);
+  color: #06745f;
+}
+
+.ac-detected-user-status--pending {
+  background: rgba(11, 111, 179, 0.12);
+  color: #0b6fb3;
+}
+
+.ac-detected-user-status--issue {
+  background: rgba(220, 38, 38, 0.12);
+  color: #b91c1c;
+}
+
+.ac-detected-user-status--inactive {
+  background: rgba(100, 116, 139, 0.12);
+  color: #64748b;
+}
+
 .ac-web-users-drawer-overlay {
   position: fixed;
   inset: 0;
@@ -2938,6 +2986,11 @@
   justify-content: flex-end;
   background: rgba(5, 13, 25, 0.48);
   backdrop-filter: blur(2px);
+  animation: drawerOverlayIn 0.2s ease;
+}
+
+.ac-web-users-drawer-overlay--closing {
+  animation: drawerOverlayOut 0.25s ease forwards;
 }
 
 .ac-web-users-drawer {
@@ -2948,6 +3001,11 @@
   border-left: 1px solid var(--color-outline-variant);
   background: var(--color-surface);
   box-shadow: -24px 0 54px rgba(5, 13, 25, 0.22);
+  animation: drawerIn 0.25s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.ac-web-users-drawer--closing {
+  animation: drawerOut 0.25s cubic-bezier(0.2, 0, 0, 1) forwards;
 }
 
 .ac-web-users-drawer__head {

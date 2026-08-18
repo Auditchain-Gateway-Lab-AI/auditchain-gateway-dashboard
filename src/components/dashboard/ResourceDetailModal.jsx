@@ -5,6 +5,91 @@ import SnapshotViewer from './SnapshotViewer';
 import Icon from '../common/Icon';
 import { formatTimestamp } from '../../utils/formatters';
 
+const parseLogMetadata = (metadata) => {
+  if (!metadata) return {};
+  if (typeof metadata !== 'string') return metadata;
+
+  try {
+    return JSON.parse(metadata);
+  } catch {
+    return { raw_metadata: metadata };
+  }
+};
+
+const buildLogJsonPayload = (log) => ({
+  audit_log: {
+    id: log?.log_id || null,
+    status: log?.status || null,
+    verification_status: log?.verification_status || log?.verify_status || log?.integrity_status || null,
+  },
+  action: {
+    type: log?.action || null,
+    time: log?.timestamp || null,
+    display_time: log?.timestamp ? formatTimestamp(log.timestamp) : null,
+  },
+  actor: {
+    name: log?.actor || null,
+    source_system: log?.source_system || null,
+    authorization_context: log?.authorization_context || null,
+  },
+  resource: {
+    id: log?.resource || log?.source_table || null,
+    source_table: log?.source_table || String(log?.resource || '').split(':')[0] || null,
+    source_record_id: log?.source_record_id || null,
+  },
+  payload: parseLogMetadata(log?.metadata),
+  cryptographic: {
+    hash_value: log?.hash_value || null,
+    previous_hash: log?.previous_hash || null,
+    merkle_root: log?.merkle_root || null,
+    blockchain_tx_id: log?.blockchain_tx_id || null,
+    blockchain_timestamp: log?.blockchain_timestamp || null,
+  },
+});
+
+function LogPayloadViewer({ currentLog, previousLog = null }) {
+  const [viewMode, setViewMode] = useState('structured');
+  const jsonPayload = buildLogJsonPayload(currentLog);
+
+  return (
+    <div className="ac-log-payload-viewer">
+      <div className="ac-log-payload-viewer__toolbar">
+        <div className="ac-overview-label">
+          <Icon name="code" size={14} /> Log Payload Data
+        </div>
+        <div className="ac-json-toggle" role="tablist" aria-label="Payload display mode">
+          <button
+            type="button"
+            className={viewMode === 'structured' ? 'ac-json-toggle__button ac-json-toggle__button--active' : 'ac-json-toggle__button'}
+            onClick={() => setViewMode('structured')}
+            role="tab"
+            aria-selected={viewMode === 'structured'}
+          >
+            Structured
+          </button>
+          <button
+            type="button"
+            className={viewMode === 'json' ? 'ac-json-toggle__button ac-json-toggle__button--active' : 'ac-json-toggle__button'}
+            onClick={() => setViewMode('json')}
+            role="tab"
+            aria-selected={viewMode === 'json'}
+          >
+            JSON
+          </button>
+        </div>
+      </div>
+
+      {viewMode === 'json' ? (
+        <pre className="ac-json-viewer">
+          <code>{JSON.stringify(jsonPayload, null, 2)}</code>
+        </pre>
+      ) : (
+        <SnapshotViewer currentLog={currentLog} previousLog={previousLog} />
+      )}
+    </div>
+  );
+}
+
 // ================================================================
 // KOMPONEN: Modal Detail Log per Resource (LEVEL 2)
 // ================================================================
@@ -184,10 +269,7 @@ function ResourceDetailModal({ log: activeLog, selectedClient, onClose }) {
           </div>
 
           <div className="ac-overview-payload">
-             <div className="ac-overview-label" style={{ marginBottom: '8px' }}>
-                <Icon name="code" size={14} /> Log Payload Data
-              </div>
-             <SnapshotViewer currentLog={activeLog} previousLog={null} />
+            <LogPayloadViewer currentLog={activeLog} previousLog={null} />
           </div>
         </div>
       </div>
@@ -281,7 +363,7 @@ function ResourceDetailModal({ log: activeLog, selectedClient, onClose }) {
                       : log.action === 'DELETE' ? 'Deleted Data (compared to previous log)'
                         : 'Changes (compared to previous log)'}
                   </div>
-                  <SnapshotViewer currentLog={log} previousLog={prevLog} />
+                  <LogPayloadViewer currentLog={log} previousLog={prevLog} />
                 </div>
 
                 <div className="ac-log-card__hash">
