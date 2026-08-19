@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import Icon from '../components/common/Icon';
 import AppearanceMenu from '../components/common/AppearanceMenu';
-import StatCards from '../components/dashboard/StatCards';
-import AuditLogTable from '../components/dashboard/AuditLogTable';
+import AuditDashboardOverview from '../components/dashboard/AuditDashboardOverview';
+import AuditLogsView from '../components/dashboard/AuditLogsView';
 import WebUsersView from '../components/dashboard/WebUsersView';
 import ResourceDetailModal from '../components/dashboard/ResourceDetailModal';
 import { parseJwt, mapRangeItemToVerifyStatus } from '../utils/formatters';
@@ -22,6 +22,81 @@ const getLogTimestampMs = (timestamp) => {
     tsStr = tsStr.replace(' ', 'T');
   }
   return new Date(tsStr).getTime() || 0;
+};
+
+const getVerificationBucket = (log, verifyStatuses = {}) => {
+  const status = String(
+    verifyStatuses[log?.log_id]?.status ||
+    log?.verify_status ||
+    log?.verification_status ||
+    log?.integrity_status ||
+    ''
+  ).toLowerCase();
+
+  if (status === 'success' || status === 'valid') return 'VALID';
+  if (status === 'pending' || status === 'loading') return 'PENDING';
+  if (status === 'failed' || status === 'failed_local' || status === 'failed_onchain' || status === 'tampered' || status === 'error' || status === 'unreachable') {
+    return 'INVALID';
+  }
+  return 'UNKNOWN';
+};
+
+const buildRangeInspectionLog = (item, fallbackLog) => {
+  const log = item?.log || item?.audit_log || fallbackLog || {};
+
+  return {
+    ...log,
+    log_id: item?.log_id || log.log_id,
+    actor: log.actor ?? item?.actor,
+    action: log.action ?? item?.action,
+    resource: log.resource ?? item?.resource,
+    source_table: log.source_table ?? item?.source_table,
+    timestamp: log.timestamp ?? item?.timestamp,
+    source_system: log.source_system ?? item?.source_system,
+    metadata: log.metadata ?? item?.metadata,
+    hash_value: log.hash_value ?? item?.hash_value,
+    verify_status: item?.verify_status || log.verify_status || log.verification_status,
+    verification_status: item?.verify_status || log.verification_status || log.verify_status,
+    verification_message: item?.message || log.verification_message,
+  };
+};
+
+const fetchAllLogsForRange = async ({ fromISO, toISO, selectedClient }) => {
+  const pageSize = 200;
+  const baseParams = {
+    page_size: pageSize,
+    sort_order: 'asc',
+    from: fromISO,
+    to: toISO,
+  };
+
+  if (selectedClient) {
+    baseParams.client_id = selectedClient;
+  }
+
+  const firstRes = await api.get('/dashboard/logs', {
+    params: { ...baseParams, page: 1 },
+  });
+
+  const firstData = Array.isArray(firstRes.data) ? firstRes.data : (firstRes.data?.data || []);
+  const totalPages = Array.isArray(firstRes.data)
+    ? 1
+    : (firstRes.data?.pagination?.total_pages || 1);
+
+  if (totalPages <= 1) return firstData;
+
+  const restResponses = await Promise.all(
+    Array.from({ length: totalPages - 1 }, (_, index) => (
+      api.get('/dashboard/logs', {
+        params: { ...baseParams, page: index + 2 },
+      })
+    ))
+  );
+
+  return restResponses.reduce((allLogs, response) => {
+    const pageData = Array.isArray(response.data) ? response.data : (response.data?.data || []);
+    return allLogs.concat(pageData);
+  }, firstData);
 };
 
 function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePreference = 'system', resolvedTheme = 'light', onThemeChange }) {
@@ -47,11 +122,14 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('auditchain_sidebar_collapsed') === 'true');
+  const [sidebarHoverOpen, setSidebarHoverOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [tempDateFrom, setTempDateFrom] = useState('');
   const [tempDateTo, setTempDateTo] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
+  const [rangeVerifyResult, setRangeVerifyResult] = useState(null);
+  const [isVerifyRangeLoading, setIsVerifyRangeLoading] = useState(false);
   const logsRequestSeq = useRef(0);
 
   // Decode JWT info for Workspace Context Indicator
@@ -241,17 +319,18 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
   }, [selectedClient, onLogout]);
 
   useEffect(() => {
-    if (view !== 'dashboard') return;
+    if (view !== 'dashboard' && view !== 'audit-logs') return;
+    if (view === 'audit-logs' && rangeVerifyResult?.results?.length) return;
 
     fetchTransactionLogs({
-      page: currentPage,
-      pageSize: rowsPerPage,
+      page: view === 'dashboard' ? 1 : currentPage,
+      pageSize: view === 'dashboard' ? 200 : rowsPerPage,
       fromDate: filterDateFrom,
       toDate: filterDateTo,
       activeSort: sortOrder,
       activeTable: filterTable
     });
-  }, [view, fetchTransactionLogs, currentPage, rowsPerPage, filterDateFrom, filterDateTo, sortOrder, filterTable]);
+  }, [view, fetchTransactionLogs, currentPage, rowsPerPage, filterDateFrom, filterDateTo, sortOrder, filterTable, rangeVerifyResult]);
 
   // Fetch summary stats only. The transaction table is loaded on demand.
   useEffect(() => {
@@ -313,6 +392,16 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
     setCurrentPage(1);
   };
 
+  const handleFilterActionChange = (newAction) => {
+    setFilterAction(newAction);
+    setCurrentPage(1);
+  };
+
+  const handleFilterVerificationChange = (newVerification) => {
+    setFilterVerification(newVerification);
+    setCurrentPage(1);
+  };
+
   // Auto-trigger logs fetch ketika kedua tanggal (From & To) dipilih.
   useEffect(() => {
     if (tempDateFrom && tempDateTo) {
@@ -326,13 +415,11 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
     const fromVal = fromDate || tempDateFrom;
     const toVal = toDate || tempDateTo;
     if (!fromVal || !toVal) return;
+    setRangeVerifyResult(null);
     setFilterDateFrom(fromVal);
     setFilterDateTo(toVal);
     setCurrentPage(1);
   }, [tempDateFrom, tempDateTo]);
-
-  const [rangeVerifyResult, setRangeVerifyResult] = useState(null);
-  const [isVerifyRangeLoading, setIsVerifyRangeLoading] = useState(false);
 
   // Clear Range handler
   const handleClearRange = useCallback(() => {
@@ -385,10 +472,23 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
 
       const res = await api.get('/dashboard/verify-range', { params });
       const results = res.data.results || [];
+      let rangeLogs = [];
+
+      try {
+        rangeLogs = await fetchAllLogsForRange({ fromISO, toISO, selectedClient });
+      } catch (logsErr) {
+        console.error("Failed to hydrate range inspection logs:", logsErr);
+      }
+
+      const rangeLogsById = new Map(rangeLogs.map(log => [log.log_id, log]));
+      const hydratedResults = results.map(item => ({
+        ...item,
+        log: item.log || item.audit_log || rangeLogsById.get(item.log_id) || null,
+      }));
 
       setVerifyStatuses(prev => {
         const next = { ...prev };
-        results.forEach(item => {
+        hydratedResults.forEach(item => {
           next[item.log_id] = mapRangeItemToVerifyStatus(item);
         });
         return next;
@@ -397,13 +497,14 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
       setRangeVerifyResult({
         range: { from: filterDateFrom, to: filterDateTo },
         summary: res.data.summary || {
-          total: results.length,
-          valid: results.filter(r => r.verify_status === 'success' || r.verify_status === 'valid').length,
-          invalid: results.filter(r => r.verify_status === 'tampered' || r.verify_status === 'failed_local' || r.verify_status === 'failed_onchain').length,
-          pending: results.filter(r => r.verify_status === 'pending').length
+          total: hydratedResults.length,
+          valid: hydratedResults.filter(r => r.verify_status === 'success' || r.verify_status === 'valid').length,
+          invalid: hydratedResults.filter(r => ['tampered', 'failed_local', 'failed_onchain', 'failed', 'error', 'unreachable'].includes(r.verify_status)).length,
+          pending: hydratedResults.filter(r => r.verify_status === 'pending').length
         },
-        results
+        results: hydratedResults
       });
+      setCurrentPage(1);
     } catch (err) {
       console.error("Failed to verify range:", err);
       setRangeVerifyResult({
@@ -421,6 +522,17 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
 
 
   // Filter & pagination
+  const rangeInspectionLogs = useMemo(() => {
+    if (!rangeVerifyResult?.results?.length) return [];
+
+    const recentById = new Map(recentLogs.map(log => [log.log_id, log]));
+    return rangeVerifyResult.results
+      .map(item => buildRangeInspectionLog(item, recentById.get(item?.log_id)))
+      .filter(log => log?.log_id);
+  }, [rangeVerifyResult, recentLogs]);
+
+  const isRangeInspectionMode = rangeInspectionLogs.length > 0;
+
   const filteredLogs = useMemo(() => {
     const normalizedSearch = deferredSearchQuery.trim().toLowerCase();
     const activeFrom = filterDateFrom || tempDateFrom;
@@ -434,7 +546,8 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
       toTime = toObj.getTime();
     }
 
-    const list = recentLogs.filter(log => {
+    const sourceLogs = isRangeInspectionMode ? rangeInspectionLogs : recentLogs;
+    const list = sourceLogs.filter(log => {
       const matchSearch = !normalizedSearch || [
         log?.source_table || log?.resource || '',
         log?.actor || '',
@@ -453,20 +566,14 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
           if (!isNaN(fromTime) && logTime < fromTime) matchDate = false;
           if (!isNaN(toTime) && logTime > toTime) matchDate = false;
         }
-      } else if (filterDateFrom || filterDateTo || tempDateFrom || tempDateTo) {
+      } else if (!isRangeInspectionMode && (filterDateFrom || filterDateTo || tempDateFrom || tempDateTo)) {
         matchDate = false;
       }
 
       // Verification status filter (Dropdown: ALL | VALID | INVALID)
       let matchVerification = true;
       if (filterVerification !== 'ALL') {
-        const v = verifyStatuses[log.log_id];
-        const isValid = v && (v.status === 'success' || v.status === 'valid');
-        if (filterVerification === 'VALID') {
-          matchVerification = isValid;
-        } else if (filterVerification === 'INVALID') {
-          matchVerification = !isValid;
-        }
+        matchVerification = getVerificationBucket(log, verifyStatuses) === filterVerification;
       }
 
       return matchSearch && matchAction && matchDate && matchVerification;
@@ -484,9 +591,13 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
       }
       return timeB - timeA;
     });
-  }, [recentLogs, deferredSearchQuery, filterAction, filterDateFrom, filterDateTo, tempDateFrom, tempDateTo, filterVerification, verifyStatuses, sortOrder]);
-  const totalPages = Math.ceil(totalLogsCount / rowsPerPage) || 1;
-  const paginatedLogs = filteredLogs;
+  }, [recentLogs, rangeInspectionLogs, isRangeInspectionMode, deferredSearchQuery, filterAction, filterDateFrom, filterDateTo, tempDateFrom, tempDateTo, filterVerification, verifyStatuses, sortOrder]);
+  const totalPages = isRangeInspectionMode
+    ? (Math.ceil(filteredLogs.length / rowsPerPage) || 1)
+    : (Math.ceil(totalLogsCount / rowsPerPage) || 1);
+  const paginatedLogs = isRangeInspectionMode
+    ? filteredLogs.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage)
+    : filteredLogs;
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -495,7 +606,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
   }, [currentPage, totalPages]);
 
   const hasLocalFilter = searchQuery || filterAction !== 'ALL' || filterVerification !== 'ALL';
-  const displayTotal = hasLocalFilter ? filteredLogs.length : totalLogsCount;
+  const displayTotal = isRangeInspectionMode ? filteredLogs.length : (hasLocalFilter ? filteredLogs.length : totalLogsCount);
 
   // Status badge for transaction table
   const renderStatusBadge = useCallback((log) => {
@@ -516,7 +627,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
 
     if (v.status === 'loading')
       return <span className="ac-status ac-status--checking">⏳ Memeriksa...</span>;
-    if (v.status === 'success')
+    if (v.status === 'success' || v.status === 'valid')
       return <span className="ac-status ac-status--valid" onClick={() => setSelectedVerifyResult(v)}>✅ VALID</span>;
     if (v.status === 'pending')
       return <span className="ac-status ac-status--pending" onClick={() => setSelectedVerifyResult(v)}>⏱️ PENDING</span>;
@@ -542,14 +653,24 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
   }, [currentPage, totalPages]);
 
   const isMobileSidebar = typeof window !== 'undefined' && window.innerWidth <= 768;
-  const isSidebarExpanded = isMobileSidebar ? sidebarOpen : !sidebarCollapsed;
+  const isSidebarPreviewOpen = !isMobileSidebar && sidebarCollapsed && sidebarHoverOpen;
+
+  const handleSidebarModeToggle = useCallback(() => {
+    if (window.innerWidth <= 768) {
+      setSidebarOpen(o => !o);
+      return;
+    }
+
+    setSidebarHoverOpen(false);
+    setSidebarCollapsed(collapsed => !collapsed);
+  }, []);
 
   return (
-    <div className={`ac-shell ac-shell--user${sidebarCollapsed ? ' ac-shell--sidebar-collapsed' : ''}`}>
+    <div className={`ac-shell ac-shell--user${sidebarCollapsed ? ' ac-shell--sidebar-collapsed' : ''}${isSidebarPreviewOpen ? ' ac-shell--sidebar-hover-open' : ''}`}>
       {/* ======= TOP NAV ======= */}
       <header className="ac-topnav">
         <div className="ac-topnav__brand">
-          <img src="/logo/logo-with-background.png" alt="Auditchain Logo" style={{ height: 36, width: 'auto', display: 'block', flexShrink: 0, borderRadius: 6 }} />
+          <img src="/logo/logo-with-background.png" alt="Auditchain Logo" style={{ height: 38, width: 'auto', display: 'block', flexShrink: 0, borderRadius: 6 }} />
           <div>
             <div className="ac-topnav__brand-name">Auditchain Gateway</div>
             <div className="ac-topnav__brand-sub">Gateway Portal</div>
@@ -637,29 +758,23 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
       </header>
 
       {/* ======= SIDEBAR ======= */}
-      <aside className={`ac-sidebar${sidebarOpen ? ' ac-sidebar--open' : ''}`}>
+      <aside
+        className={`ac-sidebar${sidebarOpen ? ' ac-sidebar--open' : ''}${isSidebarPreviewOpen ? ' ac-sidebar--hover-open' : ''}`}
+        onMouseEnter={() => {
+          if (window.innerWidth > 768 && sidebarCollapsed) setSidebarHoverOpen(true);
+        }}
+        onMouseLeave={() => {
+          if (window.innerWidth > 768 && sidebarCollapsed) setSidebarHoverOpen(false);
+        }}
+      >
         <div className="ac-sidebar__header">
           <div className="ac-sidebar__header-main">
             <img className="ac-sidebar__compact-logo" src="/logo/Mask group.png" alt="AG" />
             <div className="ac-sidebar__header-copy">
-              <div className="ac-sidebar__section-label">Audit Manager</div>
+              <div className="ac-sidebar__section-label">Gateway Portal</div>
               <div className="ac-sidebar__section-sub">Secure Data Integrity</div>
             </div>
           </div>
-          <button
-            className="ac-sidebar__toggle-btn"
-            onClick={() => {
-              if (window.innerWidth <= 768) {
-                setSidebarOpen(o => !o);
-              } else {
-                setSidebarCollapsed(o => !o);
-              }
-            }}
-            title={isSidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
-            aria-label={isSidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
-          >
-            <Icon name={isSidebarExpanded ? 'chevronLeft' : 'chevronRight'} size={18} />
-          </button>
         </div>
         <nav className="ac-sidebar__nav">
           <button
@@ -669,6 +784,15 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
           >
             <Icon name="dashboard" size={18} />
             <span className="ac-sidebar__nav-label">Dashboard</span>
+          </button>
+
+          <button
+            className={`ac-sidebar__nav-item${view === 'audit-logs' ? ' ac-sidebar__nav-item--active' : ''}`}
+            onClick={() => { navigate('/audit-logs'); setSidebarOpen(false); }}
+            title="Audit Logs"
+          >
+            <Icon name="history" size={18} />
+            <span className="ac-sidebar__nav-label">Audit Logs</span>
           </button>
 
           <button
@@ -719,9 +843,14 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
               )}
             </div>
           )}
-          <button className="ac-sidebar__nav-item ac-sidebar__nav-item--logout" style={{ marginTop: 6 }} onClick={onLogout} title="Logout">
-            <Icon name="logout" size={18} />
-            <span className="ac-sidebar__nav-label">Logout</span>
+          <button
+            type="button"
+            className={`ac-sidebar__mode-toggle${!sidebarCollapsed ? ' ac-sidebar__mode-toggle--pinned' : ''}`}
+            onClick={handleSidebarModeToggle}
+            title={sidebarCollapsed ? 'Pin sidebar open' : 'Use auto-collapse sidebar'}
+            aria-label={sidebarCollapsed ? 'Pin sidebar open' : 'Use auto-collapse sidebar'}
+          >
+            <Icon name="sidebarPanel" size={17} />
           </button>
         </div>
       </aside>
@@ -741,7 +870,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
 
 
           {view === 'profile' ? (
-            <section className="ac-hero">
+            <section className="ac-hero ac-hero--legacy-dashboard">
               <div className="ac-hero__pattern" />
               <div className="ac-hero__content">
                 <div className="ac-hero__left">
@@ -879,37 +1008,16 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
               </div>
             </section>
           ) : view === 'web-users' ? (
-            <WebUsersView />
-          ) : (
-          <>
-            {/* Hero Section */}
-            <section className="ac-hero">
-              <div className="ac-hero__pattern" />
-              <div className="ac-hero__content">
-                <div className="ac-hero__left">
-                  <h1 className="ac-hero__title">
-                    🛡️ Auditchain Gateway Dashboard
-                  </h1>
-                  <p className="ac-hero__subtitle">
-                    Monitor audit logs and verify blockchain transactions in real-time.
-                    Ensure the highest data integrity across the database infrastructure network.
-                  </p>
-                </div>
-              </div>
-            </section>
-
-            {/* Stats Grid */}
-            <StatCards stats={stats} />
-
-            {/* AUDIT TRANSACTIONS */}
-            <AuditLogTable
+            <WebUsersView onLogout={onLogout} />
+          ) : view === 'audit-logs' ? (
+            <AuditLogsView
               paginatedLogs={paginatedLogs}
               searchQuery={searchQuery}
               setSearchQuery={setSearchQuery}
               filterAction={filterAction}
-              setFilterAction={setFilterAction}
+              setFilterAction={handleFilterActionChange}
               filterVerification={filterVerification}
-              setFilterVerification={setFilterVerification}
+              setFilterVerification={handleFilterVerificationChange}
               sortOrder={sortOrder}
               setSortOrder={handleSortOrderChange}
               filterTable={filterTable}
@@ -942,6 +1050,30 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
               totalPages={totalPages}
               renderPageNumbers={renderPageNumbers}
             />
+          ) : (
+          <>
+            {/* Hero Section */}
+            <section className="ac-hero">
+              <div className="ac-hero__pattern" />
+              <div className="ac-hero__content">
+                <div className="ac-hero__left">
+                  <h1 className="ac-hero__title">
+                    🛡️ Auditchain Gateway Dashboard
+                  </h1>
+                  <p className="ac-hero__subtitle">
+                    Monitor audit logs and verify blockchain transactions in real-time.
+                    Ensure the highest data integrity across the database infrastructure network.
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            <AuditDashboardOverview
+              stats={stats}
+              selectedClient={selectedClient}
+              onOpenAuditLogs={() => navigate('/audit-logs')}
+            />
+
           </>
           )}
 
