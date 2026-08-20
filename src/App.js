@@ -1,12 +1,13 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { Suspense, lazy, useEffect, useState, useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import './App.css';
 
-import LandingPage from './pages/LandingPage';
-import LoginPage from './pages/LoginPage';
-import DashboardPage from './pages/DashboardPage';
-import AdminPage from './pages/AdminPage';
 import { parseJwt } from './utils/formatters';
+
+const LandingPage = lazy(() => import('./pages/LandingPage'));
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const AdminPage = lazy(() => import('./pages/AdminPage'));
 
 const THEME_STORAGE_KEY = 'auditchain_appearance';
 const THEME_OPTIONS = ['light', 'dark', 'system'];
@@ -79,96 +80,98 @@ function App() {
 
   return (
     <Router>
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route
-          path="/login"
-          element={
-            !isAuthenticated ? (
-              <LoginPage onLogin={() => { setIsAuthenticated(true); handleAuthRefresh(); }} />
-            ) : (
-              <Navigate to={isAdmin ? "/admin" : "/dashboard"} replace />
-            )
-          }
-        />
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute isAuthenticated={isAuthenticated}>
-              <DashboardPage
-                onLogout={handleLogout}
-                onProfileUpdated={handleAuthRefresh}
-                themePreference={themePreference}
-                resolvedTheme={resolvedTheme}
-                onThemeChange={setThemePreference}
-              />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/profile"
-          element={
-            <ProtectedRoute isAuthenticated={isAuthenticated}>
-              <DashboardPage
-                view="profile"
-                onLogout={handleLogout}
-                onProfileUpdated={handleAuthRefresh}
-                themePreference={themePreference}
-                resolvedTheme={resolvedTheme}
-                onThemeChange={setThemePreference}
-              />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/web-users"
-          element={
-            <ProtectedRoute isAuthenticated={isAuthenticated}>
-              <DashboardPage
-                view="web-users"
-                onLogout={handleLogout}
-                onProfileUpdated={handleAuthRefresh}
-                themePreference={themePreference}
-                resolvedTheme={resolvedTheme}
-                onThemeChange={setThemePreference}
-              />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/audit-logs"
-          element={
-            <ProtectedRoute isAuthenticated={isAuthenticated}>
-              <DashboardPage
-                view="audit-logs"
-                onLogout={handleLogout}
-                onProfileUpdated={handleAuthRefresh}
-                themePreference={themePreference}
-                resolvedTheme={resolvedTheme}
-                onThemeChange={setThemePreference}
-              />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin"
-          element={
-            <ProtectedRoute isAuthenticated={isAuthenticated}>
-              {isAdmin ? (
-                <AdminPage
+      <Suspense fallback={<div className="ac-route-loading">Loading...</div>}>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route
+            path="/login"
+            element={
+              !isAuthenticated ? (
+                <LoginPage onLogin={() => { setIsAuthenticated(true); handleAuthRefresh(); }} />
+              ) : (
+                <Navigate to={isAdmin ? "/admin" : "/dashboard"} replace />
+              )
+            }
+          />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated}>
+                <DashboardPage
                   onLogout={handleLogout}
+                  onProfileUpdated={handleAuthRefresh}
                   themePreference={themePreference}
                   resolvedTheme={resolvedTheme}
                   onThemeChange={setThemePreference}
                 />
-              ) : (
-                <Navigate to="/dashboard" replace />
-              )}
-            </ProtectedRoute>
-          }
-        />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated}>
+                <DashboardPage
+                  view="profile"
+                  onLogout={handleLogout}
+                  onProfileUpdated={handleAuthRefresh}
+                  themePreference={themePreference}
+                  resolvedTheme={resolvedTheme}
+                  onThemeChange={setThemePreference}
+                />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/web-users"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated}>
+                <DashboardPage
+                  view="web-users"
+                  onLogout={handleLogout}
+                  onProfileUpdated={handleAuthRefresh}
+                  themePreference={themePreference}
+                  resolvedTheme={resolvedTheme}
+                  onThemeChange={setThemePreference}
+                />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/audit-logs"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated}>
+                <DashboardPage
+                  view="audit-logs"
+                  onLogout={handleLogout}
+                  onProfileUpdated={handleAuthRefresh}
+                  themePreference={themePreference}
+                  resolvedTheme={resolvedTheme}
+                  onThemeChange={setThemePreference}
+                />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated}>
+                {isAdmin ? (
+                  <AdminPage
+                    onLogout={handleLogout}
+                    themePreference={themePreference}
+                    resolvedTheme={resolvedTheme}
+                    onThemeChange={setThemePreference}
+                  />
+                ) : (
+                  <Navigate to="/dashboard" replace />
+                )}
+              </ProtectedRoute>
+            }
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
     </Router>
   );
 }

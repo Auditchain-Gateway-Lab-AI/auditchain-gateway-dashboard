@@ -15,6 +15,7 @@ COPY . .
 # Override via --build-arg saat docker build, atau via docker-compose build args.
 ARG REACT_APP_API_BASE_URL=http://localhost:8080/api
 ENV REACT_APP_API_BASE_URL=$REACT_APP_API_BASE_URL
+ENV GENERATE_SOURCEMAP=false
 
 RUN npm run build
 

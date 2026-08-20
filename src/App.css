@@ -43,6 +43,15 @@
 /* ================================================================
    LAYOUT — Topnav + Sidebar + Main
    ================================================================ */
+.ac-route-loading {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: var(--color-surface-container-lowest, #f8fafc);
+  color: var(--color-on-surface, #0f172a);
+  font-weight: 700;
+}
+
 .ac-topnav {
   position: fixed;
   top: 0; left: 0; right: 0;
