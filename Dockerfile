@@ -1,12 +1,12 @@
 # --- Tahap 1: Build React App ---
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
 # Copy package files dulu supaya layer cache npm install tidak invalidate
 # setiap kali source code berubah
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN npm install --legacy-peer-deps
 
 COPY . .
 
