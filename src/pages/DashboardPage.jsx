@@ -607,10 +607,29 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
 
   const hasLocalFilter = searchQuery || filterAction !== 'ALL' || filterVerification !== 'ALL';
   const displayTotal = isRangeInspectionMode ? filteredLogs.length : (hasLocalFilter ? filteredLogs.length : totalLogsCount);
+  const workspaceName = clientInfo?.company_name || adminClients.find(c => c.id === clientInfo?.client_id)?.company_name || 'Client Workspace';
+  const latestActivity = recentLogs[0];
+  const profileStats = [
+    { label: 'Total Logs', value: stats.total_logs || 0, icon: 'database', tone: 'blue' },
+    { label: 'Anchored', value: stats.anchored_logs || 0, icon: 'checkCircle', tone: 'teal' },
+    { label: 'Pending', value: stats.pending_logs || 0, icon: 'clock', tone: 'amber' },
+  ];
+  const accessItems = [
+    { label: 'Dashboard', description: 'Ringkasan integritas data dan status gateway', icon: 'dashboard' },
+    { label: 'Audit Logs', description: 'Investigasi transaksi, hash, dan hasil verifikasi', icon: 'history' },
+    { label: 'Web Users', description: 'Melihat akun aplikasi yang tercatat di workspace', icon: 'users' },
+  ];
 
   // Status badge for transaction table
   const renderStatusBadge = useCallback((log) => {
-    if (!log || !log.log_id || !log.hash_value) return <span className="ac-status ac-status--invalid">🚨 INVALID</span>;
+    if (!log || !log.log_id || !log.hash_value) {
+      return (
+        <span className="ac-status ac-status--invalid">
+          <Icon name="xCircle" size={12} />
+          INVALID
+        </span>
+      );
+    }
     const v = verifyStatuses[log.log_id];
 
     if (!v) {
@@ -620,18 +639,39 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
           style={{ padding: '4px 10px', fontSize: '11px' }}
           onClick={(e) => { e.stopPropagation(); handleVerifyLog(log.log_id); }}
         >
-          🔍 Verify
+          <Icon name="search" size={12} />
+          Verify
         </button>
       );
     }
 
     if (v.status === 'loading')
-      return <span className="ac-status ac-status--checking">⏳ Memeriksa...</span>;
+      return (
+        <span className="ac-status ac-status--checking">
+          <Icon name="spinner" size={12} />
+          Memeriksa...
+        </span>
+      );
     if (v.status === 'success' || v.status === 'valid')
-      return <span className="ac-status ac-status--valid" onClick={() => setSelectedVerifyResult(v)}>✅ VALID</span>;
+      return (
+        <span className="ac-status ac-status--valid" onClick={() => setSelectedVerifyResult(v)}>
+          <Icon name="checkCircle" size={12} />
+          VALID
+        </span>
+      );
     if (v.status === 'pending')
-      return <span className="ac-status ac-status--pending" onClick={() => setSelectedVerifyResult(v)}>⏱️ PENDING</span>;
-    return <span className="ac-status ac-status--invalid" onClick={() => setSelectedVerifyResult(v)}>🚨 INVALID</span>;
+      return (
+        <span className="ac-status ac-status--pending" onClick={() => setSelectedVerifyResult(v)}>
+          <Icon name="clock" size={12} />
+          PENDING
+        </span>
+      );
+    return (
+      <span className="ac-status ac-status--invalid" onClick={() => setSelectedVerifyResult(v)}>
+        <Icon name="xCircle" size={12} />
+        INVALID
+      </span>
+    );
   }, [handleVerifyLog, verifyStatuses]);
 
 
@@ -870,17 +910,39 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
 
 
           {view === 'profile' ? (
-            <section className="ac-hero ac-hero--legacy-dashboard">
-              <div className="ac-hero__pattern" />
-              <div className="ac-hero__content">
-                <div className="ac-hero__left">
-                  <span className="ac-page-kicker">Account Center</span>
-                  <h1 className="ac-hero__title">{displayName}</h1>
-                  <p className="ac-hero__subtitle">
-                    Manage the identity used across your Auditchain workspace.
-                  </p>
+            <section className="ac-profile-page">
+              <div className="ac-profile-hero">
+                <div className="ac-profile-hero__identity">
+                  <span className="ac-profile-hero__avatar">{initials}</span>
+                  <div>
+                    <span className="ac-page-kicker">Account Center</span>
+                    <h1>{displayName}</h1>
+                    <p>Kelola identitas, keamanan, dan akses workspace Auditchain Gateway.</p>
+                  </div>
+                </div>
+                <div className="ac-profile-hero__meta">
+                  <span className="ac-status ac-status--valid">
+                    <Icon name="checkCircle" size={13} />
+                    Active Session
+                  </span>
+                  <span>{workspaceName}</span>
                 </div>
               </div>
+
+              <div className="ac-profile-stat-grid">
+                {profileStats.map(item => (
+                  <div className={`ac-profile-stat ac-profile-stat--${item.tone}`} key={item.label}>
+                    <span className="ac-profile-stat__icon">
+                      <Icon name={item.icon} size={18} />
+                    </span>
+                    <div>
+                      <strong>{item.value.toLocaleString('id-ID')}</strong>
+                      <span>{item.label}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
               <div className="ac-profile-layout">
                 <form className="ac-profile-card ac-profile-form" onSubmit={handleProfileSubmit}>
                   <div className="ac-profile-card__header">
@@ -977,7 +1039,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
                   <div className="ac-profile-card__header">
                     <div>
                       <h2>Workspace</h2>
-                      <p>Session identity assigned by admin.</p>
+                      <p>Identitas sesi yang terhubung dengan akun ini.</p>
                     </div>
                     <span className="ac-profile-card__icon ac-profile-card__icon--teal">
                       <Icon name="shield" size={18} />
@@ -993,17 +1055,92 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
                   </div>
                   <div className="ac-profile-summary__row">
                     <span>Company</span>
-                    <strong>{clientInfo?.company_name || adminClients.find(c => c.id === clientInfo?.client_id)?.company_name || 'Workspace'}</strong>
+                    <strong>{workspaceName}</strong>
+                  </div>
+                  <div className="ac-profile-summary__row">
+                    <span>Username</span>
+                    <strong>{profileForm.username || clientInfo?.username || '-'}</strong>
+                  </div>
+                  <div className="ac-profile-summary__row">
+                    <span>Security</span>
+                    <strong>Password protected</strong>
                   </div>
                 </aside>
               </div>
-              <div className="ac-profile-card ac-profile-settings-card">
-                <h3>Notification Settings</h3>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                    <input type="checkbox" style={{ marginRight: '8px', width: '16px', height: '16px' }} defaultChecked />
-                    <span>Enable Email Alerts</span>
+
+              <div className="ac-profile-secondary-grid">
+                <div className="ac-profile-card ac-profile-access-card">
+                  <div className="ac-profile-card__header">
+                    <div>
+                      <h2>Akses Portal</h2>
+                      <p>Menu yang tersedia untuk role kamu.</p>
+                    </div>
+                    <span className="ac-profile-card__icon">
+                      <Icon name="key" size={18} />
+                    </span>
+                  </div>
+                  <div className="ac-profile-access-list">
+                    {accessItems.map(item => (
+                      <div className="ac-profile-access-item" key={item.label}>
+                        <span>
+                          <Icon name={item.icon} size={16} />
+                        </span>
+                        <div>
+                          <strong>{item.label}</strong>
+                          <small>{item.description}</small>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="ac-profile-card ac-profile-settings-card">
+                  <div className="ac-profile-card__header">
+                    <div>
+                      <h2>Preferensi</h2>
+                      <p>Pengaturan ringan untuk pengalaman kerja harian.</p>
+                    </div>
+                    <span className="ac-profile-card__icon ac-profile-card__icon--teal">
+                      <Icon name="settings" size={18} />
+                    </span>
+                  </div>
+                  <label className="ac-profile-toggle-row">
+                    <input type="checkbox" defaultChecked />
+                    <span>
+                      <strong>Email Alerts</strong>
+                      <small>Notifikasi saat ada audit log yang perlu ditinjau.</small>
+                    </span>
                   </label>
+                  <label className="ac-profile-toggle-row">
+                    <input type="checkbox" defaultChecked={resolvedTheme === 'dark'} readOnly />
+                    <span>
+                      <strong>Appearance</strong>
+                      <small>{themePreference === 'system' ? 'Following system theme' : `${resolvedTheme} mode`}</small>
+                    </span>
+                  </label>
+                </div>
+
+                <div className="ac-profile-card ac-profile-activity-card">
+                  <div className="ac-profile-card__header">
+                    <div>
+                      <h2>Aktivitas Terakhir</h2>
+                      <p>Audit event terbaru dari workspace aktif.</p>
+                    </div>
+                    <span className="ac-profile-card__icon">
+                      <Icon name="activity" size={18} />
+                    </span>
+                  </div>
+                  {latestActivity ? (
+                    <div className="ac-profile-activity">
+                      <strong>{latestActivity.action || 'Audit event'}</strong>
+                      <span>{latestActivity.resource || latestActivity.source_table || 'Gateway resource'}</span>
+                      <code>{latestActivity.timestamp || 'Timestamp unavailable'}</code>
+                    </div>
+                  ) : (
+                    <div className="ac-profile-activity ac-profile-activity--empty">
+                      Belum ada aktivitas terbaru yang bisa ditampilkan.
+                    </div>
+                  )}
                 </div>
               </div>
             </section>
