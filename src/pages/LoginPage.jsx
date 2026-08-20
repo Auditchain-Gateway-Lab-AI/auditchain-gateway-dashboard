@@ -73,30 +73,30 @@ function LoginPage({ onLogin }) {
             <img src="/logo/logo-with-background.png" alt="Auditchain Gateway Logo" style={{ height: 42, width: 'auto', display: 'block', flexShrink: 0, borderRadius: 8 }} />
             <div>
               <div className="ac-login-hero__brand-name">Auditchain Gateway</div>
-              <div className="ac-login-hero__brand-sub">Gateway Portal</div>
+              <div className="ac-login-hero__brand-sub">Secure Access Portal</div>
             </div>
           </div>
         </div>
 
         {/* Headline */}
         <div>
-          <h1 className="ac-login-hero__title">Secure Audit<br />Portal</h1>
+          <h1 className="ac-login-hero__title">Auditchain Gateway<br />Portal</h1>
           <p className="ac-login-hero__desc">
-            Blockchain-based Audit Log Monitoring System.
-            Ensuring absolute data integrity, immutability, and compliance across all connected environments.
+            Access the blockchain-backed control center for audit log monitoring,
+            evidence integrity, and compliance visibility across every connected environment.
           </p>
         </div>
 
         {/* Info box */}
         <div className="ac-login-hero__infobox">
           <div className="ac-login-hero__infobox-icon">
-            <Icon name="shield" size={20} style={{ color: 'rgba(255,255,255,0.85)' }} />
+            <Icon name="key" size={21} style={{ color: 'rgba(255,255,255,0.92)' }} />
           </div>
           <div>
-            <div className="ac-login-hero__infobox-title">Authorized Access Only</div>
+            <div className="ac-login-hero__infobox-title">Protected Gateway Access</div>
             <div className="ac-login-hero__infobox-text">
-              Only authorized auditors and administrators can access this system.
-              Your IP address and session are being logged.
+              This portal is available only to approved auditors and administrators.
+              Every session is monitored and recorded for security review.
             </div>
           </div>
         </div>
@@ -125,7 +125,7 @@ function LoginPage({ onLogin }) {
             <img src="/logo/logo-with-background.png" alt="Auditchain Logo" style={{ height: 36, width: 'auto', display: 'block', flexShrink: 0, borderRadius: 6 }} />
             <div>
               <div style={{ fontSize: 18, fontWeight: 800, color: '#0d1b2e', letterSpacing: '.02em' }}>Auditchain Gateway</div>
-              <div style={{ fontSize: 10, fontWeight: 600, color: '#0077ce', letterSpacing: '.1em', textTransform: 'uppercase' }}>Gateway Portal</div>
+              <div style={{ fontSize: 10, fontWeight: 600, color: '#0077ce', letterSpacing: '.1em', textTransform: 'uppercase' }}>Secure Access Portal</div>
             </div>
           </div>
 
