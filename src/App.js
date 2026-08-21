@@ -82,7 +82,15 @@ function App() {
     <Router>
       <Suspense fallback={<div className="ac-route-loading">Loading...</div>}>
         <Routes>
-          <Route path="/" element={<LandingPage />} />
+          <Route
+            path="/"
+            element={
+              <LandingPage
+                resolvedTheme={resolvedTheme}
+                onThemeChange={setThemePreference}
+              />
+            }
+          />
           <Route
             path="/login"
             element={
