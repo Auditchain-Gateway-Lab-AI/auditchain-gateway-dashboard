@@ -176,6 +176,10 @@ function App() {
             }
           />
           <Route
+            path="/actor-tracking"
+            element={<ProtectedRoute isAuthenticated={isAuthenticated}><DashboardPage view="actor-tracking" onLogout={handleLogout} onProfileUpdated={handleAuthRefresh} themePreference={themePreference} resolvedTheme={resolvedTheme} onThemeChange={setThemePreference} /></ProtectedRoute>}
+          />
+          <Route
             path="/admin"
             element={
               <ProtectedRoute isAuthenticated={isAuthenticated}>

@@ -8,6 +8,7 @@ import AuditLogsView from '../components/dashboard/AuditLogsView';
 import WebUsersView from '../components/dashboard/WebUsersView';
 import ReportsView from '../components/dashboard/ReportsView';
 import ResourceDetailModal from '../components/dashboard/ResourceDetailModal';
+import ActorTrackingSettings from '../components/dashboard/ActorTrackingSettings';
 import { parseJwt, mapRangeItemToVerifyStatus } from '../utils/formatters';
 
 const areStatsEqual = (a = {}, b = {}) => (
@@ -853,6 +854,9 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
             <Icon name="fileText" size={18} />
             <span className="ac-sidebar__nav-label">Reports</span>
           </button>
+          <button className={`ac-sidebar__nav-item${view === 'actor-tracking' ? ' ac-sidebar__nav-item--active' : ''}`} onClick={() => { navigate('/actor-tracking'); setSidebarOpen(false); }} title="Actor Tracking">
+            <Icon name="shield" size={18} /><span className="ac-sidebar__nav-label">Actor Tracking</span>
+          </button>
 
           {clientInfo && clientInfo.role?.toLowerCase() === 'admin' && (
             <button
@@ -1154,6 +1158,8 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
                 </div>
               </div>
             </section>
+          ) : view === 'actor-tracking' ? (
+            <ActorTrackingSettings />
           ) : view === 'web-users' ? (
             <WebUsersView onLogout={onLogout} />
           ) : view === 'reports' ? (
