@@ -1,0 +1,23 @@
+name: Deploy Dashboard Dev
+
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+concurrency:
+  group: dashboard-dev-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to dev server
+    runs-on: [self-hosted, dashboard-dev]
+    timeout-minutes: 20
+
+    steps:
+      - name: Deploy dev branch
+        run: |
+          cd /home/besu/auditchain/auditchain-gateway-dashboard
+          DEPLOY_BRANCH=dev bash deploy.sh

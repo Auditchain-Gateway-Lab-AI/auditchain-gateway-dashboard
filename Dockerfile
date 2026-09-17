@@ -6,7 +6,7 @@ WORKDIR /app
 # Copy package files dulu supaya layer cache npm install tidak invalidate
 # setiap kali source code berubah
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN npm install --legacy-peer-deps
 
 COPY . .
 
@@ -15,6 +15,8 @@ COPY . .
 # Override via --build-arg saat docker build, atau via docker-compose build args.
 ARG REACT_APP_API_BASE_URL=http://localhost:8080/api
 ENV REACT_APP_API_BASE_URL=$REACT_APP_API_BASE_URL
+ENV GENERATE_SOURCEMAP=false
+ENV DISABLE_ESLINT_PLUGIN=true
 
 RUN npm run build
 
