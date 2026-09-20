@@ -1,6 +1,7 @@
 import React from 'react';
 import AuditLogTable from './AuditLogTable';
 import StatCards from './StatCards';
+import Icon from '../common/Icon';
 
 function AuditLogsView(props) {
   return (
@@ -15,6 +16,14 @@ function AuditLogsView(props) {
               Inspect transaction history, filter source tables, and verify blockchain integrity on demand.
             </p>
           </div>
+          {props.onOpenRecovery && (
+            <div className="ac-hero__actions">
+              <button type="button" className="ac-hero__btn-secondary ac-recovery-header-action" onClick={props.onOpenRecovery}>
+                <Icon name="shield" size={15} />
+                Recovery Center
+              </button>
+            </div>
+          )}
         </div>
       </section>
 

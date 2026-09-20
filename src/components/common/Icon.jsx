@@ -3,7 +3,7 @@ import React from 'react';
 // ================================================================
 // ICON — tiny inline SVG helpers (no external icon dep needed)
 // ================================================================
-const Icon = ({ name, size = 18, style = {} }) => {
+const Icon = ({ name, size = 18, style = {}, className = '' }) => {
   const icons = {
     shield: (
       <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" fill="currentColor" />
@@ -262,6 +262,20 @@ const Icon = ({ name, size = 18, style = {} }) => {
         <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" fill="none" />
       </>
     ),
+    refresh: (
+      <>
+        <path d="M20 11a8 8 0 0 0-14.9-3.9L3 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        <polyline points="3 4 3 9 8 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        <path d="M4 13a8 8 0 0 0 14.9 3.9L21 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        <polyline points="21 20 21 15 16 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      </>
+    ),
+    send: (
+      <>
+        <path d="M22 2L11 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M22 2l-7 20-4-9-9-4 20-7z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      </>
+    ),
     download: (
       <>
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
@@ -335,6 +349,7 @@ const Icon = ({ name, size = 18, style = {} }) => {
       height={size}
       viewBox="0 0 24 24"
       fill="none"
+      className={className}
       style={style}
     >
       {icons[name] || null}

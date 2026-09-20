@@ -175,7 +175,7 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
   // Client form state
   const [clientForm, setClientForm] = useState({
     company_name: '', subscription_tier: 'basic', rate_limit_per_sec: 50,
-    status: 'active', actor_field: 'actor', fallback_actor_field: '',
+    status: 'active',
   });
 
   const clientInfo = useMemo(() => parseJwt(authToken), [authToken]);
@@ -715,16 +715,14 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
     try {
       const response = await api.post('/admin/clients', {
         company_name: clientForm.company_name,
-        status: clientForm.status,
-        actor_field: clientForm.actor_field,
-        fallback_actor_field: clientForm.fallback_actor_field
+        status: clientForm.status
       });
       setNewApiKey(response.data.api_key);
       setShowClientModal(false);
       setShowApiKeyModal(true);
       setClientForm({
         company_name: '', subscription_tier: 'basic', rate_limit_per_sec: 50,
-        status: 'active', actor_field: 'actor', fallback_actor_field: '',
+        status: 'active',
       });
       fetchData();
     } catch (err) {
@@ -1584,35 +1582,9 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                   </div>
                 </section>
 
-                <section className="ac-form-section">
-                  <div className="ac-form-section__head">
-                    <div className="ac-form-section__icon ac-form-section__icon--teal">
-                      <Icon name="link" size={17} />
-                    </div>
-                    <div>
-                      <div className="ac-form-section__title">Audit Field Mapping</div>
-                      <div className="ac-form-section__subtitle">Map the primary source field used to identify the actor in audit logs.</div>
-                    </div>
-                  </div>
-                  <div className="ac-form-grid ac-form-grid--register">
-                    <div className="ac-form-field ac-form-field--wide">
-                      <label className="ac-form-label">Actor Field</label>
-                      <input className="ac-form-input ac-form-input--lg" placeholder="actor"
-                        value={clientForm.actor_field}
-                        onChange={e => setClientForm(f => ({ ...f, actor_field: e.target.value }))} />
-                    </div>
-                    <div className="ac-form-field">
-                      <label className="ac-form-label">Fallback Actor Field</label>
-                      <input className="ac-form-input ac-form-input--lg" placeholder="Optional, e.g. db_user"
-                        value={clientForm.fallback_actor_field}
-                        onChange={e => setClientForm(f => ({ ...f, fallback_actor_field: e.target.value }))} />
-                    </div>
-                  </div>
-                </section>
-
                 <div className="ac-register-form__note">
                   <Icon name="lock" size={15} />
-                  API key will be generated after registration and displayed once.
+                  API key will be generated after registration and displayed once. Configure audit actor mapping later from Actor Tracking.
                 </div>
 
                 <div className="ac-form-actions ac-register-form__actions">
