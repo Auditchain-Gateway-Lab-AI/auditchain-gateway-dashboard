@@ -4,6 +4,7 @@ import ActionBadge from '../common/ActionBadge';
 import SnapshotViewer from './SnapshotViewer';
 import Icon from '../common/Icon';
 import { formatTimestamp } from '../../utils/formatters';
+import RecoveryTab from './recovery/RecoveryTab';
 
 const parseLogMetadata = (metadata) => {
   if (!metadata) return {};
@@ -14,6 +15,21 @@ const parseLogMetadata = (metadata) => {
   } catch {
     return { raw_metadata: metadata };
   }
+};
+
+export const isLatestSourceEvent = (logStatus) => Boolean(
+  logStatus?.is_latest_client_event ?? logStatus?.is_latest
+);
+
+export const getSourceVerificationTitle = (logStatus) => {
+  if (!logStatus) return undefined;
+  if (logStatus.agent_status === 'skipped_recovery') {
+    return 'Recovery event — source comparison is not applicable';
+  }
+  if (isLatestSourceEvent(logStatus)) {
+    return `Agent: ${logStatus.agent_status}`;
+  }
+  return 'Historical client event — not compared against Agent';
 };
 
 const buildLogJsonPayload = (log) => ({
@@ -93,7 +109,7 @@ function LogPayloadViewer({ currentLog, previousLog = null }) {
 // ================================================================
 // KOMPONEN: Modal Detail Log per Resource (LEVEL 2)
 // ================================================================
-function ResourceDetailModal({ log: activeLog, selectedClient, onClose }) {
+function ResourceDetailModal({ log: activeLog, selectedClient, onClose, onRefreshLogs }) {
   const [logs, setLogs] = useState([]);
   const [chainStatus, setChainStatus] = useState(null); // hasil verify-resource
   const [loading, setLoading] = useState(true);
@@ -141,6 +157,10 @@ function ResourceDetailModal({ log: activeLog, selectedClient, onClose }) {
 
     return () => { cancelled = true; };
   }, [resource, selectedClient, activeTab]);
+
+  useEffect(() => {
+    setActiveTab('overview');
+  }, [activeLog?.log_id]);
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -289,8 +309,8 @@ function ResourceDetailModal({ log: activeLog, selectedClient, onClose }) {
         </div>
 
         {loading ? (
-          <div className="ac-empty">
-            <div className="ac-empty__icon"><Icon name="spinner" size={40} className="spin" /></div>
+          <div className="ac-empty ac-empty--loading">
+            <div className="ac-empty__icon"><Icon name="spinner" size={40} /></div>
             Loading history and running verification...
           </div>
         ) : error ? (
@@ -309,6 +329,7 @@ function ResourceDetailModal({ log: activeLog, selectedClient, onClose }) {
             const prevLog = ascIdx > 0 ? sortedAsc[ascIdx - 1] : null;
             const isFirst = idx === 0;
             const logStatus = logStatusMap[log.log_id];
+            const latestSourceEvent = isLatestSourceEvent(logStatus);
 
             const relatedIssues = (chainStatus?.chain_issues || [])
               .filter(issue => issue.endsWith(`:${log.log_id}`))
@@ -339,7 +360,7 @@ function ResourceDetailModal({ log: activeLog, selectedClient, onClose }) {
                           : logStatus.integrity_status === 'pending' ? 'ac-status--pending'
                             : 'ac-status--invalid'
                         }`}
-                      title={logStatus.is_latest ? `Agent: ${logStatus.agent_status}` : 'Historical record — not compared against Agent'}
+                      title={getSourceVerificationTitle(logStatus)}
                     >
                       {logStatus.integrity_status}
                     </span>
@@ -355,6 +376,9 @@ function ResourceDetailModal({ log: activeLog, selectedClient, onClose }) {
                     </span>
                   )}
                   {isFirst && <span className="ac-log-card__latest-chip">● Latest</span>}
+                  {latestSourceEvent && !isFirst && (
+                    <span className="ac-log-card__latest-chip">● Source latest</span>
+                  )}
                 </div>
 
                 <div className="ac-log-card__body">
@@ -417,10 +441,18 @@ function ResourceDetailModal({ log: activeLog, selectedClient, onClose }) {
             >
               History
             </button>
+            <button
+              className={`ac-drawer-tab ac-drawer-tab--recovery ${activeTab === 'recovery' ? 'ac-drawer-tab--active' : ''}`}
+              onClick={() => setActiveTab('recovery')}
+            >
+              <Icon name="shield" size={13} /> Recovery
+            </button>
           </div>
         </div>
 
-        {activeTab === 'overview' ? renderOverviewTab() : renderHistoryTab()}
+        {activeTab === 'overview' ? renderOverviewTab()
+          : activeTab === 'history' ? renderHistoryTab()
+            : <div className="ac-modal__body ac-drawer-tab-content"><RecoveryTab activeLog={activeLog} selectedClient={selectedClient} onRefreshLogs={onRefreshLogs} /></div>}
 
       </aside>
     </div>

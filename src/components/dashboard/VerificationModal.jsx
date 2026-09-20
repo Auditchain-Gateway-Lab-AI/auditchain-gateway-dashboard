@@ -60,6 +60,7 @@ function VerificationModal({ result, onClose }) {
     if (status === 'mismatch') return 'Data sumber berbeda';
     if (status === 'unreachable') return 'Agent tidak terhubung';
     if (status === 'not_configured') return 'Agent belum dikonfigurasi';
+    if (status === 'skipped_recovery') return 'Tidak diperiksa (event recovery)';
     return status;
   };
 
@@ -181,6 +182,7 @@ function VerificationModal({ result, onClose }) {
                 data.agent_status === 'matched' ? 'ac-status--valid' :
                 data.agent_status === 'mismatch' ? 'ac-status--invalid' :
                 data.agent_status === 'unreachable' ? 'ac-status--pending' :
+                data.agent_status === 'skipped_recovery' ? 'ac-status--checking' :
                 ''
               }`} style={{ fontSize: '11px', padding: '2px 8px', marginLeft: '4px' }}>
                 <Icon
@@ -189,6 +191,7 @@ function VerificationModal({ result, onClose }) {
                     data.agent_status === 'mismatch' ? 'xCircle' :
                     data.agent_status === 'unreachable' ? 'alert' :
                     data.agent_status === 'not_configured' ? 'settings' :
+                    data.agent_status === 'skipped_recovery' ? 'shield' :
                     'activity'
                   }
                   size={12}

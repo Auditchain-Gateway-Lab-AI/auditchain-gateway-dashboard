@@ -9,6 +9,7 @@ import WebUsersView from '../components/dashboard/WebUsersView';
 import ReportsView from '../components/dashboard/ReportsView';
 import ResourceDetailModal from '../components/dashboard/ResourceDetailModal';
 import ActorTrackingSettings from '../components/dashboard/ActorTrackingSettings';
+import RecoveryCenterView from '../components/dashboard/recovery/RecoveryCenterView';
 import { parseJwt, mapRangeItemToVerifyStatus } from '../utils/formatters';
 
 const areStatsEqual = (a = {}, b = {}) => (
@@ -843,7 +844,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
           </button>
 
           <button
-            className={`ac-sidebar__nav-item${view === 'audit-logs' ? ' ac-sidebar__nav-item--active' : ''}`}
+            className={`ac-sidebar__nav-item${view === 'audit-logs' || view === 'audit-logs-recovery' ? ' ac-sidebar__nav-item--active' : ''}`}
             onClick={() => { navigate('/audit-logs'); setSidebarOpen(false); }}
             title="Audit Logs"
           >
@@ -1178,6 +1179,8 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
             <WebUsersView onLogout={onLogout} />
           ) : view === 'reports' ? (
             <ReportsView selectedClient={selectedClient} />
+          ) : view === 'audit-logs-recovery' ? (
+            <RecoveryCenterView selectedClient={selectedClient} />
           ) : view === 'audit-logs' ? (
             <AuditLogsView
               paginatedLogs={paginatedLogs}
@@ -1219,6 +1222,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
               totalPages={totalPages}
               renderPageNumbers={renderPageNumbers}
               stats={stats}
+              onOpenRecovery={() => navigate('/audit-logs/recovery')}
             />
           ) : (
             <>
@@ -1255,6 +1259,14 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
         <ResourceDetailModal
           log={selectedLog}
           selectedClient={selectedClient}
+          onRefreshLogs={() => fetchTransactionLogs({
+            page: currentPage,
+            pageSize: rowsPerPage,
+            fromDate: filterDateFrom,
+            toDate: filterDateTo,
+            activeSort: sortOrder,
+            activeTable: filterTable,
+          })}
           onClose={() => setSelectedLog(null)}
         />
       )}

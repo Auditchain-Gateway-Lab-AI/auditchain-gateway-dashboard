@@ -178,11 +178,16 @@ function ClientDetailDrawer({
 
               <section className="ac-watched-drawer-section">
                 <div className="ac-watched-drawer-section__head">
-                  <div><h3>Field Mapping</h3><p>Identity fields used while processing client audit records.</p></div>
+                  <div><h3>Field Mapping</h3><p>Read-only summary. Edit workspace mapping from Actor Tracking.</p></div>
                 </div>
                 <div className="ac-client-detail-key-values">
                   <span>Actor field</span><code>{detailClient?.actor_field || 'actor'}</code>
                   <span>Fallback actor</span><code>{detailClient?.fallback_actor_field || 'Not configured'}</code>
+                  <span>Insert actor</span><code>{detailClient?.create_actor_field || 'Not configured'}</code>
+                  <span>Update actor</span><code>{detailClient?.update_actor_field || 'Not configured'}</code>
+                  <span>Delete actor</span><code>{detailClient?.delete_actor_field || 'Not configured'}</code>
+                  <span>Action field</span><code>{detailClient?.action_field || 'Auto-detected'}</code>
+                  <span>Resource field</span><code>{detailClient?.resource_field || 'Auto-detected'}</code>
                 </div>
               </section>
 
