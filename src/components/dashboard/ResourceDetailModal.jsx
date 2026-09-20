@@ -17,6 +17,21 @@ const parseLogMetadata = (metadata) => {
   }
 };
 
+export const isLatestSourceEvent = (logStatus) => Boolean(
+  logStatus?.is_latest_client_event ?? logStatus?.is_latest
+);
+
+export const getSourceVerificationTitle = (logStatus) => {
+  if (!logStatus) return undefined;
+  if (logStatus.agent_status === 'skipped_recovery') {
+    return 'Recovery event — source comparison is not applicable';
+  }
+  if (isLatestSourceEvent(logStatus)) {
+    return `Agent: ${logStatus.agent_status}`;
+  }
+  return 'Historical client event — not compared against Agent';
+};
+
 const buildLogJsonPayload = (log) => ({
   audit_log: {
     id: log?.log_id || null,
@@ -314,6 +329,7 @@ function ResourceDetailModal({ log: activeLog, selectedClient, onClose, onRefres
             const prevLog = ascIdx > 0 ? sortedAsc[ascIdx - 1] : null;
             const isFirst = idx === 0;
             const logStatus = logStatusMap[log.log_id];
+            const latestSourceEvent = isLatestSourceEvent(logStatus);
 
             const relatedIssues = (chainStatus?.chain_issues || [])
               .filter(issue => issue.endsWith(`:${log.log_id}`))
@@ -344,7 +360,7 @@ function ResourceDetailModal({ log: activeLog, selectedClient, onClose, onRefres
                           : logStatus.integrity_status === 'pending' ? 'ac-status--pending'
                             : 'ac-status--invalid'
                         }`}
-                      title={logStatus.is_latest ? `Agent: ${logStatus.agent_status}` : 'Historical record — not compared against Agent'}
+                      title={getSourceVerificationTitle(logStatus)}
                     >
                       {logStatus.integrity_status}
                     </span>
@@ -360,6 +376,9 @@ function ResourceDetailModal({ log: activeLog, selectedClient, onClose, onRefres
                     </span>
                   )}
                   {isFirst && <span className="ac-log-card__latest-chip">● Latest</span>}
+                  {latestSourceEvent && !isFirst && (
+                    <span className="ac-log-card__latest-chip">● Source latest</span>
+                  )}
                 </div>
 
                 <div className="ac-log-card__body">
