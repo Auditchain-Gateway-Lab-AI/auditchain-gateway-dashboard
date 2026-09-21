@@ -19,8 +19,12 @@ function AuditLogsView(props) {
           {props.onOpenRecovery && (
             <div className="ac-hero__actions">
               <button type="button" className="ac-hero__btn-secondary ac-recovery-header-action" onClick={props.onOpenRecovery}>
-                <Icon name="shield" size={15} />
-                Recovery Center
+                <span className="ac-recovery-header-action__icon"><Icon name="shield" size={18} /></span>
+                <span className="ac-recovery-header-action__copy">
+                  <strong>Recovery Center</strong>
+                  <small>Review and restore incidents</small>
+                </span>
+                <Icon name="chevronRight" size={16} className="ac-recovery-header-action__arrow" />
               </button>
             </div>
           )}

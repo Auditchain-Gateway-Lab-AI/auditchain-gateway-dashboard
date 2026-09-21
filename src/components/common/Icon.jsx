@@ -66,6 +66,12 @@ const Icon = ({ name, size = 18, style = {}, className = '' }) => {
         <path d="M12 7v5M12 16v1" stroke="white" strokeWidth="2" strokeLinecap="round" />
       </>
     ),
+    alertTriangle: (
+      <>
+        <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        <path d="M12 9v4M12 17h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </>
+    ),
     warn: (
       <>
         <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" fill="#f59e0b" stroke="#d97706" strokeWidth="0.5" />
@@ -85,6 +91,9 @@ const Icon = ({ name, size = 18, style = {}, className = '' }) => {
         <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2" fill="none" />
         <line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       </>
+    ),
+    filter: (
+      <path d="M4 5h16M7 12h10M10 19h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     ),
     menu: (
       <>

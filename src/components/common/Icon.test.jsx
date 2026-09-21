@@ -7,3 +7,15 @@ test('forwards animation classes to the rendered svg', () => {
 
   expect(container.querySelector('svg')).toHaveClass('ac-spin');
 });
+
+test('renders the warning triangle used by recovery incidents', () => {
+  const { container } = render(<Icon name="alertTriangle" />);
+
+  expect(container.querySelectorAll('svg path')).toHaveLength(2);
+});
+
+test('renders the recovery filter icon', () => {
+  const { container } = render(<Icon name="filter" />);
+
+  expect(container.querySelector('svg path')).toBeInTheDocument();
+});

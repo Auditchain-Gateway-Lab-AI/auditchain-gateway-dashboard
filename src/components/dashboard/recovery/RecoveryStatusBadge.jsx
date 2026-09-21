@@ -2,7 +2,7 @@ import React from 'react';
 import Icon from '../../common/Icon';
 
 const STATUS_META = {
-  OPEN: { label: 'Open', tone: 'danger', icon: 'alertTriangle' },
+  OPEN: { label: 'Incident open', tone: 'danger', icon: 'alertTriangle' },
   UNDER_REVIEW: { label: 'Under review', tone: 'warning', icon: 'clock' },
   RECOVERING: { label: 'Recovering', tone: 'info', icon: 'spinner' },
   RESOLVED: { label: 'Resolved', tone: 'success', icon: 'checkCircle' },
