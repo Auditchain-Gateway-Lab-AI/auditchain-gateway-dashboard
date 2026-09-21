@@ -182,7 +182,7 @@ function VerificationModal({ result, onClose }) {
                 data.agent_status === 'matched' ? 'ac-status--valid' :
                 data.agent_status === 'mismatch' ? 'ac-status--invalid' :
                 data.agent_status === 'unreachable' ? 'ac-status--pending' :
-                data.agent_status === 'skipped_recovery' ? 'ac-status--checking' :
+                data.agent_status === 'skipped_recovery' ? 'ac-status--skipped' :
                 ''
               }`} style={{ fontSize: '11px', padding: '2px 8px', marginLeft: '4px' }}>
                 <Icon

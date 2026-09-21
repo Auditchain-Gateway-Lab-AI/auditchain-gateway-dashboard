@@ -32,7 +32,11 @@ describe('VerificationModal', () => {
       jest.runAllTimers();
     });
 
-    expect(screen.getByText('Tidak diperiksa (event recovery)')).toBeInTheDocument();
+    const skippedStatus = screen.getByText('Tidak diperiksa (event recovery)').closest('.ac-status');
+
+    expect(skippedStatus).toBeInTheDocument();
+    expect(skippedStatus).toHaveClass('ac-status--skipped');
+    expect(skippedStatus).not.toHaveClass('ac-status--checking');
     expect(screen.queryByText('Agent tidak terhubung')).not.toBeInTheDocument();
   });
 });

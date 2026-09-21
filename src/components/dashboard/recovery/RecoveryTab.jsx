@@ -244,12 +244,20 @@ function RecoveryTab({ activeLog, selectedClient, onRefreshLogs }) {
         <>
           <section className="ac-recovery-card ac-recovery-incident-card">
             <div className="ac-recovery-card__header">
-              <div>
-                <span className="ac-recovery-eyebrow"><Icon name="alertTriangle" size={13} /> Tamper incident</span>
-                <h3>{incident.incident_type || 'Integrity mismatch detected'}</h3>
-                <p>Detected {incident.detected_at ? formatTimestamp(incident.detected_at) : '-'}</p>
+              <div className="ac-recovery-incident-card__lead">
+                <span className="ac-recovery-incident-card__icon" aria-hidden="true">
+                  <Icon name="alertTriangle" size={18} />
+                </span>
+                <div>
+                  <span className="ac-recovery-eyebrow">Tamper incident</span>
+                  <h3>{incident.incident_type || 'Integrity mismatch detected'}</h3>
+                  <p>Detected {incident.detected_at ? formatTimestamp(incident.detected_at) : '-'}</p>
+                </div>
               </div>
-              <code className="ac-recovery-id">{incident.id}</code>
+              <div className="ac-recovery-incident-card__reference">
+                <span>Incident ID</span>
+                <code className="ac-recovery-id" title={incident.id}>{incident.id}</code>
+              </div>
             </div>
             <RecoveryHashComparison expected={incident.expected_hash} detected={incident.detected_hash} />
             <div className="ac-recovery-facts">
