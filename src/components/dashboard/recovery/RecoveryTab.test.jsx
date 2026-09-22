@@ -20,6 +20,9 @@ const activeLog = {
   log_id: 'log-161',
   resource: 'RUANGAN:161',
   source_table: 'RUANGAN',
+  action: 'UPDATE',
+  actor: 'mbi',
+  source_system: 'SIMRS Morbis 1',
   integrity_status: 'TAMPERED',
   metadata: { id: 161, nama: 'tampered-room' },
 };
@@ -91,6 +94,12 @@ test('keeps the contextual Recovery tab and shows tampered/trusted data without 
   expect(screen.queryByLabelText(/Reason/i)).not.toBeInTheDocument();
 
   expect(await screen.findAllByText(/trusted-room/)).not.toHaveLength(0);
+  expect(screen.getByText('Actor affected')).toBeInTheDocument();
+  expect(screen.getByText('mbi')).toBeInTheDocument();
+  expect(screen.getByText('UPDATE')).toBeInTheDocument();
+  expect(screen.getByRole('columnheader', { name: 'Tampered data' })).toBeInTheDocument();
+  expect(screen.getByRole('columnheader', { name: 'Original trusted data' })).toBeInTheDocument();
+  expect(screen.queryByText(/"nama"/)).not.toBeInTheDocument();
   expect(screen.getByText('Changed fields')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Execute recovery' }));
   const confirmation = screen.getByRole('dialog', { name: 'Execute recovery?' });

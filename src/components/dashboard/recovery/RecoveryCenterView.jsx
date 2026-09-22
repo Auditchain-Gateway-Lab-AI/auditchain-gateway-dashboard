@@ -6,7 +6,7 @@ import { recoveryApi } from '../../../services/recoveryApi';
 import RecoveryStatusBadge from './RecoveryStatusBadge';
 import RecoveryConfirmationDialog from './RecoveryConfirmationDialog';
 
-const INCIDENT_FILTERS = ['ALL', 'OPEN', 'UNDER_REVIEW', 'RECOVERING', 'RESOLVED', 'DISMISSED'];
+const INCIDENT_FILTERS = ['ALL', 'OPEN', 'RESOLVED'];
 const REQUEST_FILTERS = ['ALL', 'PENDING_EXECUTION', 'EXECUTING', 'SUCCEEDED', 'FAILED_VERIFICATION', 'FAILED_EXECUTION'];
 const EXECUTABLE_REQUEST_STATUSES = new Set(['PENDING_EXECUTION', 'PENDING_APPROVAL', 'APPROVED']);
 
