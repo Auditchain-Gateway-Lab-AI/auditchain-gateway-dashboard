@@ -28,7 +28,7 @@ function RecoveryPreflightPanel({ result, loading = false, onRun, disabled = fal
         <div>
           <span className="ac-recovery-eyebrow"><Icon name="shield" size={13} /> Trust validation</span>
           <h3>MinIO + Fabric preflight</h3>
-          <p>Validates the frozen snapshot reference before a recovery request can be submitted.</p>
+          <p>Validates the frozen snapshot reference before recovery can be executed.</p>
         </div>
         <button type="button" className="ac-btn-primary" onClick={onRun} disabled={loading || disabled}>
           <Icon name={loading ? 'spinner' : 'search'} size={15} />

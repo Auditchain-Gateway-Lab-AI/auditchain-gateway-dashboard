@@ -9,7 +9,7 @@ import WebUsersView from '../components/dashboard/WebUsersView';
 import ReportsView from '../components/dashboard/ReportsView';
 import ResourceDetailModal from '../components/dashboard/ResourceDetailModal';
 import ActorTrackingSettings from '../components/dashboard/ActorTrackingSettings';
-import RecoveryCenterView from '../components/dashboard/recovery/RecoveryCenterView';
+import RecoveryDataView from '../components/dashboard/recovery/RecoveryDataView';
 import { parseJwt, mapRangeItemToVerifyStatus } from '../utils/formatters';
 
 const areStatsEqual = (a = {}, b = {}) => (
@@ -634,6 +634,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
   const accessItems = [
     { label: 'Dashboard', description: 'Ringkasan integritas data dan status gateway', icon: 'dashboard' },
     { label: 'Audit Logs', description: 'Investigasi transaksi, hash, dan hasil verifikasi', icon: 'history' },
+    { label: 'Recovery Data', description: 'Preview dan pemulihan log yang terdeteksi tampered', icon: 'shield' },
     { label: 'Web Users', description: 'Melihat akun aplikasi yang tercatat di workspace', icon: 'users' },
   ];
 
@@ -844,12 +845,21 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
           </button>
 
           <button
-            className={`ac-sidebar__nav-item${view === 'audit-logs' || view === 'audit-logs-recovery' ? ' ac-sidebar__nav-item--active' : ''}`}
+            className={`ac-sidebar__nav-item${view === 'audit-logs' ? ' ac-sidebar__nav-item--active' : ''}`}
             onClick={() => { navigate('/audit-logs'); setSidebarOpen(false); }}
             title="Audit Logs"
           >
             <Icon name="history" size={18} />
             <span className="ac-sidebar__nav-label">Audit Logs</span>
+          </button>
+
+          <button
+            className={`ac-sidebar__nav-item${view === 'recovery-data' ? ' ac-sidebar__nav-item--active' : ''}`}
+            onClick={() => { navigate('/recovery-data'); setSidebarOpen(false); }}
+            title="Recovery Data"
+          >
+            <Icon name="shield" size={18} />
+            <span className="ac-sidebar__nav-label">Recovery Data</span>
           </button>
 
           <button
@@ -1179,8 +1189,8 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
             <WebUsersView onLogout={onLogout} />
           ) : view === 'reports' ? (
             <ReportsView selectedClient={selectedClient} />
-          ) : view === 'audit-logs-recovery' ? (
-            <RecoveryCenterView selectedClient={selectedClient} />
+          ) : view === 'recovery-data' ? (
+            <RecoveryDataView selectedClient={selectedClient} />
           ) : view === 'audit-logs' ? (
             <AuditLogsView
               paginatedLogs={paginatedLogs}
@@ -1222,7 +1232,6 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
               totalPages={totalPages}
               renderPageNumbers={renderPageNumbers}
               stats={stats}
-              onOpenRecovery={() => navigate('/audit-logs/recovery')}
             />
           ) : (
             <>

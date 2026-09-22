@@ -164,8 +164,16 @@ function App() {
             path="/audit-logs/recovery"
             element={
               <ProtectedRoute isAuthenticated={isAuthenticated}>
+                <Navigate to="/recovery-data" replace />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/recovery-data"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated}>
                 <DashboardPage
-                  view="audit-logs-recovery"
+                  view="recovery-data"
                   onLogout={handleLogout}
                   onProfileUpdated={handleAuthRefresh}
                   themePreference={themePreference}
