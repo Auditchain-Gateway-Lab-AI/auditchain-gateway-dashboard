@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Icon from '../../common/Icon';
+import ActionBadge from '../../common/ActionBadge';
 import { formatTimestamp } from '../../../utils/formatters';
 import { recoveryApi } from '../../../services/recoveryApi';
 import RecoveryStatusBadge from './RecoveryStatusBadge';
 import RecoveryConfirmationDialog from './RecoveryConfirmationDialog';
 
 const EXECUTABLE_REQUEST_STATUSES = new Set(['PENDING_EXECUTION', 'PENDING_APPROVAL', 'APPROVED']);
-const CLOSED_INCIDENT_STATUSES = new Set(['RESOLVED', 'DISMISSED']);
+const CLOSED_INCIDENT_STATUSES = new Set(['RESOLVED']);
 const INTERNAL_RECOVERY_REASON = 'Recovery initiated from the Log Details Recovery tab.';
 
 const createIdempotencyKey = () => {
@@ -24,12 +25,88 @@ const parseJsonValue = value => {
   }
 };
 
-const formatJson = value => {
+const formatDisplayValue = value => {
   const parsed = parseJsonValue(value);
-  if (parsed === null || parsed === undefined) return '-';
-  if (typeof parsed === 'string') return parsed;
-  return JSON.stringify(parsed, null, 2);
+  if (parsed === null || parsed === undefined || parsed === '') return '—';
+  if (typeof parsed === 'boolean') return parsed ? 'True' : 'False';
+  if (Array.isArray(parsed)) return parsed.map(item => formatDisplayValue(item)).join(', ');
+  if (typeof parsed === 'object') {
+    return Object.entries(parsed)
+      .map(([key, item]) => `${key}: ${formatDisplayValue(item)}`)
+      .join(' · ');
+  }
+  return String(parsed);
 };
+
+const isRecord = value => Boolean(
+  value
+  && typeof value === 'object'
+  && !Array.isArray(value)
+);
+
+const areValuesEqual = (left, right) => JSON.stringify(left) === JSON.stringify(right);
+
+const getComparisonRows = (tampered, trusted) => {
+  const tamperedValue = parseJsonValue(tampered);
+  const trustedValue = parseJsonValue(trusted);
+
+  if (!isRecord(tamperedValue) && !isRecord(trustedValue)) {
+    if (tamperedValue === null && trustedValue === null) return [];
+    return [{
+      field: 'value',
+      tampered: tamperedValue,
+      trusted: trustedValue,
+      changed: !areValuesEqual(tamperedValue, trustedValue),
+    }];
+  }
+
+  const keys = [...new Set([
+    ...Object.keys(isRecord(tamperedValue) ? tamperedValue : {}),
+    ...Object.keys(isRecord(trustedValue) ? trustedValue : {}),
+  ])];
+
+  return keys.map(field => ({
+    field,
+    tampered: isRecord(tamperedValue) ? tamperedValue[field] : null,
+    trusted: isRecord(trustedValue) ? trustedValue[field] : null,
+    changed: !areValuesEqual(
+      isRecord(tamperedValue) ? tamperedValue[field] : null,
+      isRecord(trustedValue) ? trustedValue[field] : null
+    ),
+  }));
+};
+
+const getStructuredEntries = value => {
+  const parsed = parseJsonValue(value);
+  if (isRecord(parsed)) return Object.entries(parsed);
+  if (parsed === null || parsed === undefined || parsed === '') return [];
+  return [['value', parsed]];
+};
+
+const firstValue = (...values) => values.find(value => (
+  value !== undefined
+  && value !== null
+  && String(value).trim() !== ''
+));
+
+function StructuredValueList({ value, emptyLabel = 'No data available.' }) {
+  const entries = getStructuredEntries(value);
+
+  if (entries.length === 0) {
+    return <div className="ac-recovery-structured-empty">{emptyLabel}</div>;
+  }
+
+  return (
+    <dl className="ac-recovery-structured-list">
+      {entries.map(([field, fieldValue]) => (
+        <div className="ac-recovery-structured-list__row" key={field}>
+          <dt>{field}</dt>
+          <dd>{formatDisplayValue(fieldValue)}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
 
 const sortNewest = (items = [], field = 'detected_at') => [...items].sort((a, b) => (
   new Date(b?.[field] || 0).getTime() - new Date(a?.[field] || 0).getTime()
@@ -40,14 +117,6 @@ const getTamperedData = (activeLog, incident) => activeLog?.metadata
   ?? incident?.tampered_metadata
   ?? incident?.current_metadata
   ?? null;
-
-const getChangedFields = (current, trusted) => {
-  const currentValue = parseJsonValue(current);
-  const trustedValue = parseJsonValue(trusted);
-  if (!currentValue || !trustedValue || typeof currentValue !== 'object' || typeof trustedValue !== 'object' || Array.isArray(currentValue) || Array.isArray(trustedValue)) return [];
-  const keys = new Set([...Object.keys(currentValue), ...Object.keys(trustedValue)]);
-  return [...keys].filter(key => JSON.stringify(currentValue[key]) !== JSON.stringify(trustedValue[key]));
-};
 
 const getEventList = value => Array.isArray(value) ? value : Array.isArray(value?.data) ? value.data : [];
 
@@ -249,7 +318,29 @@ function RecoveryTab({ activeLog, selectedClient, onRefreshLogs }) {
   const tamperedData = getTamperedData(activeLog, incident);
   const recoveredData = shownEvent?.recovered_metadata;
   const trustedData = recoveredData ?? preflight?.snapshot_preview?.metadata;
-  const changedFields = getChangedFields(tamperedData, trustedData);
+  const hasTrustedData = trustedData !== undefined && trustedData !== null && trustedData !== '';
+  const comparisonRows = hasTrustedData ? getComparisonRows(tamperedData, trustedData) : [];
+  const changedFields = comparisonRows.filter(row => row.changed).map(row => row.field);
+  const trustedPreview = preflight?.snapshot_preview || {};
+  const tamperedAction = String(firstValue(
+    activeLog?.action,
+    incident?.target_action,
+    shownEvent?.target_action,
+    trustedPreview.action
+  ) || '').trim().toUpperCase();
+  const tamperedActor = firstValue(
+    activeLog?.actor,
+    incident?.target_actor,
+    shownEvent?.target_actor,
+    trustedPreview.actor
+  ) || 'Unknown actor';
+  const sourceSystem = firstValue(
+    activeLog?.source_system,
+    incident?.source_system,
+    shownEvent?.source_system,
+    shownEvent?.target_source_system,
+    trustedPreview.source_system
+  ) || 'Unknown source';
   const integrityStatus = String(activeLog?.integrity_status || activeLog?.verification_status || activeLog?.verify_status || '').toUpperCase();
   const looksTampered = ['TAMPERED', 'INVALID', 'FAILED', 'FAILED_LOCAL'].includes(integrityStatus) || Boolean(incident?.incident_type);
 
@@ -300,15 +391,32 @@ function RecoveryTab({ activeLog, selectedClient, onRefreshLogs }) {
       ) : (
         <>
           <section className="ac-recovery-card ac-recovery-simple-summary">
-            <div>
+            <div className="ac-recovery-simple-summary__content">
               <span className="ac-recovery-eyebrow"><Icon name="alertTriangle" size={13} /> Tampered log</span>
               <h3>{incident.resource || activeLog.resource || activeLog.source_table || activeLog.log_id}</h3>
               <p>{incident.incident_type || 'Integrity mismatch'} · {incident.detected_at ? formatTimestamp(incident.detected_at) : 'Detection time unavailable'}</p>
+              <div className="ac-recovery-facts ac-recovery-simple-summary__facts">
+                <span>
+                  <strong>Action</strong>
+                  {tamperedAction ? <ActionBadge action={tamperedAction} /> : '—'}
+                </span>
+                <span>
+                  <strong>Actor affected</strong>
+                  <span className="ac-recovery-simple-summary__fact-value">
+                    <Icon name="user" size={12} />
+                    {tamperedActor}
+                  </span>
+                </span>
+                <span>
+                  <strong>Source system</strong>
+                  <span className="ac-recovery-simple-summary__fact-value">{sourceSystem}</span>
+                </span>
+              </div>
             </div>
             <code title={incident.log_id}>{incident.log_id}</code>
           </section>
 
-          <section className="ac-recovery-card ac-recovery-context-data-card">
+          <section className={`ac-recovery-card ac-recovery-context-data-card${recoverySucceeded ? ' ac-recovery-context-data-card--recovered' : ' ac-recovery-context-data-card--tampered'}`}>
             <div className="ac-recovery-card__header ac-recovery-card__header--compact">
               <div>
                 <span className="ac-recovery-eyebrow"><Icon name="code" size={13} /> Data review</span>
@@ -316,16 +424,44 @@ function RecoveryTab({ activeLog, selectedClient, onRefreshLogs }) {
               </div>
               {recoverySucceeded && <RecoveryStatusBadge status="SUCCEEDED" compact />}
             </div>
-            <div className="ac-recovery-context-data-grid">
-              <div className="ac-recovery-simple-data ac-recovery-simple-data--danger">
-                <span className="ac-recovery-data-label ac-recovery-data-label--danger">Tampered data</span>
-                <pre>{formatJson(tamperedData)}</pre>
+            {hasTrustedData && comparisonRows.length > 0 ? (
+              <div className="ac-recovery-comparison">
+                <div className="ac-recovery-comparison__table-wrap">
+                  <table className="ac-diff ac-recovery-diff-table">
+                    <thead>
+                      <tr>
+                        <th>Field</th>
+                        <th className="before">Tampered data</th>
+                        <th className="after">{recoverySucceeded ? 'Recovered data' : 'Original trusted data'}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {comparisonRows.map(row => (
+                        <tr key={row.field} className={!row.changed ? 'ac-recovery-diff-row--unchanged' : ''}>
+                          <td className="field">
+                            <span>{row.field}</span>
+                            {!row.changed && <small>unchanged</small>}
+                          </td>
+                          <td className={row.changed ? 'val-before' : 'val-unchanged'}>{formatDisplayValue(row.tampered)}</td>
+                          <td className={row.changed ? 'val-after' : 'val-unchanged'}>{formatDisplayValue(row.trusted)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-              <div className="ac-recovery-simple-data ac-recovery-simple-data--success">
-                <span className="ac-recovery-data-label ac-recovery-data-label--success">{recoverySucceeded ? 'Recovered data' : 'Original trusted data'}</span>
-                {trustedData ? <pre>{formatJson(trustedData)}</pre> : <div className="ac-recovery-simple-placeholder">{checking ? <><Icon name="spinner" size={16} /> Checking trusted data...</> : friendlyRecoveryReason(candidate?.reason)}</div>}
+            ) : (
+              <div className="ac-recovery-context-data-grid">
+                <div className="ac-recovery-simple-data ac-recovery-simple-data--danger">
+                  <span className="ac-recovery-data-label ac-recovery-data-label--danger">Tampered data</span>
+                  <StructuredValueList value={tamperedData} />
+                </div>
+                <div className="ac-recovery-simple-data ac-recovery-simple-data--success">
+                  <span className="ac-recovery-data-label ac-recovery-data-label--success">{recoverySucceeded ? 'Recovered data' : 'Original trusted data'}</span>
+                  {hasTrustedData ? <StructuredValueList value={trustedData} /> : <div className="ac-recovery-simple-placeholder">{checking ? <><Icon name="spinner" size={16} /> Checking trusted data...</> : friendlyRecoveryReason(candidate?.reason)}</div>}
+                </div>
               </div>
-            </div>
+            )}
             {changedFields.length > 0 && <div className="ac-recovery-changed-fields"><strong>Changed fields</strong><div>{changedFields.map(field => <span key={field}><Icon name="alertTriangle" size={12} /><em>{field}</em></span>)}</div></div>}
           </section>
 

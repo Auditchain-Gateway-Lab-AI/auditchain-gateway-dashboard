@@ -3,10 +3,7 @@ import Icon from '../../common/Icon';
 
 const STATUS_META = {
   OPEN: { label: 'Incident open', tone: 'danger', icon: 'alertTriangle' },
-  UNDER_REVIEW: { label: 'Under review', tone: 'warning', icon: 'clock' },
-  RECOVERING: { label: 'Recovering', tone: 'info', icon: 'spinner' },
   RESOLVED: { label: 'Resolved', tone: 'success', icon: 'checkCircle' },
-  DISMISSED: { label: 'Dismissed', tone: 'muted', icon: 'xCircle' },
   PENDING_EXECUTION: { label: 'Ready to execute', tone: 'warning', icon: 'clock' },
   PENDING_APPROVAL: { label: 'Legacy request', tone: 'warning', icon: 'clock' },
   APPROVED: { label: 'Ready to execute', tone: 'info', icon: 'checkCircle' },
@@ -19,11 +16,12 @@ const STATUS_META = {
   RECOVERED: { label: 'Recovered', tone: 'success', icon: 'checkCircle' },
   SKIPPED: { label: 'Skipped', tone: 'muted', icon: 'xCircle' },
   VALID: { label: 'Valid', tone: 'success', icon: 'checkCircle' },
+  PREVIEW_READY: { label: 'Trusted snapshot verified', tone: 'success', icon: 'checkCircle' },
   NO_RECOVERY_REQUIRED: { label: 'No recovery required', tone: 'success', icon: 'checkCircle' },
   TAMPERED: { label: 'Tampered', tone: 'danger', icon: 'alertTriangle' },
-  PENDING: { label: 'Pending', tone: 'warning', icon: 'clock' },
   UNREACHABLE: { label: 'Unreachable', tone: 'warning', icon: 'wifi' },
-  NOT_CHECKED: { label: 'Not checked', tone: 'muted', icon: 'clock' },
+  NOT_CHECKED: { label: 'Auto verification pending', tone: 'warning', icon: 'clock' },
+  PENDING: { label: 'Verification pending', tone: 'warning', icon: 'clock' },
 };
 
 function RecoveryStatusBadge({ status, compact = false }) {

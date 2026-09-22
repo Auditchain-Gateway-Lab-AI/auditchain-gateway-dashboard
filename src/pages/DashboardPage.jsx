@@ -880,7 +880,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
             <span className="ac-sidebar__nav-label">Reports</span>
           </button>
           <button className={`ac-sidebar__nav-item${view === 'actor-tracking' ? ' ac-sidebar__nav-item--active' : ''}`} onClick={() => { navigate('/actor-tracking'); setSidebarOpen(false); }} title="Actor Tracking">
-            <Icon name="shield" size={18} /><span className="ac-sidebar__nav-label">Actor Tracking</span>
+            <Icon name="activity" size={18} /><span className="ac-sidebar__nav-label">Actor Tracking</span>
           </button>
 
           {clientInfo && clientInfo.role?.toLowerCase() === 'admin' && (

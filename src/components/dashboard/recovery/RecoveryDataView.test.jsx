@@ -52,7 +52,7 @@ const incidents = [
     incident_type: 'METADATA_HASH_MISMATCH',
     expected_hash: 'trusted-hash-blocked',
     detected_hash: 'tampered-hash-blocked',
-    status: 'UNDER_REVIEW',
+    status: 'RESOLVED',
     detected_at: '2026-09-21T09:00:00.000Z',
   },
 ];
@@ -134,14 +134,14 @@ test('loads backend incidents, previews multiple records, and executes each read
   render(<RecoveryDataView selectedClient="client-1" />);
 
   expect(await screen.findByText('log-140')).toBeInTheDocument();
-  fireEvent.click(screen.getByLabelText('Select log-140'));
-  fireEvent.click(screen.getByLabelText('Select log-141'));
+  fireEvent.click(screen.getByRole('button', { name: 'Select all ready (2)' }));
+  expect(screen.getByRole('button', { name: 'Preview selected (2)' })).toBeEnabled();
 
   fireEvent.click(screen.getByRole('button', { name: 'Preview selected (2)' }));
   expect(await screen.findByRole('dialog', { name: 'Review recovery data' })).toBeInTheDocument();
-  expect(await screen.findAllByText('Tampered evidence')).toHaveLength(2);
+  expect(await screen.findAllByText('Tampered data')).toHaveLength(2);
   expect(screen.getAllByText(/live-tampered-log/).length).toBeGreaterThan(0);
-  expect(await screen.findAllByText('Trusted recovery data')).toHaveLength(2);
+  expect(await screen.findAllByText('Original trusted data')).toHaveLength(2);
   expect(recoveryApi.runPreflight).toHaveBeenCalledTimes(2);
 
   fireEvent.click(screen.getByRole('button', { name: 'Execute recovery (2)' }));
@@ -150,37 +150,92 @@ test('loads backend incidents, previews multiple records, and executes each read
   expect(screen.queryByText(/recovery request/i)).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Execute recovery' }));
 
-  await waitFor(() => expect(screen.getByRole('heading', { name: 'Latest execution results' })).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Latest recovery results' })).toBeInTheDocument());
   expect(recoveryApi.createRequest).toHaveBeenCalledTimes(2);
   expect(recoveryApi.executeRequest).toHaveBeenCalledTimes(2);
-  expect(screen.getAllByText('Before recovery · tampered').length).toBe(2);
-  expect(screen.getAllByText('After recovery · trusted').length).toBe(2);
+  expect(screen.getAllByText('Tampered hash').length).toBe(2);
+  expect(screen.getAllByText('Recovery result hash').length).toBe(2);
 });
 
-test('shows recovery_events separately and can inspect and verify an event', async () => {
+test('shows recovery history as read-only and inspects an event from the full row', async () => {
   render(<RecoveryDataView selectedClient="client-1" />);
 
-  fireEvent.click(await screen.findByRole('button', { name: /Recovery events/ }));
+  fireEvent.click(await screen.findByRole('button', { name: /Recovery history/ }));
   expect(await screen.findByText('event-140')).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'View' }));
-  expect(await screen.findByRole('dialog', { name: 'event-140' })).toBeInTheDocument();
-  expect(await screen.findByText('Recovered metadata')).toBeInTheDocument();
-
-  fireEvent.click(screen.getByRole('button', { name: 'Verify event' }));
-  await waitFor(() => expect(recoveryApi.verifyEvent).toHaveBeenCalledWith({ eventId: 'event-140' }));
+  fireEvent.click(screen.getByText('event-140'));
+  expect(await screen.findByRole('dialog', { name: 'Trusted data restored' })).toBeInTheDocument();
+  expect(await screen.findByText('Trusted data restored')).toBeInTheDocument();
+  expect(await screen.findByText('Recovered data')).toBeInTheDocument();
+  fireEvent.click(screen.getByText('Technical evidence'));
+  expect(await screen.findByText('Before recovery hash')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Verify event' })).not.toBeInTheDocument();
+  expect(recoveryApi.verifyEvent).not.toHaveBeenCalled();
   expect(screen.getAllByText('Valid').length).toBeGreaterThan(0);
 });
 
-test('does not allow an incident that is not open to be selected', async () => {
+test('does not allow a resolved incident to be selected', async () => {
   render(<RecoveryDataView selectedClient="client-1" />);
 
   const blockedCheckbox = await screen.findByLabelText('Select log-blocked');
   expect(blockedCheckbox).toBeDisabled();
-  expect(screen.getByText('UNDER REVIEW')).toBeInTheDocument();
+  expect(screen.getByText('Resolved')).toBeInTheDocument();
+});
+
+test('only offers open and resolved incident statuses', async () => {
+  render(<RecoveryDataView selectedClient="client-1" />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Filter recovery data' }));
+  expect(screen.getByRole('option', { name: /Open/ })).toBeInTheDocument();
+  expect(screen.getByRole('option', { name: /Resolved/ })).toBeInTheDocument();
+  expect(screen.queryByRole('option', { name: /Under review/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('option', { name: /Recovering/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('option', { name: /Dismissed/ })).not.toBeInTheDocument();
+});
+
+test('opens incident preview by clicking the full row', async () => {
+  render(<RecoveryDataView selectedClient="client-1" />);
+
+  const logCell = await screen.findByText('log-140');
+  expect(screen.queryByRole('button', { name: 'Preview' })).not.toBeInTheDocument();
+  fireEvent.click(logCell);
+
+  expect(await screen.findByRole('dialog', { name: 'Review recovery data' })).toBeInTheDocument();
+});
+
+test('shows the recorded recovery result for a closed incident instead of rerunning verification', async () => {
+  const resolvedIncident = {
+    ...incidents[0],
+    status: 'RESOLVED',
+    detected_at: '2026-09-22T03:08:23.793Z',
+  };
+  const resolvedEvent = {
+    ...recoveryEvent,
+    incident_id: resolvedIncident.id,
+    target_action: 'UPDATE',
+    target_actor: 'mbi',
+    source_system: 'SIMRS Morbis',
+    executed_at: '2026-09-22T03:12:00.000Z',
+    recovered_metadata: { room: 140, owner: 'trusted' },
+  };
+  recoveryApi.listIncidents.mockResolvedValue([resolvedIncident]);
+  recoveryApi.getIncident.mockResolvedValue(resolvedIncident);
+  recoveryApi.listEvents.mockResolvedValue({ data: [resolvedEvent], total_items: 1, total_pages: 1 });
+  recoveryApi.getEvent.mockResolvedValue(resolvedEvent);
+
+  render(<RecoveryDataView selectedClient="client-1" />);
+  fireEvent.click(await screen.findByText('log-140'));
+
+  expect(await screen.findByText('Recovery result')).toBeInTheDocument();
+  expect(screen.getByText('Action')).toBeInTheDocument();
+  expect(screen.getByText('Actor affected')).toBeInTheDocument();
+  expect(screen.getByText('Tampered at')).toBeInTheDocument();
+  expect(screen.getByText('mbi')).toBeInTheDocument();
+  expect(screen.queryByText('Verification failed')).not.toBeInTheDocument();
+  expect(recoveryApi.runPreflight).not.toHaveBeenCalled();
 });
 
 test('keeps the current tampered log visible when backend preflight blocks recovery', async () => {
-  const blockedIncident = { ...incidents[2], tampered_metadata: undefined };
+  const blockedIncident = { ...incidents[2], status: 'OPEN', tampered_metadata: undefined };
   recoveryApi.listIncidents.mockResolvedValue([blockedIncident]);
   recoveryApi.getIncident.mockResolvedValue(blockedIncident);
   recoveryApi.listCandidates.mockResolvedValue([{
@@ -195,7 +250,7 @@ test('keeps the current tampered log visible when backend preflight blocks recov
   }]);
 
   render(<RecoveryDataView selectedClient="client-1" />);
-  fireEvent.click(await screen.findByRole('button', { name: 'Preview' }));
+  fireEvent.click(await screen.findByText('log-blocked'));
 
   expect(await screen.findByText(/tampered-from-audit-log/)).toBeInTheDocument();
   expect(screen.getAllByText('legacy_recovery_out_of_scope').length).toBeGreaterThan(0);
