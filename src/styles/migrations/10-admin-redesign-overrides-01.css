@@ -1,0 +1,492 @@
+/* ================================================================
+   ADMIN DASHBOARD REDESIGN OVERRIDES
+   Mirrors the user dashboard shell with admin-specific accents.
+   ================================================================ */
+:root {
+  --admin-sidebar-collapsed: 78px;
+  --admin-ink: #102033;
+  --admin-navy: #07345f;
+  --admin-blue: #0b6fb3;
+  --admin-teal: #07866f;
+  --admin-mint: #dff8ef;
+  --admin-amber: #c27613;
+  --admin-bg: #f5f8fb;
+}
+
+.ac-shell--admin {
+  min-height: 100vh;
+  background:
+    linear-gradient(180deg, rgba(255, 241, 217, 0.7) 0, rgba(245, 248, 251, 0) 310px),
+    linear-gradient(90deg, rgba(223, 248, 239, 0.45), rgba(245, 248, 251, 0) 46%),
+    var(--admin-bg);
+}
+
+.ac-shell--admin .ac-topnav {
+  height: 72px;
+  padding: 0 24px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+  border-bottom-color: rgba(7, 52, 95, 0.1);
+  box-shadow: 0 10px 30px rgba(16, 32, 51, 0.06);
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.ac-shell--admin .ac-topnav__menu-btn--visible {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(7, 52, 95, 0.14);
+  background: #fff;
+  color: var(--admin-navy);
+}
+
+.ac-shell--admin .ac-topnav__brand-name {
+  color: var(--admin-navy);
+  letter-spacing: 0;
+}
+
+.ac-shell--admin .ac-admin-portal-label {
+  color: var(--admin-amber) !important;
+}
+
+.ac-shell--admin .ac-admin-pill {
+  min-height: 38px;
+  border-color: rgba(194, 118, 19, 0.22) !important;
+  background: rgba(255, 241, 217, 0.75) !important;
+  color: var(--admin-amber) !important;
+}
+
+.ac-shell--admin .ac-admin-dot {
+  background: var(--admin-amber) !important;
+}
+
+.ac-topnav__avatar--admin {
+  background: linear-gradient(135deg, var(--admin-navy), var(--admin-amber));
+}
+
+.ac-shell--admin .ac-sidebar {
+  top: 72px;
+  width: var(--sidebar-width);
+  padding: 20px 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8f5ed 100%);
+  border-right-color: rgba(7, 52, 95, 0.1);
+  box-shadow: 10px 0 28px rgba(16, 32, 51, 0.04);
+  transition: width 0.24s ease, transform 0.24s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.ac-shell--admin .ac-sidebar__header {
+  min-height: 62px;
+  padding: 0 6px 18px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.ac-shell--admin .ac-sidebar__header-main {
+  width: 100%;
+}
+
+.ac-shell--admin .ac-sidebar__header-main .ac-sidebar__compact-logo {
+  display: none;
+}
+
+.ac-shell--admin .ac-sidebar__toggle-btn {
+  color: var(--admin-navy);
+}
+
+.ac-shell--admin .ac-sidebar__toggle-btn:hover {
+  border-color: rgba(194, 118, 19, 0.35);
+  background: rgba(255, 241, 217, 0.78);
+  color: var(--admin-amber);
+}
+
+.ac-shell--admin .ac-sidebar__nav {
+  padding: 0;
+}
+
+.ac-shell--admin .ac-sidebar__nav-item {
+  min-height: 42px;
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: #4a6074;
+  font-weight: 750;
+}
+
+.ac-shell--admin .ac-sidebar__nav-item--active {
+  background: linear-gradient(135deg, rgba(194, 118, 19, 0.13), rgba(7, 134, 111, 0.1));
+  color: var(--admin-navy);
+  box-shadow: inset 3px 0 0 var(--admin-amber);
+}
+
+.ac-sidebar__divider {
+  height: 1px;
+  background: rgba(7, 52, 95, 0.1);
+  margin: 10px 12px;
+}
+
+.ac-shell--admin .ac-sidebar__identity-card {
+  gap: 12px;
+  padding: 18px;
+  border-radius: 22px;
+  border-color: rgba(7, 52, 95, 0.08);
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 18px 36px rgba(16, 32, 51, 0.08);
+  margin-bottom: 14px;
+}
+
+.ac-shell--admin .ac-sidebar__identity-user {
+  gap: 12px;
+}
+
+.ac-shell--admin .ac-sidebar__identity-avatar {
+  width: 42px;
+  height: 42px;
+  border: 0;
+  background: linear-gradient(135deg, #0bbf9a, #07866f);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 850;
+  box-shadow: 0 10px 22px rgba(7, 134, 111, 0.22);
+}
+
+.ac-shell--admin .ac-sidebar__identity-name {
+  color: var(--admin-ink);
+  font-size: 16px;
+  font-weight: 850;
+}
+
+.ac-shell--admin .ac-sidebar__identity-role {
+  margin-top: 2px;
+  color: #8a94a6;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.ac-shell--admin .ac-sidebar__identity-client {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 0 0;
+  border: 0;
+  border-top: 1px solid rgba(7, 52, 95, 0.08);
+  border-radius: 0;
+  background: transparent;
+  color: #8a94a6;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ac-shell--admin .ac-sidebar__identity-client svg {
+  color: #8a94a6;
+  flex-shrink: 0;
+}
+
+.ac-shell--admin .ac-sidebar__nav-item--logout {
+  min-height: 44px;
+  color: #8a94a6;
+  font-size: 16px;
+  font-weight: 750;
+  border-radius: 12px;
+}
+
+.ac-shell--admin .ac-sidebar__nav-item--logout:hover {
+  background: rgba(7, 52, 95, 0.05);
+  color: var(--admin-navy);
+}
+
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-sidebar {
+  width: var(--admin-sidebar-collapsed);
+  align-items: center;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-sidebar__compact-logo {
+  display: none;
+}
+
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-sidebar__header {
+  width: 100%;
+  min-height: 58px;
+  justify-content: center;
+  padding: 0 0 14px;
+}
+
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-sidebar__header-main {
+  display: none;
+}
+
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-sidebar__section-label,
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-sidebar__section-sub,
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-sidebar__nav-label,
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-sidebar__identity-label,
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-sidebar__identity-details,
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-sidebar__identity-client {
+  display: none;
+}
+
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-sidebar__nav-item {
+  width: 46px;
+  height: 46px;
+  justify-content: center;
+  padding: 0;
+}
+
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-sidebar__divider {
+  width: 36px;
+  margin: 10px auto;
+}
+
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-sidebar__footer {
+  width: 100%;
+  padding: 0;
+}
+
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-sidebar__identity-card {
+  align-items: center;
+  padding: 8px;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-sidebar__identity-avatar {
+  width: 42px;
+  height: 42px;
+}
+
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-sidebar__mode-toggle {
+  width: 46px;
+  height: 46px;
+  margin: 10px auto 0;
+  align-self: center;
+}
+
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-sidebar--hover-open {
+  width: var(--sidebar-width);
+  align-items: stretch;
+  padding: 20px 12px;
+  box-shadow: 18px 0 44px rgba(16, 32, 51, 0.12);
+  z-index: 48;
+}
+
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-sidebar--hover-open .ac-sidebar__header {
+  width: 100%;
+  min-height: 62px;
+  justify-content: flex-start;
+  padding: 0 6px 18px;
+}
+
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-sidebar--hover-open .ac-sidebar__header-main {
+  display: flex;
+}
+
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-sidebar--hover-open .ac-sidebar__section-label,
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-sidebar--hover-open .ac-sidebar__section-sub {
+  display: block;
+}
+
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-sidebar--hover-open .ac-sidebar__nav-label {
+  display: inline;
+}
+
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-sidebar--hover-open .ac-sidebar__identity-details,
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-sidebar--hover-open .ac-sidebar__identity-client {
+  display: flex;
+}
+
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-sidebar--hover-open .ac-sidebar__nav-item {
+  width: 100%;
+  height: auto;
+  justify-content: flex-start;
+  padding: 10px 12px;
+}
+
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-sidebar--hover-open .ac-sidebar__divider {
+  width: auto;
+  margin: 10px 12px;
+}
+
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-sidebar--hover-open .ac-sidebar__footer {
+  width: 100%;
+  padding: 0;
+}
+
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-sidebar--hover-open .ac-sidebar__identity-card {
+  align-items: stretch;
+  padding: 18px;
+  border-color: rgba(7, 52, 95, 0.08);
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 18px 36px rgba(16, 32, 51, 0.08);
+}
+
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-sidebar--hover-open .ac-sidebar__mode-toggle {
+  width: 38px;
+  height: 38px;
+  margin: 10px 0 0;
+  align-self: flex-start;
+}
+
+.ac-shell--admin .ac-main {
+  min-height: calc(100vh - 72px);
+  margin-left: var(--sidebar-width);
+  padding: 32px;
+  background: transparent;
+  transition: margin-left 0.24s ease;
+}
+
+.ac-shell--admin.ac-shell--sidebar-collapsed .ac-main {
+  margin-left: var(--admin-sidebar-collapsed);
+}
+
+.ac-shell--admin .ac-main__container {
+  max-width: 1320px;
+  gap: 22px;
+}
+
+.ac-shell--admin .ac-hero {
+  padding: 14px 0 6px;
+}
+
+.ac-shell--admin .ac-hero__content {
+  align-items: flex-start;
+}
+
+.ac-shell--admin .ac-hero__title {
+  margin: 3px 0 8px;
+  font-size: 34px;
+  letter-spacing: 0;
+  background: linear-gradient(135deg, var(--admin-navy), var(--admin-amber));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.ac-page-kicker--admin {
+  background: rgba(194, 118, 19, 0.11);
+  color: var(--admin-amber);
+}
+
+.ac-admin-hero-stats {
+  display: flex;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.ac-shell--admin .ac-admin-hero-stat {
+  min-width: 138px;
+  padding: 14px 18px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fff 0%, rgba(255, 255, 255, 0.84) 100%);
+  border: 1px solid rgba(7, 52, 95, 0.09);
+  box-shadow: 0 18px 42px rgba(16, 32, 51, 0.08);
+}
+
+.ac-shell--admin .ac-admin-hero-stat__val {
+  color: var(--admin-ink);
+}
+
+.ac-shell--admin .ac-admin-hero-stat__label {
+  color: #66778a;
+  line-height: 1.25;
+}
+
+.ac-shell--admin .ac-card {
+  border-radius: 16px;
+  border-color: rgba(7, 52, 95, 0.09);
+  box-shadow: 0 18px 44px rgba(16, 32, 51, 0.08);
+}
+
+.ac-shell--admin .ac-card__header {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(247, 250, 252, 0.84));
+}
+
+.ac-shell--admin .ac-card__title {
+  color: var(--admin-ink);
+  font-size: 16px;
+}
+
+.ac-shell--admin .ac-admin-registry-header {
+  padding: 22px;
+}
+
+.ac-shell--admin .ac-admin-mini-stat {
+  min-height: 36px;
+  border-color: rgba(7, 134, 111, 0.18);
+  background: rgba(223, 248, 239, 0.68);
+  color: var(--admin-teal);
+}
+
+.ac-shell--admin .ac-admin-mini-stat--soft {
+  border-color: rgba(11, 111, 179, 0.18);
+  background: rgba(11, 111, 179, 0.08);
+  color: var(--admin-blue);
+}
+
+.ac-shell--admin .ac-admin-mini-stat--warning {
+  border-color: rgba(194, 118, 19, 0.22);
+  background: rgba(255, 241, 217, 0.85);
+  color: var(--admin-amber);
+}
+
+.ac-shell--admin .ac-btn-primary {
+  background: var(--admin-navy);
+  box-shadow: 0 8px 18px rgba(7, 52, 95, 0.18);
+}
+
+.ac-shell--admin .ac-btn-primary:hover {
+  background: #052947;
+}
+
+.ac-shell--admin .ac-admin-register-btn {
+  height: 40px;
+  border-radius: 10px;
+}
+
+.ac-shell--admin .ac-admin-client-cell__avatar {
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(11, 111, 179, 0.12), rgba(194, 118, 19, 0.1));
+  color: var(--admin-navy);
+}
+
+.ac-shell--admin .ac-admin-action-btn {
+  min-height: 32px;
+  border-radius: 8px;
+}
+
+.ac-shell--admin .ac-admin-action-btn--primary {
+  background: rgba(11, 111, 179, 0.1);
+  border-color: rgba(11, 111, 179, 0.18);
+  color: var(--admin-blue);
+}
+
+.ac-shell--admin .ac-admin-action-btn--agent,
+.ac-shell--admin .ac-admin-action-btn--success {
+  background: rgba(7, 134, 111, 0.1);
+  border-color: rgba(7, 134, 111, 0.18);
+  color: var(--admin-teal);
+}
+
+.ac-shell--admin .ac-admin-action-btn--warning {
+  background: rgba(255, 241, 217, 0.9);
+  border-color: rgba(194, 118, 19, 0.22);
+  color: var(--admin-amber);
+}
+
+.ac-shell--admin .ac-table th {
+  background: #f7fafc;
+  color: #536579;
+}
+
+.ac-shell--admin .ac-table tbody tr:hover {
+  background: rgba(255, 241, 217, 0.42);
+}
+

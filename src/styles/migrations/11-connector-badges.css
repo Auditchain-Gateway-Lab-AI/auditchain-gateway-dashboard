@@ -1,0 +1,63 @@
+/* NEW BADGE STYLES (DB Engine & Connector Status)                  */
+/* ================================================================ */
+
+/* Connector Status Badges */
+.ac-badge--success {
+  background-color: rgba(46, 125, 50, 0.1);
+  color: #2e7d32;
+  border-color: rgba(46, 125, 50, 0.3);
+}
+
+.ac-badge--error {
+  background-color: rgba(198, 40, 40, 0.1);
+  color: #c62828;
+  border-color: rgba(198, 40, 40, 0.3);
+}
+
+.ac-badge--warning {
+  background-color: rgba(245, 127, 23, 0.1);
+  color: #f57f17;
+  border-color: rgba(245, 127, 23, 0.3);
+}
+
+.ac-badge--neutral {
+  background-color: rgba(97, 97, 97, 0.1);
+  color: #616161;
+  border-color: rgba(97, 97, 97, 0.3);
+}
+
+/* DB Engine Badges */
+.ac-db-engine-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.ac-db-engine-badge__icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.ac-db-engine-badge--postgres {
+  color: #0277bd;
+}
+
+.ac-db-engine-badge--mongodb {
+  color: #2e7d32;
+}
+
+.ac-db-engine-badge--mysql {
+  color: #00695c;
+}
+
+.ac-db-engine-badge--oracle {
+  color: #c62828;
+}
+
+.ac-db-engine-badge--unknown {
+  color: #757575;
+}
+

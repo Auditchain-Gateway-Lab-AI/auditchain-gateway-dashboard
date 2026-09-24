@@ -1,0 +1,19 @@
+html[data-ac-theme='dark'] .ac-shell--admin .ac-admin-role-badge--admin {
+  background: rgba(255, 178, 74, 0.14);
+  border-color: rgba(255, 178, 74, 0.32);
+  color: #ffbe6a;
+}
+
+html[data-ac-theme='dark'] .ac-shell--admin .ac-admin-role-badge--auditor {
+  background: rgba(53, 212, 179, 0.13);
+  border-color: rgba(53, 212, 179, 0.28);
+  color: #51e6ca;
+}
+
+html[data-ac-theme='dark'] .ac-shell--admin .ac-admin-action-btn--danger:disabled {
+  background: rgba(255, 139, 134, 0.1);
+  border-color: rgba(255, 139, 134, 0.18);
+  color: #d89491;
+  opacity: 0.82;
+}
+

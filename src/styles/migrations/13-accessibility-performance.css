@@ -1,0 +1,130 @@
+/* ================================================================
+   PERFORMANCE GUARDS
+   ================================================================ */
+@supports (content-visibility: auto) {
+
+  .ac-main__container>.ac-card,
+  .ac-main__container>.ac-stats-grid,
+  .ac-admin-overview-grid,
+  .ac-admin-dashboard-layout,
+  .ac-admin-dashboard-layout--wide-left {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 280px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .ac-shell--user .ac-topnav,
+  .ac-shell--admin .ac-topnav {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+.ac-overview-value {
+  font-size: 13px;
+  color: var(--color-on-surface);
+  font-weight: 500;
+}
+
+.ac-overview-value--code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.04);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.ac-overview-payload {
+  background: var(--color-surface-container);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  border: 1px solid var(--color-outline-variant);
+}
+
+.ac-log-payload-viewer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ac-log-payload-viewer__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 30px;
+}
+
+.ac-json-toggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 8px;
+  background: var(--color-surface-container-lowest);
+  flex-shrink: 0;
+}
+
+.ac-json-toggle__button {
+  border: 0;
+  background: transparent;
+  color: var(--color-on-surface-variant);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.ac-json-toggle__button:hover {
+  color: var(--color-on-surface);
+}
+
+.ac-json-toggle__button--active {
+  background: var(--color-surface-container-high);
+  color: var(--color-on-surface);
+  box-shadow: inset 0 0 0 1px var(--color-outline-variant);
+}
+
+.ac-json-viewer {
+  margin: 0;
+  padding: 16px 18px;
+  min-height: 220px;
+  max-height: 520px;
+  overflow: auto;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 8px;
+  background: var(--color-surface-container-lowest);
+  color: var(--color-on-surface);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.65;
+  white-space: pre;
+}
+
+.ac-json-viewer code {
+  font-family: inherit;
+}
+
+@keyframes drawerOverlayOut {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
