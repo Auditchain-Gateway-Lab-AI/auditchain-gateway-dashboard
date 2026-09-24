@@ -136,7 +136,7 @@ test('loads backend incidents, previews multiple records, and executes each read
   expect(await screen.findByText('log-140')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Filter recovery data' }));
   fireEvent.click(screen.getByRole('option', { name: /^Open/ }));
-  fireEvent.click(screen.getByRole('button', { name: 'Select all open (2)' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Select all open incidents (2)' }));
   expect(screen.getByRole('button', { name: 'Preview selected (2)' })).toBeEnabled();
 
   fireEvent.click(screen.getByRole('button', { name: 'Preview selected (2)' }));
@@ -153,10 +153,25 @@ test('loads backend incidents, previews multiple records, and executes each read
   fireEvent.click(screen.getByRole('button', { name: 'Execute recovery' }));
 
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Latest recovery results' })).toBeInTheDocument());
+  expect(screen.getByRole('heading', { name: 'Tampered incidents' })).toBeInTheDocument();
+  expect(screen.getAllByText('log-140').length).toBeGreaterThan(0);
   expect(recoveryApi.createRequest).toHaveBeenCalledTimes(2);
   expect(recoveryApi.executeRequest).toHaveBeenCalledTimes(2);
   expect(screen.getAllByText('Tampered hash').length).toBe(2);
   expect(screen.getAllByText('Recovery result hash').length).toBe(2);
+});
+
+test('selects every incident from the master checkbox, including resolved incidents', async () => {
+  render(<RecoveryDataView selectedClient="client-1" />);
+
+  const masterCheckbox = await screen.findByLabelText('Select all incidents matching current filters');
+  const resolvedCheckbox = screen.getByLabelText('Select log-blocked');
+  expect(resolvedCheckbox).not.toBeDisabled();
+
+  fireEvent.click(masterCheckbox);
+
+  expect(screen.getByRole('button', { name: 'Preview selected (3)' })).toBeEnabled();
+  expect(masterCheckbox).toBeChecked();
 });
 
 test('shows recovery history as read-only and inspects an event from the full row', async () => {
@@ -267,8 +282,8 @@ test('selects only resolved incidents when the resolved filter is active', async
 
   fireEvent.click(await screen.findByRole('button', { name: 'Filter recovery data' }));
   fireEvent.click(screen.getByRole('option', { name: /^Resolved/ }));
-  expect(screen.getByRole('button', { name: 'Select all resolved (1)' })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Select all resolved (1)' }));
+  expect(screen.getByRole('button', { name: 'Select all resolved incidents (1)' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Select all resolved incidents (1)' }));
   fireEvent.click(screen.getByRole('button', { name: 'Preview selected (1)' }));
 
   expect(await screen.findByText('Recovery result')).toBeInTheDocument();

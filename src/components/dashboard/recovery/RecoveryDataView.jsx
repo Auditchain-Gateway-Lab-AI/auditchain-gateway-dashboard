@@ -19,7 +19,6 @@ const EVENT_STATUS_OPTIONS = [
   { value: 'FAILED_EXECUTION', label: 'Execution failed', description: 'Recovery could not be completed', tone: 'danger' },
 ];
 
-const REVIEWABLE_INCIDENT_STATUSES = new Set(['OPEN', 'RESOLVED']);
 const NON_REEXECUTABLE_REQUEST_STATUSES = new Set([
   'PENDING_EXECUTION',
   'PENDING_APPROVAL',
@@ -727,8 +726,10 @@ function RecoveryDataView({ selectedClient }) {
   }), [events, eventFilter, normalizedSearch]);
 
   const isSelectable = useCallback((incident) => {
-    const status = String(incident?.status || '').toUpperCase();
-    return REVIEWABLE_INCIDENT_STATUSES.has(status);
+    // Selection is for review as well as execution. Keep every incident in
+    // the bulk-selection scope, including already-resolved records and any
+    // future backend status. `isReadyForRecovery` remains the execution gate.
+    return Boolean(incident?.id);
   }, []);
 
   const isReadyForRecovery = useCallback((incident) => {
@@ -752,11 +753,11 @@ function RecoveryDataView({ selectedClient }) {
 
   const selectedIncidentStatus = incidentStatusOptions.find(option => option.value === incidentFilter);
   const bulkSelectionLabel = incidentFilter === 'ALL'
-    ? 'Select all reviewable'
-    : `Select all ${selectedIncidentStatus?.label?.toLowerCase() || 'matching'}`;
+    ? 'Select all incidents'
+    : `Select all ${selectedIncidentStatus?.label?.toLowerCase() || 'matching'} incidents`;
   const bulkClearLabel = incidentFilter === 'ALL'
-    ? 'Clear reviewable selection'
-    : `Clear ${selectedIncidentStatus?.label?.toLowerCase() || 'matching'} selection`;
+    ? 'Clear all incident selection'
+    : `Clear ${selectedIncidentStatus?.label?.toLowerCase() || 'matching'} incident selection`;
 
   const stats = useMemo(() => ({
     readyIncidents: incidents.filter(isReadyForRecovery).length,
@@ -919,7 +920,6 @@ function RecoveryDataView({ selectedClient }) {
     setSelectedIds(new Set());
     setPreviewOpen(false);
     setConfirmationOpen(false);
-    setActiveSection('events');
     setExecuting(false);
     executionInFlight.current = false;
     await loadData();
@@ -988,7 +988,7 @@ function RecoveryDataView({ selectedClient }) {
 
       {activeSection === 'incidents' ? (
         <section className="ac-recovery-center__panel ac-recovery-data-panel">
-          <div className="ac-recovery-center__panel-head"><div className="ac-recovery-center__panel-title"><div className="ac-recovery-center__panel-title-row"><h2>Tampered incidents</h2><span>{visibleIncidents.length} of {incidents.length}</span></div><p>Use the status filter to scope bulk selection. Open incidents can be recovered; resolved incidents can be selected to compare the original tampered data with the recovery result.</p></div><div className="ac-recovery-data-selection-note"><Icon name="shield" size={14} /> {stats.readyIncidents} ready to recover · {incidents.filter(item => String(item.status || '').toUpperCase() === 'RESOLVED').length} available for review</div></div>
+          <div className="ac-recovery-center__panel-head"><div className="ac-recovery-center__panel-title"><div className="ac-recovery-center__panel-title-row"><h2>Tampered incidents</h2><span>{visibleIncidents.length} of {incidents.length}</span></div><p>Select any incident for review, including resolved incidents. Open incidents can be recovered; resolved incidents remain selectable so you can compare the original tampered data with the recovery result.</p></div><div className="ac-recovery-data-selection-note"><Icon name="shield" size={14} /> {stats.readyIncidents} ready to recover · {incidents.filter(item => String(item.status || '').toUpperCase() === 'RESOLVED').length} available for review</div></div>
           {loading ? <div className="ac-recovery-empty ac-recovery-empty--loading"><Icon name="spinner" size={25} /> Loading tampered incidents...</div> : visibleIncidents.length === 0 ? <div className="ac-recovery-empty"><Icon name="inbox" size={25} /><strong>No tampered incidents found</strong><p>The backend returned no records for this workspace and filter.</p></div> : (
             <div className="ac-recovery-table-wrap"><table className="ac-recovery-table ac-recovery-data-table"><thead><tr><th className="ac-recovery-checkbox-cell"><input type="checkbox" aria-label="Select all incidents matching current filters" checked={allVisibleSelected} onChange={toggleSelectAll} disabled={!visibleSelectableIds.length} /></th><th>Incident</th><th>Target log / resource</th><th>Detected</th><th>Integrity evidence</th><th>Status</th></tr></thead><tbody>
               {visibleIncidents.map(item => {

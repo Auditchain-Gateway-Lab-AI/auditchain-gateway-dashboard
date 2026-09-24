@@ -60,6 +60,8 @@ export const mapRangeItemToVerifyStatus = (item) => {
       actual_hash: item.actual_hash,
       blockchain_tx_id: item.blockchain_tx_id,
       db_root: item.merkle_root,
+      agent_status: item.agent_status,
+      agent_discrepancies: item.agent_discrepancies || [],
     },
   };
 };

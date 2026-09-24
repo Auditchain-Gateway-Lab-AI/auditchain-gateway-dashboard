@@ -64,44 +64,6 @@ const buildRangeInspectionLog = (item, fallbackLog) => {
   };
 };
 
-const fetchAllLogsForRange = async ({ fromISO, toISO, selectedClient }) => {
-  const pageSize = 200;
-  const baseParams = {
-    page_size: pageSize,
-    sort_order: 'asc',
-    from: fromISO,
-    to: toISO,
-  };
-
-  if (selectedClient) {
-    baseParams.client_id = selectedClient;
-  }
-
-  const firstRes = await api.get('/dashboard/logs', {
-    params: { ...baseParams, page: 1 },
-  });
-
-  const firstData = Array.isArray(firstRes.data) ? firstRes.data : (firstRes.data?.data || []);
-  const totalPages = Array.isArray(firstRes.data)
-    ? 1
-    : (firstRes.data?.pagination?.total_pages || 1);
-
-  if (totalPages <= 1) return firstData;
-
-  const restResponses = await Promise.all(
-    Array.from({ length: totalPages - 1 }, (_, index) => (
-      api.get('/dashboard/logs', {
-        params: { ...baseParams, page: index + 2 },
-      })
-    ))
-  );
-
-  return restResponses.reduce((allLogs, response) => {
-    const pageData = Array.isArray(response.data) ? response.data : (response.data?.data || []);
-    return allLogs.concat(pageData);
-  }, firstData);
-};
-
 function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePreference = 'system', resolvedTheme = 'light', onThemeChange }) {
   const navigate = useNavigate();
   const [stats, setStats] = useState({ total_logs: 0, pending_logs: 0, anchored_logs: 0 });
@@ -133,6 +95,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
   const [filterDateTo, setFilterDateTo] = useState('');
   const [rangeVerifyResult, setRangeVerifyResult] = useState(null);
   const [isVerifyRangeLoading, setIsVerifyRangeLoading] = useState(false);
+  const [verifyRangeProgress, setVerifyRangeProgress] = useState(null);
   const logsRequestSeq = useRef(0);
 
   // Decode JWT info for Workspace Context Indicator
@@ -433,6 +396,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
     const toVal = toDate || tempDateTo;
     if (!fromVal || !toVal) return;
     setRangeVerifyResult(null);
+    setVerifyRangeProgress(null);
     setFilterDateFrom(fromVal);
     setFilterDateTo(toVal);
     setCurrentPage(1);
@@ -445,6 +409,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
     setFilterDateFrom('');
     setFilterDateTo('');
     setRangeVerifyResult(null);
+    setVerifyRangeProgress(null);
     setFilterVerification('ALL');
     setSortOrder('desc');
     setCurrentPage(1);
@@ -475,6 +440,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
   const handleVerifyRange = useCallback(async () => {
     if (!filterDateFrom || !filterDateTo) return;
     setIsVerifyRangeLoading(true);
+    setVerifyRangeProgress({ phase: 'estimating', message: 'Counting logs in the selected range...' });
     try {
       const fromISO = new Date(filterDateFrom).toISOString();
       const toISO = new Date(filterDateTo).toISOString();
@@ -487,20 +453,40 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
         params.client_id = selectedClient;
       }
 
-      const res = await api.get('/dashboard/verify-range', { params });
-      const results = res.data.results || [];
-      let rangeLogs = [];
+      const estimateRes = await api.get('/dashboard/verify-range/estimate', { params });
+      const estimatedItems = Number(estimateRes.data?.estimated_items || 0);
+      const syncLimit = Number(estimateRes.data?.sync_limit || 100);
 
-      try {
-        rangeLogs = await fetchAllLogsForRange({ fromISO, toISO, selectedClient });
-      } catch (logsErr) {
-        console.error("Failed to hydrate range inspection logs:", logsErr);
+      if (!estimateRes.data?.can_verify_sync) {
+        setRangeVerifyResult(null);
+        setVerifyRangeProgress({
+          phase: 'blocked',
+          estimatedItems,
+          syncLimit,
+          message: `${estimatedItems.toLocaleString()} logs match this range. Synchronous verification is limited to ${syncLimit}; narrow the date range.`
+        });
+        return;
       }
 
-      const rangeLogsById = new Map(rangeLogs.map(log => [log.log_id, log]));
+      setVerifyRangeProgress({
+        phase: 'verifying',
+        estimatedItems,
+        syncLimit,
+        message: `Verifying ${estimatedItems.toLocaleString()} log${estimatedItems === 1 ? '' : 's'}...`
+      });
+
+      const res = await api.get('/dashboard/verify-range', { params });
+      const results = res.data.results || [];
+      setVerifyRangeProgress({
+        phase: 'preparing',
+        estimatedItems,
+        syncLimit,
+        message: 'Preparing verification results...'
+      });
+
       const hydratedResults = results.map(item => ({
         ...item,
-        log: item.log || item.audit_log || rangeLogsById.get(item.log_id) || null,
+        log: item.log || item.audit_log || null,
       }));
 
       setVerifyStatuses(prev => {
@@ -522,14 +508,30 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
         results: hydratedResults
       });
       setCurrentPage(1);
+      setVerifyRangeProgress({
+        phase: 'completed',
+        estimatedItems: hydratedResults.length,
+        syncLimit,
+        message: `Verification completed for ${hydratedResults.length.toLocaleString()} log${hydratedResults.length === 1 ? '' : 's'}.`
+      });
     } catch (err) {
       console.error("Failed to verify range:", err);
+      const errorData = err.response?.data;
+      const estimatedItems = Number(errorData?.estimated_items || 0);
+      const syncLimit = Number(errorData?.sync_limit || 100);
+      const message = errorData?.error || 'Connection error while verifying log range.';
+      setVerifyRangeProgress({
+        phase: errorData?.code === 'VERIFY_RANGE_TOO_LARGE' ? 'blocked' : 'error',
+        estimatedItems,
+        syncLimit,
+        message
+      });
       setRangeVerifyResult({
         range: { from: filterDateFrom, to: filterDateTo },
         summary: { total: 0, valid: 0, invalid: 0, pending: 0 },
         results: [],
         status: 'failed_local',
-        message: err.response?.data?.error || 'Connection error while verifying log range.'
+        message
       });
     } finally {
       setIsVerifyRangeLoading(false);
@@ -1222,6 +1224,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
               rangeVerifyResult={rangeVerifyResult}
               setRangeVerifyResult={setRangeVerifyResult}
               isVerifyRangeLoading={isVerifyRangeLoading}
+              verifyRangeProgress={verifyRangeProgress}
               selectedVerifyResult={selectedVerifyResult}
               setSelectedVerifyResult={setSelectedVerifyResult}
               onSelectResource={setSelectedLog}
