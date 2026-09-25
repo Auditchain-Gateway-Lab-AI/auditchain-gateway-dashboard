@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import RecoveryDataView from './RecoveryDataView';
 import { recoveryApi } from '../../../services/recoveryApi';
 
@@ -75,6 +75,16 @@ const recoveryEvent = {
   event_hash: 'event-hash-140',
   legacy: false,
   storage_kind: 'RECOVERY_EVENT',
+};
+
+const recoveredIncident = {
+  ...incidents[1],
+  id: 'incident-recovered',
+  log_id: 'log-recovered',
+  resource: 'RUANGAN:143',
+  status: 'RECOVERED',
+  detected_at: '2026-09-21T08:55:00.000Z',
+  tampered_metadata: { room: 143, owner: 'tampered-before-recovery' },
 };
 
 beforeEach(() => {
@@ -200,15 +210,116 @@ test('allows a resolved incident to be selected for comparison review', async ()
   expect(screen.getByText('Resolved')).toBeInTheDocument();
 });
 
-test('only offers open and resolved incident statuses', async () => {
+test('offers every incident status that is present, including recovered', async () => {
+  recoveryApi.listIncidents.mockResolvedValue([...incidents, recoveredIncident]);
+  recoveryApi.getIncident.mockImplementation(({ incidentId }) => Promise.resolve(
+    [...incidents, recoveredIncident].find(item => item.id === incidentId)
+  ));
+
   render(<RecoveryDataView selectedClient="client-1" />);
 
   fireEvent.click(await screen.findByRole('button', { name: 'Filter recovery data' }));
   expect(screen.getByRole('option', { name: /Open/ })).toBeInTheDocument();
   expect(screen.getByRole('option', { name: /Resolved/ })).toBeInTheDocument();
+  expect(screen.getByRole('option', { name: /Recovered/ })).toBeInTheDocument();
   expect(screen.queryByRole('option', { name: /Under review/ })).not.toBeInTheDocument();
   expect(screen.queryByRole('option', { name: /Recovering/ })).not.toBeInTheDocument();
   expect(screen.queryByRole('option', { name: /Dismissed/ })).not.toBeInTheDocument();
+});
+
+test('previews open, resolved, and recovered incidents but executes only the open incident', async () => {
+  const resolvedIncident = {
+    ...incidents[2],
+    tampered_metadata: { room: 142, owner: 'tampered-before-recovery' },
+  };
+  const records = [incidents[0], resolvedIncident, recoveredIncident];
+  const resolvedEvent = {
+    ...recoveryEvent,
+    id: 'event-resolved',
+    incident_id: resolvedIncident.id,
+    target_log_id: resolvedIncident.log_id,
+    resource: resolvedIncident.resource,
+    recovered_metadata: { room: 142, owner: 'trusted' },
+  };
+  const recoveredEvent = {
+    ...recoveryEvent,
+    id: 'event-recovered',
+    incident_id: recoveredIncident.id,
+    target_log_id: recoveredIncident.log_id,
+    resource: recoveredIncident.resource,
+    recovered_metadata: { room: 143, owner: 'trusted' },
+  };
+
+  recoveryApi.listIncidents
+    .mockResolvedValueOnce(records)
+    // Simulate a stale/partial gateway response after execution. The local
+    // closed row must still be merged back into the incident history.
+    .mockResolvedValueOnce([resolvedIncident, recoveredIncident]);
+  recoveryApi.getIncident.mockImplementation(({ incidentId }) => Promise.resolve(
+    records.find(item => item.id === incidentId)
+  ));
+  recoveryApi.listEvents.mockResolvedValue({
+    data: [recoveryEvent, resolvedEvent, recoveredEvent],
+    page: 1,
+    page_size: 100,
+    total_items: 3,
+    total_pages: 1,
+  });
+
+  render(<RecoveryDataView selectedClient="client-1" />);
+
+  const masterCheckbox = await screen.findByLabelText('Select all incidents matching current filters');
+  fireEvent.click(masterCheckbox);
+  expect(screen.getByRole('button', { name: 'Preview selected (3)' })).toBeEnabled();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Preview selected (3)' }));
+  expect(await screen.findByRole('dialog', { name: 'Review recovery data' })).toBeInTheDocument();
+  expect(await screen.findAllByText('Tampered data')).toHaveLength(3);
+  expect(await screen.findAllByText('Recovery result')).toHaveLength(2);
+  expect(screen.getByRole('button', { name: 'Execute recovery (1)' })).toBeEnabled();
+  expect(recoveryApi.runPreflight).toHaveBeenCalledTimes(1);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Execute recovery (1)' }));
+  expect(screen.getByRole('dialog', { name: 'Execute recovery?' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Execute recovery' }));
+
+  await waitFor(() => expect(recoveryApi.createRequest).toHaveBeenCalledTimes(1));
+  expect(recoveryApi.executeRequest).toHaveBeenCalledTimes(1);
+  expect(screen.getAllByText('log-140').length).toBeGreaterThan(0);
+  await waitFor(() => {
+    const recoveredRow = screen.getByRole('row', { name: /log-140/ });
+    expect(within(recoveredRow).getByText('Resolved')).toBeInTheDocument();
+  });
+});
+
+test('keeps a recovered incident selectable and disables execute recovery', async () => {
+  const recoveredEvent = {
+    ...recoveryEvent,
+    id: 'event-recovered',
+    incident_id: recoveredIncident.id,
+    target_log_id: recoveredIncident.log_id,
+    resource: recoveredIncident.resource,
+    recovered_metadata: { room: 143, owner: 'trusted' },
+  };
+  recoveryApi.listIncidents.mockResolvedValue([recoveredIncident]);
+  recoveryApi.getIncident.mockResolvedValue(recoveredIncident);
+  recoveryApi.listEvents.mockResolvedValue({
+    data: [recoveredEvent],
+    total_items: 1,
+    total_pages: 1,
+  });
+
+  render(<RecoveryDataView selectedClient="client-1" />);
+
+  const recoveredCheckbox = await screen.findByLabelText('Select log-recovered');
+  expect(recoveredCheckbox).not.toBeDisabled();
+  fireEvent.click(recoveredCheckbox);
+  fireEvent.click(screen.getByRole('button', { name: 'Preview selected (1)' }));
+
+  expect(await screen.findByText('Recovery result')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Execute recovery (0)' })).toBeDisabled();
+  expect(recoveryApi.listCandidates).not.toHaveBeenCalled();
+  expect(recoveryApi.runPreflight).not.toHaveBeenCalled();
 });
 
 test('opens incident preview by clicking the full row', async () => {

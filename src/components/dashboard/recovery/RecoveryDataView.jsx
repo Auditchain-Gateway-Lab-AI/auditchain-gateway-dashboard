@@ -10,6 +10,7 @@ const INCIDENT_STATUS_OPTIONS = [
   { value: 'ALL', label: 'All statuses', description: 'Show every incident', tone: 'all' },
   { value: 'OPEN', label: 'Open', description: 'Detected and waiting for recovery', tone: 'danger' },
   { value: 'RESOLVED', label: 'Resolved', description: 'Trusted data has been restored', tone: 'success' },
+  { value: 'RECOVERED', label: 'Recovered', description: 'Recovery result is recorded', tone: 'success' },
 ];
 
 const EVENT_STATUS_OPTIONS = [
@@ -26,7 +27,52 @@ const NON_REEXECUTABLE_REQUEST_STATUSES = new Set([
   'EXECUTING',
   'SUCCEEDED',
 ]);
+const CLOSED_INCIDENT_STATUSES = new Set(['RESOLVED', 'RECOVERED']);
 const PREVIEW_BATCH_SIZE = 20;
+
+const isClosedIncident = incident => CLOSED_INCIDENT_STATUSES.has(
+  String(incident?.status || '').trim().toUpperCase()
+);
+
+const hasValue = value => value !== undefined && value !== null && value !== '';
+
+const mergeIncidentLists = (previous, incoming) => {
+  const previousById = new Map(
+    previous.filter(item => item?.id).map(item => [item.id, item])
+  );
+  const incomingIds = new Set();
+
+  const merged = incoming
+    .filter(item => item?.id)
+    .map(item => {
+      incomingIds.add(item.id);
+      const previousItem = previousById.get(item.id);
+      if (!previousItem) return item;
+
+      const next = { ...previousItem, ...item };
+      // A just-completed recovery can race the next list request.  During
+      // that window an older gateway may still return the incident as OPEN.
+      // Do not let that stale response undo the closed state we already
+      // recorded locally (or make the row executable again).
+      if (isClosedIncident(previousItem) && !isClosedIncident(item)) {
+        next.status = previousItem.status;
+        if (hasValue(previousItem.resolved_at)) next.resolved_at = previousItem.resolved_at;
+      }
+      ['tampered_metadata', 'tampered_data', 'tampered_payload', 'auditLog'].forEach(field => {
+        if (!hasValue(item[field]) && hasValue(previousItem[field])) next[field] = previousItem[field];
+      });
+      return next;
+    });
+
+  // Some gateway deployments return only active incidents after execution.
+  // Keep a locally known closed incident visible until the backend includes it
+  // again, so recovery does not erase the incident history from the UI.
+  previous.forEach(item => {
+    if (item?.id && !incomingIds.has(item.id) && isClosedIncident(item)) merged.push(item);
+  });
+
+  return merged;
+};
 
 const getAvailableStatusOptions = (items, field, options, selectedValue) => {
   const availableStatuses = new Set(
@@ -398,12 +444,11 @@ function RecoveryResultCard({ item }) {
 // row is therefore loaded from the tenant-scoped resource endpoint for the
 // before-recovery view, with incident projections kept as a fallback.
 const getTamperedData = (incident, auditLog) => {
-  const resolved = String(incident?.status || '').toUpperCase() === 'RESOLVED';
   const preservedTamperedData = incident?.tampered_metadata
     ?? incident?.tampered_data
     ?? incident?.tampered_payload;
 
-  if (resolved) {
+  if (isClosedIncident(incident)) {
     // Once recovery succeeds, the live audit row contains the trusted value.
     // Never reuse it as the "before" side of a resolved comparison.
     return preservedTamperedData !== undefined && preservedTamperedData !== null && preservedTamperedData !== ''
@@ -644,7 +689,9 @@ function RecoveryDataView({ selectedClient }) {
       ]);
 
       const failures = [];
-      if (incidentResult.status === 'fulfilled') setIncidents(normalizeList(incidentResult.value));
+      if (incidentResult.status === 'fulfilled') {
+        setIncidents(current => mergeIncidentLists(current, normalizeList(incidentResult.value)));
+      }
       else failures.push(incidentResult.reason);
 
       if (eventResult.status === 'fulfilled') {
@@ -787,7 +834,8 @@ function RecoveryDataView({ selectedClient }) {
 
   const loadPreviewItem = async (incident) => {
     const incidentStatus = String(incident?.status || '').toUpperCase();
-    const incidentClosed = incidentStatus === 'RESOLVED';
+    const incidentOpen = incidentStatus === 'OPEN';
+    const incidentClosed = CLOSED_INCIDENT_STATUSES.has(incidentStatus);
     const relatedRequest = requestByIncident.get(incident?.id);
     const existingEvent = incidentClosed
       ? events.find(item => item?.incident_id === incident?.id)
@@ -795,8 +843,8 @@ function RecoveryDataView({ selectedClient }) {
       : null;
     const [detailResult, candidateResult, preflightResult, auditLogsResult] = await Promise.allSettled([
       recoveryApi.getIncident({ incidentId: incident.id }),
-      incidentClosed ? Promise.resolve([]) : recoveryApi.listCandidates({ incidentId: incident.id }),
-      incidentClosed ? Promise.resolve(null) : recoveryApi.runPreflight({ incidentId: incident.id }),
+      incidentOpen ? recoveryApi.listCandidates({ incidentId: incident.id }) : Promise.resolve([]),
+      incidentOpen ? recoveryApi.runPreflight({ incidentId: incident.id }) : Promise.resolve(null),
       recoveryApi.listAuditLogsByResource({ resource: incident.resource }),
     ]);
 
@@ -821,7 +869,7 @@ function RecoveryDataView({ selectedClient }) {
       .filter(result => result.status === 'rejected')
       .map(result => result.reason);
     const ready = Boolean(
-      !incidentClosed
+      incidentOpen
       && !NON_REEXECUTABLE_REQUEST_STATUSES.has(requestStatus)
       && candidate?.eligible
       && preflight?.recoverable
@@ -909,6 +957,26 @@ function RecoveryDataView({ selectedClient }) {
         return { ...item, incident: item.incident, status: 'FAILED_EXECUTION', error: getErrorMessage(executionError) };
       }
     }));
+
+    const successfulByIncident = new Map(
+      settled
+        .filter(item => String(item.status || '').toUpperCase() === 'SUCCEEDED' && item.incident?.id)
+        .map(item => [item.incident.id, item])
+    );
+    if (successfulByIncident.size > 0) {
+      setIncidents(current => current.map(incident => {
+        const result = successfulByIncident.get(incident.id);
+        if (!result) return incident;
+
+        const preservedTamperedData = getTamperedData(result.incident, result.auditLog);
+        return {
+          ...incident,
+          status: 'RESOLVED',
+          resolved_at: incident.resolved_at || new Date().toISOString(),
+          ...(hasValue(preservedTamperedData) ? { tampered_metadata: preservedTamperedData } : {}),
+        };
+      }));
+    }
     const skipped = previewItems.filter(item => !item.ready).map(item => ({
       ...item,
       incident: item.incident,
@@ -988,7 +1056,7 @@ function RecoveryDataView({ selectedClient }) {
 
       {activeSection === 'incidents' ? (
         <section className="ac-recovery-center__panel ac-recovery-data-panel">
-          <div className="ac-recovery-center__panel-head"><div className="ac-recovery-center__panel-title"><div className="ac-recovery-center__panel-title-row"><h2>Tampered incidents</h2><span>{visibleIncidents.length} of {incidents.length}</span></div><p>Select any incident for review, including resolved incidents. Open incidents can be recovered; resolved incidents remain selectable so you can compare the original tampered data with the recovery result.</p></div><div className="ac-recovery-data-selection-note"><Icon name="shield" size={14} /> {stats.readyIncidents} ready to recover · {incidents.filter(item => String(item.status || '').toUpperCase() === 'RESOLVED').length} available for review</div></div>
+           <div className="ac-recovery-center__panel-head"><div className="ac-recovery-center__panel-title"><div className="ac-recovery-center__panel-title-row"><h2>Tampered incidents</h2><span>{visibleIncidents.length} of {incidents.length}</span></div><p>Select any incident for review, including resolved and recovered incidents. Open incidents can be recovered; closed incidents remain selectable so you can compare the original tampered data with the recovery result.</p></div><div className="ac-recovery-data-selection-note"><Icon name="shield" size={14} /> {stats.readyIncidents} ready to recover · {incidents.filter(isClosedIncident).length} available for review</div></div>
           {loading ? <div className="ac-recovery-empty ac-recovery-empty--loading"><Icon name="spinner" size={25} /> Loading tampered incidents...</div> : visibleIncidents.length === 0 ? <div className="ac-recovery-empty"><Icon name="inbox" size={25} /><strong>No tampered incidents found</strong><p>The backend returned no records for this workspace and filter.</p></div> : (
             <div className="ac-recovery-table-wrap"><table className="ac-recovery-table ac-recovery-data-table"><thead><tr><th className="ac-recovery-checkbox-cell"><input type="checkbox" aria-label="Select all incidents matching current filters" checked={allVisibleSelected} onChange={toggleSelectAll} disabled={!visibleSelectableIds.length} /></th><th>Incident</th><th>Target log / resource</th><th>Detected</th><th>Integrity evidence</th><th>Status</th></tr></thead><tbody>
               {visibleIncidents.map(item => {

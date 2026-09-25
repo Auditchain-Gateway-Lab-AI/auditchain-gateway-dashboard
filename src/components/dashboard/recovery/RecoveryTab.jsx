@@ -7,7 +7,7 @@ import RecoveryStatusBadge from './RecoveryStatusBadge';
 import RecoveryConfirmationDialog from './RecoveryConfirmationDialog';
 
 const EXECUTABLE_REQUEST_STATUSES = new Set(['PENDING_EXECUTION', 'PENDING_APPROVAL', 'APPROVED']);
-const CLOSED_INCIDENT_STATUSES = new Set(['RESOLVED']);
+const CLOSED_INCIDENT_STATUSES = new Set(['RESOLVED', 'RECOVERED']);
 const INTERNAL_RECOVERY_REASON = 'Recovery initiated from the Log Details Recovery tab.';
 
 const createIdempotencyKey = () => {
@@ -112,11 +112,19 @@ const sortNewest = (items = [], field = 'detected_at') => [...items].sort((a, b)
   new Date(b?.[field] || 0).getTime() - new Date(a?.[field] || 0).getTime()
 ));
 
-const getTamperedData = (activeLog, incident) => activeLog?.metadata
-  ?? incident?.tampered_payload
-  ?? incident?.tampered_metadata
-  ?? incident?.current_metadata
-  ?? null;
+const getTamperedData = (activeLog, incident) => {
+  const incidentStatus = String(incident?.status || '').trim().toUpperCase();
+  const preservedTamperedData = incident?.tampered_payload
+    ?? incident?.tampered_metadata
+    ?? incident?.current_metadata;
+
+  // After recovery, activeLog.metadata is the trusted value currently stored
+  // in the audit log. Closed incidents must use the encrypted before-image
+  // returned by the incident detail endpoint instead.
+  if (CLOSED_INCIDENT_STATUSES.has(incidentStatus)) return preservedTamperedData ?? null;
+
+  return activeLog?.metadata ?? preservedTamperedData ?? null;
+};
 
 const getEventList = value => Array.isArray(value) ? value : Array.isArray(value?.data) ? value.data : [];
 
@@ -198,10 +206,29 @@ function RecoveryTab({ activeLog, selectedClient, onRefreshLogs }) {
       return;
     }
 
-    const nextIncident = sortNewest(
+    let nextIncident = sortNewest(
       (Array.isArray(incidentResult.value) ? incidentResult.value : [])
         .filter(item => item.log_id === activeLog.log_id)
     )[0] || null;
+
+    // The list projection intentionally omits the protected tampered payload.
+    // Load the detail projection for closed incidents so the contextual tab
+    // can compare the before-image with the recorded recovery result.
+    if (
+      nextIncident
+      && CLOSED_INCIDENT_STATUSES.has(String(nextIncident.status || '').toUpperCase())
+      && typeof recoveryApi.getIncident === 'function'
+    ) {
+      try {
+        const detail = await recoveryApi.getIncident({ incidentId: nextIncident.id });
+        if (seq !== loadSeqRef.current) return;
+        if (detail) nextIncident = { ...nextIncident, ...detail };
+      } catch {
+        // The list projection remains usable; the UI will show that the
+        // preserved before-image is unavailable if detail loading fails.
+      }
+    }
+
     const requests = requestResult.status === 'fulfilled' && Array.isArray(requestResult.value)
       ? requestResult.value
       : [];
@@ -222,7 +249,7 @@ function RecoveryTab({ activeLog, selectedClient, onRefreshLogs }) {
     setPreflight(null);
     setLoading(false);
 
-    if (!nextIncident || CLOSED_INCIDENT_STATUSES.has(String(nextIncident.status || '').toUpperCase())) return;
+    if (!nextIncident || String(nextIncident.status || '').toUpperCase() !== 'OPEN') return;
 
     try {
       const candidates = await recoveryApi.listCandidates({ incidentId: nextIncident.id });
@@ -259,7 +286,7 @@ function RecoveryTab({ activeLog, selectedClient, onRefreshLogs }) {
 
   const executeRecovery = async () => {
     const incidentStatus = String(incident?.status || '').toUpperCase();
-    if (!incident?.id || !candidate?.eligible || !preflight?.recoverable || CLOSED_INCIDENT_STATUSES.has(incidentStatus) || executing) return;
+    if (!incident?.id || incidentStatus !== 'OPEN' || !candidate?.eligible || !preflight?.recoverable || CLOSED_INCIDENT_STATUSES.has(incidentStatus) || executing) return;
 
     setExecuting(true);
     setError('');
@@ -309,6 +336,7 @@ function RecoveryTab({ activeLog, selectedClient, onRefreshLogs }) {
   );
   const canExecute = Boolean(
     incident
+    && incidentStatus === 'OPEN'
     && !CLOSED_INCIDENT_STATUSES.has(incidentStatus)
     && candidateEligible
     && preflightReady

@@ -32,6 +32,15 @@ export const getSourceVerificationTitle = (logStatus) => {
   return 'Historical client event — not compared against Agent';
 };
 
+// Audit-log badges intentionally expose only the two user-facing outcomes.
+// Keep the raw verification payload untouched; this is presentation-only.
+export const getIntegrityBadge = (integrityStatus) => {
+  const normalized = String(integrityStatus || '').trim().toLowerCase();
+  return normalized === 'valid'
+    ? { label: 'VALID', className: 'ac-status--valid' }
+    : { label: 'INVALID', className: 'ac-status--invalid' };
+};
+
 const buildLogJsonPayload = (log) => ({
   audit_log: {
     id: log?.log_id || null,
@@ -329,6 +338,7 @@ function ResourceDetailModal({ log: activeLog, selectedClient, onClose, onRefres
             const prevLog = ascIdx > 0 ? sortedAsc[ascIdx - 1] : null;
             const isFirst = idx === 0;
             const logStatus = logStatusMap[log.log_id];
+            const integrityBadge = getIntegrityBadge(logStatus?.integrity_status);
             const latestSourceEvent = isLatestSourceEvent(logStatus);
 
             const relatedIssues = (chainStatus?.chain_issues || [])
@@ -356,13 +366,10 @@ function ResourceDetailModal({ log: activeLog, selectedClient, onClose, onRefres
                   
                   {logStatus && relatedIssues.length === 0 && (
                     <span
-                      className={`ac-chain-badge ${logStatus.integrity_status === 'valid' ? 'ac-status--valid'
-                          : logStatus.integrity_status === 'pending' ? 'ac-status--pending'
-                            : 'ac-status--invalid'
-                        }`}
+                      className={`ac-chain-badge ${integrityBadge.className}`}
                       title={getSourceVerificationTitle(logStatus)}
                     >
-                      {logStatus.integrity_status}
+                      {integrityBadge.label}
                     </span>
                   )}
                   {relatedIssues.includes('client_mismatch') && (

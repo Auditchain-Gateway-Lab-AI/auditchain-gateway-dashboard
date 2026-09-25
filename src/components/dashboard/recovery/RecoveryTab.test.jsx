@@ -6,6 +6,7 @@ import { recoveryApi } from '../../../services/recoveryApi';
 jest.mock('../../../services/recoveryApi', () => ({
   recoveryApi: {
     listIncidents: jest.fn(),
+    getIncident: jest.fn(),
     listRequests: jest.fn(),
     listEvents: jest.fn(),
     listCandidates: jest.fn(),
@@ -55,6 +56,7 @@ const event = {
 beforeEach(() => {
   jest.clearAllMocks();
   recoveryApi.listIncidents.mockResolvedValue([incident]);
+  recoveryApi.getIncident.mockResolvedValue(incident);
   recoveryApi.listRequests.mockResolvedValue([]);
   recoveryApi.listEvents.mockResolvedValue({ data: [] });
   recoveryApi.listCandidates.mockResolvedValue([{
@@ -113,6 +115,35 @@ test('keeps the contextual Recovery tab and shows tampered/trusted data without 
   expect(recoveryApi.executeRequest).toHaveBeenCalledWith({ requestId: 'request-161' });
   expect(await screen.findByText('Recovery completed')).toBeInTheDocument();
   expect(screen.getByText('Recovered data')).toBeInTheDocument();
+});
+
+test('uses the preserved before-image when a resolved incident is opened again', async () => {
+  const resolvedIncident = {
+    ...incident,
+    status: 'RESOLVED',
+    tampered_metadata: { id: 161, nama: 'tampered-before-recovery' },
+  };
+  const resolvedLog = {
+    ...activeLog,
+    metadata: { id: 161, nama: 'trusted-current-log' },
+  };
+  const resolvedEvent = {
+    ...event,
+    incident_id: resolvedIncident.id,
+    recovered_metadata: { id: 161, nama: 'trusted-room' },
+  };
+  recoveryApi.listIncidents.mockResolvedValue([resolvedIncident]);
+  recoveryApi.getIncident.mockResolvedValue(resolvedIncident);
+  recoveryApi.listEvents.mockResolvedValue({ data: [resolvedEvent] });
+
+  render(<RecoveryTab activeLog={resolvedLog} selectedClient="client-1" />);
+
+  expect(await screen.findByText('Tampered data and recovery result')).toBeInTheDocument();
+  expect(screen.getByText('tampered-before-recovery')).toBeInTheDocument();
+  expect(screen.getByText('trusted-room')).toBeInTheDocument();
+  expect(screen.queryByText('trusted-current-log')).not.toBeInTheDocument();
+  expect(recoveryApi.getIncident).toHaveBeenCalledWith({ incidentId: resolvedIncident.id });
+  expect(screen.queryByRole('button', { name: 'Execute recovery' })).not.toBeInTheDocument();
 });
 
 test('does not let an old successful request or another incident event lock the current execute action', async () => {

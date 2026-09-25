@@ -681,9 +681,9 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
       );
     if (v.status === 'pending')
       return (
-        <span className="ac-status ac-status--pending" onClick={() => setSelectedVerifyResult(v)}>
-          <Icon name="clock" size={12} />
-          PENDING
+        <span className="ac-status ac-status--checking" onClick={() => setSelectedVerifyResult(v)}>
+          <Icon name="spinner" size={12} />
+          Memeriksa...
         </span>
       );
     return (
