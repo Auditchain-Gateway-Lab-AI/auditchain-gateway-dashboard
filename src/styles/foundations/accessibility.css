@@ -1,0 +1,33 @@
+/* ================================================================
+   PERFORMANCE GUARDS
+   ================================================================ */
+
+@supports (content-visibility: auto) {
+
+  .ac-main__container>.ac-card,
+  .ac-main__container>.ac-stats-grid,
+  .ac-admin-overview-grid,
+  .ac-admin-dashboard-layout,
+  .ac-admin-dashboard-layout--wide-left {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 280px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .ac-shell--user .ac-topnav,
+  .ac-shell--admin .ac-topnav {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}

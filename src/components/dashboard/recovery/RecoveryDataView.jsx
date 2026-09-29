@@ -10,6 +10,7 @@ const INCIDENT_STATUS_OPTIONS = [
   { value: 'ALL', label: 'All statuses', description: 'Show every incident', tone: 'all' },
   { value: 'OPEN', label: 'Open', description: 'Detected and waiting for recovery', tone: 'danger' },
   { value: 'RESOLVED', label: 'Resolved', description: 'Trusted data has been restored', tone: 'success' },
+  { value: 'RECOVERED', label: 'Recovered', description: 'Recovery result is recorded', tone: 'success' },
 ];
 
 const EVENT_STATUS_OPTIONS = [
@@ -18,6 +19,60 @@ const EVENT_STATUS_OPTIONS = [
   { value: 'FAILED_VERIFICATION', label: 'Verification failed', description: 'Integrity check did not pass', tone: 'danger' },
   { value: 'FAILED_EXECUTION', label: 'Execution failed', description: 'Recovery could not be completed', tone: 'danger' },
 ];
+
+const NON_REEXECUTABLE_REQUEST_STATUSES = new Set([
+  'PENDING_EXECUTION',
+  'PENDING_APPROVAL',
+  'APPROVED',
+  'EXECUTING',
+  'SUCCEEDED',
+]);
+const CLOSED_INCIDENT_STATUSES = new Set(['RESOLVED', 'RECOVERED']);
+const PREVIEW_BATCH_SIZE = 20;
+
+const isClosedIncident = incident => CLOSED_INCIDENT_STATUSES.has(
+  String(incident?.status || '').trim().toUpperCase()
+);
+
+const hasValue = value => value !== undefined && value !== null && value !== '';
+
+const mergeIncidentLists = (previous, incoming) => {
+  const previousById = new Map(
+    previous.filter(item => item?.id).map(item => [item.id, item])
+  );
+  const incomingIds = new Set();
+
+  const merged = incoming
+    .filter(item => item?.id)
+    .map(item => {
+      incomingIds.add(item.id);
+      const previousItem = previousById.get(item.id);
+      if (!previousItem) return item;
+
+      const next = { ...previousItem, ...item };
+      // A just-completed recovery can race the next list request.  During
+      // that window an older gateway may still return the incident as OPEN.
+      // Do not let that stale response undo the closed state we already
+      // recorded locally (or make the row executable again).
+      if (isClosedIncident(previousItem) && !isClosedIncident(item)) {
+        next.status = previousItem.status;
+        if (hasValue(previousItem.resolved_at)) next.resolved_at = previousItem.resolved_at;
+      }
+      ['tampered_metadata', 'tampered_data', 'tampered_payload', 'auditLog'].forEach(field => {
+        if (!hasValue(item[field]) && hasValue(previousItem[field])) next[field] = previousItem[field];
+      });
+      return next;
+    });
+
+  // Some gateway deployments return only active incidents after execution.
+  // Keep a locally known closed incident visible until the backend includes it
+  // again, so recovery does not erase the incident history from the UI.
+  previous.forEach(item => {
+    if (item?.id && !incomingIds.has(item.id) && isClosedIncident(item)) merged.push(item);
+  });
+
+  return merged;
+};
 
 const getAvailableStatusOptions = (items, field, options, selectedValue) => {
   const availableStatuses = new Set(
@@ -388,13 +443,26 @@ function RecoveryResultCard({ item }) {
 // TamperIncident currently omits TamperedPayload from JSON. The current audit
 // row is therefore loaded from the tenant-scoped resource endpoint for the
 // before-recovery view, with incident projections kept as a fallback.
-const getTamperedData = (incident, auditLog) => auditLog?.metadata
-  ?? incident?.auditLog?.metadata
-  ?? incident?.tampered_payload
-  ?? incident?.tampered_metadata
-  ?? incident?.current_metadata
-  ?? incident?.metadata
-  ?? null;
+const getTamperedData = (incident, auditLog) => {
+  const preservedTamperedData = incident?.tampered_metadata
+    ?? incident?.tampered_data
+    ?? incident?.tampered_payload;
+
+  if (isClosedIncident(incident)) {
+    // Once recovery succeeds, the live audit row contains the trusted value.
+    // Never reuse it as the "before" side of a resolved comparison.
+    return preservedTamperedData !== undefined && preservedTamperedData !== null && preservedTamperedData !== ''
+      ? preservedTamperedData
+      : null;
+  }
+
+  return auditLog?.metadata
+    ?? incident?.auditLog?.metadata
+    ?? preservedTamperedData
+    ?? incident?.current_metadata
+    ?? incident?.metadata
+    ?? null;
+};
 
 const getRecoveryContext = ({ incident, auditLog, preflight, recoveryEvent }) => {
   const trustedPreview = preflight?.snapshot_preview || {};
@@ -445,6 +513,25 @@ const normalizeEventPage = value => ({
   totalItems: value?.total_items ?? (Array.isArray(value) ? value.length : 0),
   totalPages: value?.total_pages ?? 1,
 });
+
+const listAllEvents = async () => {
+  const firstPage = normalizeEventPage(await recoveryApi.listEvents({ page: 1, pageSize: 100, includeLegacy: false }));
+  const totalPages = Math.max(1, Number(firstPage.totalPages) || 1);
+  if (totalPages === 1) return firstPage;
+
+  const remainingPages = await Promise.all(
+    Array.from({ length: totalPages - 1 }, (_, index) => recoveryApi.listEvents({
+      page: index + 2,
+      pageSize: 100,
+      includeLegacy: false,
+    }))
+  );
+  const pages = [firstPage, ...remainingPages.map(normalizeEventPage)];
+  return {
+    ...firstPage,
+    data: pages.flatMap(page => page.data),
+  };
+};
 
 const eventIntegrityStatus = event => event?.integrity_status || 'NOT_CHECKED';
 
@@ -573,6 +660,7 @@ function RecoveryDataView({ selectedClient }) {
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [previewItems, setPreviewItems] = useState([]);
+  const [previewTotal, setPreviewTotal] = useState(0);
   const [resultItems, setResultItems] = useState([]);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -585,6 +673,7 @@ function RecoveryDataView({ selectedClient }) {
   const [error, setError] = useState('');
   const executionInFlight = useRef(false);
   const refreshInFlight = useRef(false);
+  const previewRun = useRef(0);
 
   const loadData = useCallback(async ({ silent = false } = {}) => {
     if (refreshInFlight.current) return;
@@ -595,12 +684,14 @@ function RecoveryDataView({ selectedClient }) {
     try {
       const [incidentResult, eventResult, requestResult] = await Promise.allSettled([
         recoveryApi.listIncidents(),
-        recoveryApi.listEvents({ page: 1, pageSize: 100, includeLegacy: false }),
+        listAllEvents(),
         recoveryApi.listRequests(),
       ]);
 
       const failures = [];
-      if (incidentResult.status === 'fulfilled') setIncidents(normalizeList(incidentResult.value));
+      if (incidentResult.status === 'fulfilled') {
+        setIncidents(current => mergeIncidentLists(current, normalizeList(incidentResult.value)));
+      }
       else failures.push(incidentResult.reason);
 
       if (eventResult.status === 'fulfilled') {
@@ -625,8 +716,10 @@ function RecoveryDataView({ selectedClient }) {
   }, [selectedClient]);
 
   useEffect(() => {
+    previewRun.current += 1;
     setSelectedIds(new Set());
     setPreviewItems([]);
+    setPreviewTotal(0);
     setResultItems([]);
     setPreviewOpen(false);
     setEventDetail(null);
@@ -680,9 +773,16 @@ function RecoveryDataView({ selectedClient }) {
   }), [events, eventFilter, normalizedSearch]);
 
   const isSelectable = useCallback((incident) => {
+    // Selection is for review as well as execution. Keep every incident in
+    // the bulk-selection scope, including already-resolved records and any
+    // future backend status. `isReadyForRecovery` remains the execution gate.
+    return Boolean(incident?.id);
+  }, []);
+
+  const isReadyForRecovery = useCallback((incident) => {
     const status = String(incident?.status || '').toUpperCase();
     const requestStatus = String(requestByIncident.get(incident?.id)?.status || '').toUpperCase();
-    return status === 'OPEN' && !['PENDING_EXECUTION', 'EXECUTING', 'SUCCEEDED'].includes(requestStatus);
+    return status === 'OPEN' && !NON_REEXECUTABLE_REQUEST_STATUSES.has(requestStatus);
   }, [requestByIncident]);
 
   const selectedIncidents = useMemo(
@@ -698,12 +798,20 @@ function RecoveryDataView({ selectedClient }) {
   const allVisibleSelected = visibleSelectableIds.length > 0
     && visibleSelectableIds.every(id => selectedIds.has(id));
 
+  const selectedIncidentStatus = incidentStatusOptions.find(option => option.value === incidentFilter);
+  const bulkSelectionLabel = incidentFilter === 'ALL'
+    ? 'Select all incidents'
+    : `Select all ${selectedIncidentStatus?.label?.toLowerCase() || 'matching'} incidents`;
+  const bulkClearLabel = incidentFilter === 'ALL'
+    ? 'Clear all incident selection'
+    : `Clear ${selectedIncidentStatus?.label?.toLowerCase() || 'matching'} incident selection`;
+
   const stats = useMemo(() => ({
-    readyIncidents: incidents.filter(isSelectable).length,
+    readyIncidents: incidents.filter(isReadyForRecovery).length,
     recoveredEvents: events.filter(item => String(item.result_status || '').toUpperCase() === 'SUCCEEDED').length,
     selected: selectedIncidents.length,
     verifiedEvents: events.filter(item => String(eventIntegrityStatus(item)).toUpperCase() === 'VALID').length,
-  }), [events, incidents, isSelectable, selectedIncidents]);
+  }), [events, incidents, isReadyForRecovery, selectedIncidents]);
 
   const toggleSelection = (incident) => {
     if (!isSelectable(incident)) return;
@@ -726,7 +834,8 @@ function RecoveryDataView({ selectedClient }) {
 
   const loadPreviewItem = async (incident) => {
     const incidentStatus = String(incident?.status || '').toUpperCase();
-    const incidentClosed = incidentStatus === 'RESOLVED';
+    const incidentOpen = incidentStatus === 'OPEN';
+    const incidentClosed = CLOSED_INCIDENT_STATUSES.has(incidentStatus);
     const relatedRequest = requestByIncident.get(incident?.id);
     const existingEvent = incidentClosed
       ? events.find(item => item?.incident_id === incident?.id)
@@ -734,13 +843,13 @@ function RecoveryDataView({ selectedClient }) {
       : null;
     const [detailResult, candidateResult, preflightResult, auditLogsResult] = await Promise.allSettled([
       recoveryApi.getIncident({ incidentId: incident.id }),
-      incidentClosed ? Promise.resolve([]) : recoveryApi.listCandidates({ incidentId: incident.id }),
-      incidentClosed ? Promise.resolve(null) : recoveryApi.runPreflight({ incidentId: incident.id }),
+      incidentOpen ? recoveryApi.listCandidates({ incidentId: incident.id }) : Promise.resolve([]),
+      incidentOpen ? recoveryApi.runPreflight({ incidentId: incident.id }) : Promise.resolve(null),
       recoveryApi.listAuditLogsByResource({ resource: incident.resource }),
     ]);
 
     let recoveryEvent = existingEvent;
-    if (existingEvent?.id) {
+    if (existingEvent?.id && !existingEvent.result_status) {
       try {
         recoveryEvent = await recoveryApi.getEvent({ eventId: existingEvent.id }) || existingEvent;
       } catch {
@@ -755,11 +864,13 @@ function RecoveryDataView({ selectedClient }) {
     const auditLogs = auditLogsResult.status === 'fulfilled' ? normalizeList(auditLogsResult.value) : [];
     const auditLog = auditLogs.find(item => item?.log_id === incident.log_id) || null;
     const previewIncident = auditLog ? { ...detail, auditLog } : detail;
+    const requestStatus = String(relatedRequest?.status || '').toUpperCase();
     const failures = [detailResult, candidateResult, preflightResult]
       .filter(result => result.status === 'rejected')
       .map(result => result.reason);
     const ready = Boolean(
-      !incidentClosed
+      incidentOpen
+      && !NON_REEXECUTABLE_REQUEST_STATUSES.has(requestStatus)
       && candidate?.eligible
       && preflight?.recoverable
       && String(preflight?.status || '').toUpperCase() === 'VALID'
@@ -780,22 +891,31 @@ function RecoveryDataView({ selectedClient }) {
 
   const openPreview = async (records = selectedIncidents) => {
     if (!records.length) return;
+    const runId = previewRun.current + 1;
+    previewRun.current = runId;
     setPreviewOpen(true);
     setPreviewLoading(true);
     setPreviewError('');
     setPreviewItems([]);
+    setPreviewTotal(records.length);
+    const loadedItems = [];
     try {
-      const preview = await Promise.all(records.map(loadPreviewItem));
-      setPreviewItems(preview);
+      for (let start = 0; start < records.length; start += PREVIEW_BATCH_SIZE) {
+        const batch = await Promise.all(records.slice(start, start + PREVIEW_BATCH_SIZE).map(loadPreviewItem));
+        if (previewRun.current !== runId) return;
+        loadedItems.push(...batch);
+        setPreviewItems([...loadedItems]);
+      }
     } catch (previewLoadError) {
-      setPreviewError(getErrorMessage(previewLoadError));
+      if (previewRun.current === runId) setPreviewError(getErrorMessage(previewLoadError));
     } finally {
-      setPreviewLoading(false);
+      if (previewRun.current === runId) setPreviewLoading(false);
     }
   };
 
   const closePreview = () => {
     if (executing) return;
+    previewRun.current += 1;
     setPreviewOpen(false);
     setConfirmationOpen(false);
   };
@@ -837,6 +957,26 @@ function RecoveryDataView({ selectedClient }) {
         return { ...item, incident: item.incident, status: 'FAILED_EXECUTION', error: getErrorMessage(executionError) };
       }
     }));
+
+    const successfulByIncident = new Map(
+      settled
+        .filter(item => String(item.status || '').toUpperCase() === 'SUCCEEDED' && item.incident?.id)
+        .map(item => [item.incident.id, item])
+    );
+    if (successfulByIncident.size > 0) {
+      setIncidents(current => current.map(incident => {
+        const result = successfulByIncident.get(incident.id);
+        if (!result) return incident;
+
+        const preservedTamperedData = getTamperedData(result.incident, result.auditLog);
+        return {
+          ...incident,
+          status: 'RESOLVED',
+          resolved_at: incident.resolved_at || new Date().toISOString(),
+          ...(hasValue(preservedTamperedData) ? { tampered_metadata: preservedTamperedData } : {}),
+        };
+      }));
+    }
     const skipped = previewItems.filter(item => !item.ready).map(item => ({
       ...item,
       incident: item.incident,
@@ -848,7 +988,6 @@ function RecoveryDataView({ selectedClient }) {
     setSelectedIds(new Set());
     setPreviewOpen(false);
     setConfirmationOpen(false);
-    setActiveSection('events');
     setExecuting(false);
     executionInFlight.current = false;
     await loadData();
@@ -912,14 +1051,14 @@ function RecoveryDataView({ selectedClient }) {
           value={activeSection === 'incidents' ? incidentFilter : eventFilter}
           onChange={value => activeSection === 'incidents' ? setIncidentFilter(value) : setEventFilter(value)}
         />
-        {activeSection === 'incidents' && <div className="ac-recovery-data-toolbar__actions"><button type="button" className="ac-btn-ghost-action" onClick={toggleSelectAll} disabled={!visibleSelectableIds.length}><Icon name={allVisibleSelected ? 'check' : 'list'} size={14} /> {allVisibleSelected ? 'Clear all ready' : `Select all ready (${visibleSelectableIds.length})`}</button><button type="button" className="ac-btn-ghost-action" onClick={() => setSelectedIds(new Set())} disabled={!selectedIncidents.length}><Icon name="x" size={14} /> Clear selection</button><button type="button" className="ac-btn-primary" onClick={() => openPreview()} disabled={!selectedIncidents.length}><Icon name="eye" size={15} /> Preview selected ({selectedIncidents.length})</button></div>}
+        {activeSection === 'incidents' && <div className="ac-recovery-data-toolbar__actions"><button type="button" className="ac-btn-ghost-action" onClick={toggleSelectAll} disabled={!visibleSelectableIds.length} title="Only incidents matching the active status and search filters are selected"><Icon name={allVisibleSelected ? 'check' : 'list'} size={14} /> {allVisibleSelected ? bulkClearLabel : `${bulkSelectionLabel} (${visibleSelectableIds.length})`}</button><button type="button" className="ac-btn-ghost-action" onClick={() => setSelectedIds(new Set())} disabled={!selectedIncidents.length}><Icon name="x" size={14} /> Clear selection</button><button type="button" className="ac-btn-primary" onClick={() => openPreview()} disabled={!selectedIncidents.length}><Icon name="eye" size={15} /> Preview selected ({selectedIncidents.length})</button></div>}
       </div>
 
       {activeSection === 'incidents' ? (
         <section className="ac-recovery-center__panel ac-recovery-data-panel">
-          <div className="ac-recovery-center__panel-head"><div className="ac-recovery-center__panel-title"><div className="ac-recovery-center__panel-title-row"><h2>Tampered incidents</h2><span>{visibleIncidents.length} of {incidents.length}</span></div><p>Select eligible open incidents for multi-recovery. Resolved records stay visible as tamper history; completed outcomes are in Recovery history.</p></div><div className="ac-recovery-data-selection-note"><Icon name="shield" size={14} /> {stats.readyIncidents} ready to recover · {incidents.filter(item => String(item.status || '').toUpperCase() === 'RESOLVED').length} already processed</div></div>
+           <div className="ac-recovery-center__panel-head"><div className="ac-recovery-center__panel-title"><div className="ac-recovery-center__panel-title-row"><h2>Tampered incidents</h2><span>{visibleIncidents.length} of {incidents.length}</span></div><p>Select any incident for review, including resolved and recovered incidents. Open incidents can be recovered; closed incidents remain selectable so you can compare the original tampered data with the recovery result.</p></div><div className="ac-recovery-data-selection-note"><Icon name="shield" size={14} /> {stats.readyIncidents} ready to recover · {incidents.filter(isClosedIncident).length} available for review</div></div>
           {loading ? <div className="ac-recovery-empty ac-recovery-empty--loading"><Icon name="spinner" size={25} /> Loading tampered incidents...</div> : visibleIncidents.length === 0 ? <div className="ac-recovery-empty"><Icon name="inbox" size={25} /><strong>No tampered incidents found</strong><p>The backend returned no records for this workspace and filter.</p></div> : (
-            <div className="ac-recovery-table-wrap"><table className="ac-recovery-table ac-recovery-data-table"><thead><tr><th className="ac-recovery-checkbox-cell"><input type="checkbox" aria-label="Select all eligible incidents" checked={allVisibleSelected} onChange={toggleSelectAll} disabled={!visibleSelectableIds.length} /></th><th>Incident</th><th>Target log / resource</th><th>Detected</th><th>Integrity evidence</th><th>Status</th></tr></thead><tbody>
+            <div className="ac-recovery-table-wrap"><table className="ac-recovery-table ac-recovery-data-table"><thead><tr><th className="ac-recovery-checkbox-cell"><input type="checkbox" aria-label="Select all incidents matching current filters" checked={allVisibleSelected} onChange={toggleSelectAll} disabled={!visibleSelectableIds.length} /></th><th>Incident</th><th>Target log / resource</th><th>Detected</th><th>Integrity evidence</th><th>Status</th></tr></thead><tbody>
               {visibleIncidents.map(item => {
                 const request = requestByIncident.get(item.id);
                 const selectable = isSelectable(item);
@@ -948,7 +1087,7 @@ function RecoveryDataView({ selectedClient }) {
 
       {!!resultItems.length && <section className="ac-recovery-center__panel ac-recovery-results-panel"><div className="ac-recovery-center__panel-head"><div className="ac-recovery-center__panel-title"><div className="ac-recovery-center__panel-title-row"><h2>Latest recovery results</h2><span>{resultItems.filter(item => item.status === 'SUCCEEDED').length} succeeded · {resultItems.filter(item => item.status !== 'SUCCEEDED').length} other</span></div><p>Each item keeps the tampered data beside the recovery result for audit review.</p></div><button type="button" className="ac-btn-ghost-action" onClick={() => setResultItems([])}><Icon name="x" size={14} /> Clear results</button></div><div className="ac-recovery-results-list">{resultItems.map(item => <RecoveryResultCard key={`${item.incident?.id}-${item.request?.id || item.status}`} item={item} />)}</div></section>}
 
-      {previewOpen && <div className="ac-recovery-preview-overlay" role="presentation" onClick={closePreview}><section className="ac-recovery-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="recovery-preview-title" onClick={event => event.stopPropagation()}><header className="ac-recovery-preview-dialog__header"><div><span className="ac-recovery-eyebrow"><Icon name="eye" size={14} /> Backend preflight preview</span><h2 id="recovery-preview-title">Review recovery data</h2><p>{previewItems.length || (previewLoading ? '...' : 0)} incident{previewItems.length === 1 ? '' : 's'} · {readyPreviewCount} ready · {recoveredPreviewCount} recovered · {notActionablePreviewCount} not actionable</p></div><button type="button" className="ac-modal__close" onClick={closePreview} disabled={executing} aria-label="Close preview"><Icon name="x" size={18} /></button></header><div className="ac-recovery-preview-dialog__body">{previewLoading ? <div className="ac-recovery-empty ac-recovery-empty--loading"><Icon name="spinner" size={25} /> Running backend preflight...</div> : previewError ? <div className="ac-recovery-alert ac-recovery-alert--error" role="alert"><Icon name="alertTriangle" size={16} /><span>{previewError}</span></div> : previewItems.map(item => <RecoveryPreviewItem item={item} key={item.incident?.id || item.incident?.log_id} />)}</div><footer className="ac-recovery-preview-dialog__footer"><span><Icon name="checkCircle" size={13} /> Snapshot verified means the trusted data passed preflight; recovery is completed only after execution.</span><div><button type="button" className="ac-btn-ghost-action" onClick={closePreview} disabled={executing}>Close</button><button type="button" className="ac-btn-primary" onClick={() => setConfirmationOpen(true)} disabled={!readyPreviewCount || previewLoading || executing}><Icon name={executing ? 'spinner' : 'refresh'} size={15} /> Execute recovery ({readyPreviewCount})</button></div></footer></section></div>}
+      {previewOpen && <div className="ac-recovery-preview-overlay" role="presentation" onClick={closePreview}><section className="ac-recovery-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="recovery-preview-title" onClick={event => event.stopPropagation()}><header className="ac-recovery-preview-dialog__header"><div><span className="ac-recovery-eyebrow"><Icon name="eye" size={14} /> Backend preflight preview</span><h2 id="recovery-preview-title">Review recovery data</h2><p>{previewLoading ? `${previewItems.length} of ${previewTotal || '...'} incidents loaded` : `${previewItems.length} incident${previewItems.length === 1 ? '' : 's'}`} · {readyPreviewCount} ready · {recoveredPreviewCount} recovered · {notActionablePreviewCount} not actionable</p></div><button type="button" className="ac-modal__close" onClick={closePreview} disabled={executing} aria-label="Close preview"><Icon name="x" size={18} /></button></header><div className="ac-recovery-preview-dialog__body">{previewError ? <div className="ac-recovery-alert ac-recovery-alert--error" role="alert"><Icon name="alertTriangle" size={16} /><span>{previewError}</span></div> : <>{previewItems.map(item => <RecoveryPreviewItem item={item} key={item.incident?.id || item.incident?.log_id} />)}{previewLoading && <div className="ac-recovery-empty ac-recovery-empty--loading"><Icon name="spinner" size={25} /> Loading preview data ({previewItems.length} of {previewTotal})...</div>}</>}</div><footer className="ac-recovery-preview-dialog__footer"><span><Icon name="checkCircle" size={13} /> Snapshot verified means the trusted data passed preflight; recovery is completed only after execution.</span><div><button type="button" className="ac-btn-ghost-action" onClick={closePreview} disabled={executing}>Close</button><button type="button" className="ac-btn-primary" onClick={() => setConfirmationOpen(true)} disabled={!readyPreviewCount || previewLoading || executing}><Icon name={executing ? 'spinner' : 'refresh'} size={15} /> Execute recovery ({readyPreviewCount})</button></div></footer></section></div>}
 
       {eventDetail && <RecoveryEventDetail eventDetail={eventDetail} loading={eventDetailLoading} onClose={() => setEventDetail(null)} />}
 

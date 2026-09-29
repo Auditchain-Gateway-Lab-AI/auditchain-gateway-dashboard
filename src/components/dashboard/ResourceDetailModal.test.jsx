@@ -1,4 +1,5 @@
 import {
+  getIntegrityBadge,
   getSourceVerificationTitle,
   isLatestSourceEvent,
 } from './ResourceDetailModal';
@@ -30,5 +31,11 @@ describe('ResourceDetailModal source verification helpers', () => {
 
   test('supports API responses created before the new field existed', () => {
     expect(isLatestSourceEvent({ is_latest: true })).toBe(true);
+  });
+
+  test('normalizes audit-log verification badges to VALID or INVALID', () => {
+    expect(getIntegrityBadge('valid')).toEqual({ label: 'VALID', className: 'ac-status--valid' });
+    expect(getIntegrityBadge('pending')).toEqual({ label: 'INVALID', className: 'ac-status--invalid' });
+    expect(getIntegrityBadge('agent_matched')).toEqual({ label: 'INVALID', className: 'ac-status--invalid' });
   });
 });

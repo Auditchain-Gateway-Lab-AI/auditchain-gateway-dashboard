@@ -214,6 +214,7 @@ function AuditLogTable({
   rangeVerifyResult = null,
   setRangeVerifyResult,
   isVerifyRangeLoading = false,
+  verifyRangeProgress = null,
   selectedVerifyResult = null,
   setSelectedVerifyResult,
   onSelectResource,
@@ -460,6 +461,18 @@ function AuditLogTable({
   const draftToDate = fromDateInputValue(draftTo);
   const appliedRangeLabel = getRangeLabel(filterDateFrom, filterDateTo);
   const hasAppliedRange = Boolean(filterDateFrom && filterDateTo);
+  const verifyButtonLabel = React.useMemo(() => {
+    switch (verifyRangeProgress?.phase) {
+      case 'estimating':
+        return 'Checking Range...';
+      case 'verifying':
+        return 'Verifying...';
+      case 'preparing':
+        return 'Preparing...';
+      default:
+        return 'Verify Range';
+    }
+  }, [verifyRangeProgress]);
   const actionOptions = React.useMemo(() => ([
     { value: 'ALL', label: 'All Actions' },
     { value: 'INSERT', label: 'INSERT' },
@@ -751,7 +764,7 @@ function AuditLogTable({
                 onClick={handleVerifyRange}
               >
                 <Icon name={isVerifyRangeLoading ? 'spinner' : 'zap'} size={14} className={isVerifyRangeLoading ? 'ac-spin' : ''} />
-                {isVerifyRangeLoading ? 'Verifying...' : 'Verify Range'}
+                {isVerifyRangeLoading ? verifyButtonLabel : 'Verify Range'}
               </button>
             )}
             {filterDateFrom && filterDateTo && (
@@ -773,6 +786,15 @@ function AuditLogTable({
                 <Icon name="copy" size={14} />
                 Copy Results {copyState && `(${copyState})`}
               </button>
+            )}
+            {verifyRangeProgress?.message && (
+              <span
+                className={`ac-verify-range-progress ac-verify-range-progress--${verifyRangeProgress.phase}`}
+                role={verifyRangeProgress.phase === 'error' || verifyRangeProgress.phase === 'blocked' ? 'alert' : 'status'}
+                aria-live="polite"
+              >
+                {verifyRangeProgress.message}
+              </span>
             )}
           </div>
 
