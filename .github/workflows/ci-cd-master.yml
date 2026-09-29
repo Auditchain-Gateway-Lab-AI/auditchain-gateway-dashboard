@@ -1,0 +1,181 @@
+name: Dashboard CI/CD
+
+on:
+  pull_request:
+    branches:
+      - dev
+      - master
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy after checks (only runs when the selected ref is master)
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: dashboard-master-deploy
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: ghcr.io/auditchain-gateway-lab-ai/auditchain-gateway-dashboard
+  API_BASE_URL: ${{ vars.DASHBOARD_API_BASE_URL || 'http://localhost:8080/api' }}
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Test and production build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Run tests
+        env:
+          CI: true
+          REACT_APP_API_BASE_URL: ${{ env.API_BASE_URL }}
+        run: npm test -- --watchAll=false --passWithNoTests
+
+      - name: Build production bundle
+        env:
+          REACT_APP_API_BASE_URL: ${{ env.API_BASE_URL }}
+        run: npm run build
+
+  image:
+    name: Build Docker image
+    needs: quality
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Validate master deployment configuration
+        if: github.ref == 'refs/heads/master' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy))
+        env:
+          DASHBOARD_API_BASE_URL: ${{ vars.DASHBOARD_API_BASE_URL }}
+        run: |
+          set -euo pipefail
+          test -n "$DASHBOARD_API_BASE_URL" || {
+            echo "Repository variable DASHBOARD_API_BASE_URL is required for a master deployment."
+            exit 1
+          }
+
+      - name: Log in to GHCR
+        if: github.ref == 'refs/heads/master' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy))
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build image and publish on master
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          push: ${{ github.ref == 'refs/heads/master' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy)) }}
+          tags: |
+            ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:master
+          build-args: |
+            REACT_APP_API_BASE_URL=${{ env.API_BASE_URL }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy master image to Semeru
+    needs: image
+    if: github.ref == 'refs/heads/master' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy))
+    runs-on: [self-hosted, dashboard-dev]
+    timeout-minutes: 20
+    permissions:
+      packages: read
+
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull published image with retry
+        env:
+          IMAGE_TAG: sha-${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          pulled=false
+          for attempt in 1 2 3 4 5; do
+            if docker pull "$IMAGE_NAME:$IMAGE_TAG"; then
+              pulled=true
+              break
+            fi
+
+            echo "Image pull failed (attempt $attempt/5). Retrying..."
+            sleep $((attempt * 10))
+          done
+
+          if [ "$pulled" != true ]; then
+            echo "Unable to pull $IMAGE_NAME:$IMAGE_TAG"
+            exit 1
+          fi
+
+      - name: Replace dashboard container
+        env:
+          IMAGE_TAG: sha-${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          docker rm -f auditchain-dashboard 2>/dev/null || true
+          docker run -d \
+            --name auditchain-dashboard \
+            --restart always \
+            --label org.opencontainers.image.source="https://github.com/${GITHUB_REPOSITORY}" \
+            -p 3001:80 \
+            "$IMAGE_NAME:$IMAGE_TAG"
+
+      - name: Verify deployed container
+        run: |
+          set -euo pipefail
+
+          for attempt in 1 2 3 4 5 6; do
+            if docker inspect --format '{{.State.Running}}' auditchain-dashboard | grep -q '^true$'; then
+              break
+            fi
+
+            if [ "$attempt" -eq 6 ]; then
+              docker logs auditchain-dashboard || true
+              exit 1
+            fi
+
+            sleep 5
+          done
+
+          if command -v curl >/dev/null 2>&1; then
+            curl --fail --silent --show-error --retry 5 --retry-delay 2 http://127.0.0.1:3001/ >/dev/null
+          fi
+
+          docker ps --filter name=auditchain-dashboard
