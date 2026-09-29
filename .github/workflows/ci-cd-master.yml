@@ -161,21 +161,24 @@ jobs:
         run: |
           set -euo pipefail
 
-          for attempt in 1 2 3 4 5 6; do
-            if docker inspect --format '{{.State.Running}}' auditchain-dashboard | grep -q '^true$'; then
-              break
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            running="$(docker inspect --format '{{.State.Running}}' auditchain-dashboard 2>/dev/null || true)"
+
+            if [ "$running" = true ] && curl --noproxy '*' \
+              --fail --silent --show-error \
+              --connect-timeout 5 --max-time 10 \
+              http://127.0.0.1:3001/ >/dev/null; then
+              docker ps --filter name=auditchain-dashboard
+              exit 0
             fi
 
-            if [ "$attempt" -eq 6 ]; then
-              docker logs auditchain-dashboard || true
-              exit 1
-            fi
-
+            echo "Dashboard is not ready yet (attempt $attempt/12)."
             sleep 5
           done
 
-          if command -v curl >/dev/null 2>&1; then
-            curl --fail --silent --show-error --retry 5 --retry-delay 2 http://127.0.0.1:3001/ >/dev/null
-          fi
-
-          docker ps --filter name=auditchain-dashboard
+          echo "Dashboard health check failed. Container diagnostics:"
+          docker ps -a --filter name=auditchain-dashboard || true
+          docker inspect auditchain-dashboard || true
+          docker logs --tail 100 auditchain-dashboard || true
+          docker exec auditchain-dashboard nginx -t || true
+          exit 1
