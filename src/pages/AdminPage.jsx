@@ -4,9 +4,11 @@ import api from '../api';
 import Icon from '../components/common/Icon';
 import AppearanceMenu from '../components/common/AppearanceMenu';
 import DBEngineBadge from '../components/common/DBEngineBadge';
+import ClientDetailDrawer from '../components/admin/ClientDetailDrawer';
 import { parseJwt, formatTimestamp } from '../utils/formatters';
 
-const ADMIN_TABS = ['overview', 'clients', 'client-users', 'users', 'kafka', 'profile'];
+const ADMIN_TABS = ['overview', 'clients', 'users', 'profile'];
+const LEGACY_CLIENT_TABS = ['client-users', 'kafka'];
 
 const isSameJSON = (a, b) => {
   try {
@@ -15,11 +17,6 @@ const isSameJSON = (a, b) => {
     return false;
   }
 };
-
-const splitListValue = (value = '') => String(value || '')
-  .split(',')
-  .map(item => item.trim())
-  .filter(Boolean);
 
 const getLatestUserActivity = (users = []) => {
   const latest = users.reduce((currentLatest, user) => {
@@ -43,7 +40,9 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
-  const activeTab = ADMIN_TABS.includes(tabParam) ? tabParam : 'overview';
+  const activeTab = LEGACY_CLIENT_TABS.includes(tabParam)
+    ? 'clients'
+    : ADMIN_TABS.includes(tabParam) ? tabParam : 'overview';
   const [clients, setClients] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
   const [kafkaConfigs, setKafkaConfigs] = useState([]);
@@ -67,7 +66,6 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
 
   // Modal states
   const [showClientModal, setShowClientModal] = useState(false);
-  const [showKafkaModal, setShowKafkaModal] = useState(false);
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [newApiKey, setNewApiKey] = useState('');
   const [apiKeyCopied, setApiKeyCopied] = useState(false);
@@ -136,21 +134,16 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
 
   // CDC client users state
   const [cdcClientUsers, setCdcClientUsers] = useState([]);
-  const [clientCdcDetails, setClientCdcDetails] = useState({});
   const [cdcActionError, setCdcActionError] = useState('');
-  const [userTableModalClient, setUserTableModalClient] = useState(null);
-  const [userTableLoading, setUserTableLoading] = useState(false);
-  const [userTableSaving, setUserTableSaving] = useState(false);
-  const [userTableNotice, setUserTableNotice] = useState(null);
-  const [userTableForm, setUserTableForm] = useState({
-    user_table_name: '',
-    user_column_name: '',
-  });
-  const [watchedTablesClient, setWatchedTablesClient] = useState(null);
-  const [watchedTablesClosing, setWatchedTablesClosing] = useState(false);
-  const [watchedTablesLoading, setWatchedTablesLoading] = useState(false);
-  const [watchedTableSearch, setWatchedTableSearch] = useState('');
-  const watchedTablesCloseTimerRef = useRef(null);
+  const [selectedRegistryClient, setSelectedRegistryClient] = useState(null);
+  const [selectedClientDetail, setSelectedClientDetail] = useState(null);
+  const [clientDetailLoading, setClientDetailLoading] = useState(false);
+  const [clientDetailError, setClientDetailError] = useState('');
+  const [clientDrawerTab, setClientDrawerTab] = useState('overview');
+  const [clientDrawerClosing, setClientDrawerClosing] = useState(false);
+  const clientDrawerCloseTimerRef = useRef(null);
+  const clientDrawerTriggerRef = useRef(null);
+  const clientDetailRequestRef = useRef(0);
 
   // Manage client users state
   const [manageUsersClient, setManageUsersClient] = useState(null);
@@ -182,12 +175,7 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
   // Client form state
   const [clientForm, setClientForm] = useState({
     company_name: '', subscription_tier: 'basic', rate_limit_per_sec: 50,
-    status: 'active', actor_field: 'actor', fallback_actor_field: '',
-  });
-
-  // Kafka form state
-  const [kafkaForm, setKafkaForm] = useState({
-    client_id: '', kafka_brokers: '', topic_prefix: '', pk_field: 'ID',
+    status: 'active',
   });
 
   const clientInfo = useMemo(() => parseJwt(authToken), [authToken]);
@@ -209,11 +197,17 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
 
     return () => {
       isMountedRef.current = false;
-      if (watchedTablesCloseTimerRef.current) {
-        clearTimeout(watchedTablesCloseTimerRef.current);
+      if (clientDrawerCloseTimerRef.current) {
+        clearTimeout(clientDrawerCloseTimerRef.current);
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (LEGACY_CLIENT_TABS.includes(tabParam)) {
+      setSearchParams({ tab: 'clients' }, { replace: true });
+    }
+  }, [tabParam, setSearchParams]);
 
   useEffect(() => {
     localStorage.setItem('auditchain_admin_sidebar_collapsed', sidebarCollapsed ? 'true' : 'false');
@@ -250,19 +244,9 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
     return map;
   }, [cdcClientUsers]);
 
-  const cdcStats = useMemo(() => {
-    const totalUsers = cdcClientUsers.reduce((sum, item) => sum + (item.users?.length || 0), 0);
-    const activeSources = cdcClientUsers.filter(item => (item.users?.length || 0) > 0).length;
-    const monitoredTables = Object.values(clientCdcDetails).reduce((sum, detail) => (
-      sum + splitListValue(detail?.agent_config?.db_tables).length
-    ), 0);
-    return {
-      totalUsers,
-      activeSources,
-      configuredClients: cdcClientUsers.length,
-      monitoredTables,
-    };
-  }, [cdcClientUsers, clientCdcDetails]);
+  const cdcRegistryStats = useMemo(() => ({
+    activeSources: cdcClientUsers.filter(item => (item.users?.length || 0) > 0).length,
+  }), [cdcClientUsers]);
 
   const overviewData = useMemo(() => {
     const configuredClientIds = new Set(kafkaConfigs.map(config => config.client_id));
@@ -317,16 +301,6 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
       kicker: 'Tenant Operations',
       title: 'Client Registry',
       subtitle: 'Register, activate, and manage all client systems connected to the AuditChain Gateway.'
-    },
-    'client-users': {
-      kicker: 'Client Identity Feed',
-      title: 'Client Users CDC',
-      subtitle: 'Review users discovered from client databases and configure the user table watched by the remote agent.'
-    },
-    kafka: {
-      kicker: 'Stream Operations',
-      title: 'Kafka Configuration',
-      subtitle: 'Manage real-time ingestion streams, broker mapping, and source system connectivity per client.'
     },
     users: {
       kicker: 'Access Control',
@@ -403,6 +377,62 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
     }
   }, [onLogout]);
 
+  const fetchClientDetail = useCallback(async (clientId, { silent = false } = {}) => {
+    const requestId = ++clientDetailRequestRef.current;
+    if (!silent) setClientDetailLoading(true);
+    setClientDetailError('');
+    try {
+      const response = await api.get(`/admin/clients/${clientId}/detail`);
+      if (requestId === clientDetailRequestRef.current && isMountedRef.current) {
+        setSelectedClientDetail(response.data || {});
+      }
+      return response.data || {};
+    } catch (err) {
+      if (requestId === clientDetailRequestRef.current && isMountedRef.current) {
+        setClientDetailError(err.response?.data?.error || 'Failed to load the latest client detail.');
+      }
+      throw err;
+    } finally {
+      if (!silent && requestId === clientDetailRequestRef.current && isMountedRef.current) {
+        setClientDetailLoading(false);
+      }
+    }
+  }, []);
+
+  const handleOpenClientDrawer = useCallback((client) => {
+    if (clientDrawerCloseTimerRef.current) {
+      clearTimeout(clientDrawerCloseTimerRef.current);
+      clientDrawerCloseTimerRef.current = null;
+    }
+    clientDrawerTriggerRef.current = document.activeElement;
+    setSelectedRegistryClient(client);
+    setSelectedClientDetail(null);
+    setClientDrawerTab('overview');
+    setClientDrawerClosing(false);
+    fetchClientDetail(client.id).catch(() => {});
+  }, [fetchClientDetail]);
+
+  const handleCloseClientDrawer = useCallback(() => {
+    if (!selectedRegistryClient || clientDrawerClosing) return;
+    setClientDrawerClosing(true);
+    clientDetailRequestRef.current += 1;
+    clientDrawerCloseTimerRef.current = setTimeout(() => {
+      setSelectedRegistryClient(null);
+      setSelectedClientDetail(null);
+      setClientDetailError('');
+      setClientDrawerClosing(false);
+      clientDrawerCloseTimerRef.current = null;
+      clientDrawerTriggerRef.current?.focus?.();
+    }, 260);
+  }, [selectedRegistryClient, clientDrawerClosing]);
+
+  const refreshSelectedClient = useCallback(async (clientId) => {
+    await Promise.allSettled([
+      fetchData(),
+      fetchClientDetail(clientId, { silent: true }),
+    ]);
+  }, [fetchData, fetchClientDetail]);
+
   useEffect(() => {
     fetchData();
     const intervalId = setInterval(fetchData, 5000);
@@ -418,35 +448,42 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
   }, [fetchData]);
 
   useEffect(() => {
-    if (activeTab !== 'client-users' || clients.length === 0) {
-      if (activeTab !== 'client-users') setClientCdcDetails({});
-      return;
-    }
-
-    let cancelled = false;
-
-    Promise.allSettled(
-      clients.map(client => api.get(`/admin/clients/${client.id}/detail`))
-    ).then(results => {
-      if (cancelled) return;
-
-      const nextDetails = {};
-      results.forEach((result, index) => {
-        const client = clients[index];
-        if (!client) return;
-        if (result.status === 'fulfilled') {
-          nextDetails[client.id] = result.value.data || {};
-        }
-      });
-      setClientCdcDetails(prev => isSameJSON(prev, nextDetails) ? prev : nextDetails);
-    }).catch(err => {
-      if (!cancelled) console.error('Failed to load client CDC details:', err);
-    });
-
+    if (!selectedRegistryClient) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     return () => {
-      cancelled = true;
+      document.body.style.overflow = previousOverflow;
     };
-  }, [activeTab, clients]);
+  }, [selectedRegistryClient]);
+
+  useEffect(() => {
+    if (!selectedRegistryClient) return;
+    const latestClient = clients.find(client => client.id === selectedRegistryClient.id);
+    if (latestClient && !isSameJSON(latestClient, selectedRegistryClient)) {
+      setSelectedRegistryClient(latestClient);
+    } else if (!latestClient) {
+      handleCloseClientDrawer();
+    }
+  }, [clients, selectedRegistryClient, handleCloseClientDrawer]);
+
+  useEffect(() => {
+    const handleLayeredEscape = event => {
+      if (event.key !== 'Escape') return;
+      if (showAgentModal) {
+        setShowAgentModal(false);
+      } else if (manageUsersClient) {
+        setManageUsersClient(null);
+      }
+    };
+    document.addEventListener('keydown', handleLayeredEscape);
+    return () => document.removeEventListener('keydown', handleLayeredEscape);
+  }, [showAgentModal, manageUsersClient]);
+
+  useEffect(() => {
+    if (activeTab !== 'clients' && selectedRegistryClient) {
+      handleCloseClientDrawer();
+    }
+  }, [activeTab, selectedRegistryClient, handleCloseClientDrawer]);
 
   useEffect(() => {
     if (activeTab !== 'profile') return;
@@ -529,12 +566,12 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
     }
     try {
       await api.patch(`/admin/clients/${client.id}/toggle`);
-      fetchData();
+      await refreshSelectedClient(client.id);
     } catch (err) {
       console.error("Failed to update client status:", err);
       alert(err.response?.data?.error || "Failed to update client status.");
     }
-  }, [fetchData]);
+  }, [refreshSelectedClient]);
 
   const handleDeleteClient = useCallback(async (client) => {
     if (!window.confirm(`Are you sure you want to permanently delete the client "${client.company_name}"? All associated users will also lose access.`)) {
@@ -542,12 +579,13 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
     }
     try {
       await api.delete(`/admin/clients/${client.id}`);
-      fetchData();
+      handleCloseClientDrawer();
+      await fetchData();
     } catch (err) {
       console.error("Failed to delete client:", err);
       alert(err.response?.data?.error || "Failed to delete client.");
     }
-  }, [fetchData]);
+  }, [fetchData, handleCloseClientDrawer]);
 
   const fetchClientUsers = useCallback(async (clientId) => {
     try {
@@ -677,16 +715,14 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
     try {
       const response = await api.post('/admin/clients', {
         company_name: clientForm.company_name,
-        status: clientForm.status,
-        actor_field: clientForm.actor_field,
-        fallback_actor_field: clientForm.fallback_actor_field
+        status: clientForm.status
       });
       setNewApiKey(response.data.api_key);
       setShowClientModal(false);
       setShowApiKeyModal(true);
       setClientForm({
         company_name: '', subscription_tier: 'basic', rate_limit_per_sec: 50,
-        status: 'active', actor_field: 'actor', fallback_actor_field: '',
+        status: 'active',
       });
       fetchData();
     } catch (err) {
@@ -694,33 +730,34 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
     }
   }, [clientForm, fetchData]);
 
-  const handleSubmitKafka = useCallback(async (e) => {
-    e.preventDefault();
+  const handleCreateKafka = useCallback(async (clientId, form) => {
     try {
       await api.post('/admin/kafka-config', {
-        client_id: kafkaForm.client_id,
-        kafka_brokers: kafkaForm.kafka_brokers,
-        topic_prefix: kafkaForm.topic_prefix,
+        client_id: clientId,
+        kafka_brokers: form.kafka_brokers,
+        topic_prefix: form.topic_prefix,
         source_system: 'Auto-Sync', // Backend akan override dengan Company Name
-        pk_field: kafkaForm.pk_field,
+        pk_field: form.pk_field,
         actor_field: '', // Tidak dipakai lagi
       });
-      setShowKafkaModal(false);
-      setKafkaForm({ client_id: '', kafka_brokers: '', topic_prefix: '', pk_field: 'ID' });
-      fetchData();
+      await refreshSelectedClient(clientId);
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to save Kafka configuration');
+      throw new Error(err.response?.data?.error || 'Failed to save Kafka configuration');
     }
-  }, [kafkaForm, fetchData]);
+  }, [refreshSelectedClient]);
 
   const handleToggleKafka = useCallback(async (configId) => {
     try {
       await api.patch(`/admin/kafka-config/${configId}/toggle`);
-      fetchData();
+      if (selectedRegistryClient) {
+        await refreshSelectedClient(selectedRegistryClient.id);
+      } else {
+        await fetchData();
+      }
     } catch (err) {
       alert(err.response?.data?.error || 'Failed to update Kafka configuration status');
     }
-  }, [fetchData]);
+  }, [fetchData, refreshSelectedClient, selectedRegistryClient]);
 
   const handleCopyApiKey = useCallback(() => {
     const fallbackCopy = () => {
@@ -799,13 +836,14 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
       });
       setAgentActionSuccess(res.data.message || "Agent configuration saved successfully!");
       fetchAgentConfig(selectedAgentClient.id);
+      refreshSelectedClient(selectedAgentClient.id);
     } catch (err) {
       console.error("Failed to save agent config:", err);
       setAgentActionError(err.response?.data?.error || "Failed to save Agent configuration.");
     } finally {
       setAgentActionLoading(false);
     }
-  }, [selectedAgentClient, agentForm, fetchAgentConfig]);
+  }, [selectedAgentClient, agentForm, fetchAgentConfig, refreshSelectedClient]);
 
   const handleDeleteAgentConfig = useCallback(async () => {
     if (!selectedAgentClient) return;
@@ -821,13 +859,14 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
       setAgentConfig(null);
       setAgentPingResult(null);
       setAgentForm({ agent_url: '', verify_token: '', timeout_seconds: 5 });
+      refreshSelectedClient(selectedAgentClient.id);
     } catch (err) {
       console.error("Failed to delete agent config:", err);
       setAgentActionError(err.response?.data?.error || "Failed to delete Agent configuration.");
     } finally {
       setAgentActionLoading(false);
     }
-  }, [selectedAgentClient]);
+  }, [selectedAgentClient, refreshSelectedClient]);
 
   const handlePingAgent = useCallback(async () => {
     if (!selectedAgentClient) return;
@@ -851,127 +890,23 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
     }
   }, [selectedAgentClient]);
 
-  const handleOpenUserTableConfig = useCallback(async (client) => {
-    setUserTableModalClient(client);
-    setUserTableNotice(null);
-    setCdcActionError('');
-    setUserTableForm({
-      user_table_name: '',
-      user_column_name: '',
-    });
-
-    try {
-      setUserTableLoading(true);
-      const res = await api.get(`/admin/clients/${client.id}/detail`);
-      setClientCdcDetails(prev => ({
-        ...prev,
-        [client.id]: res.data || {},
-      }));
-      const cfg = res.data?.agent_config || {};
-      setUserTableForm({
-        user_table_name: cfg.user_table_name || '',
-        user_column_name: cfg.user_column_name || '',
-      });
-      if (!cfg.agent_url) {
-        setUserTableNotice({
-          tone: 'warning',
-          message: 'Agent config belum terdeteksi untuk client ini. Simpan tetap bisa dicoba setelah agent/telemetry tersedia.',
-        });
-      }
-    } catch (err) {
-      console.error("Failed to load user table config:", err);
-      setUserTableNotice({
-        tone: 'warning',
-        message: err.response?.data?.error || 'Existing user table config could not be loaded. You can still fill it manually.',
-      });
-    } finally {
-      setUserTableLoading(false);
-    }
-  }, []);
-
-  const handleOpenWatchedTables = useCallback(async (client) => {
-    if (watchedTablesCloseTimerRef.current) {
-      clearTimeout(watchedTablesCloseTimerRef.current);
-      watchedTablesCloseTimerRef.current = null;
-    }
-    setWatchedTablesClosing(false);
-    setWatchedTablesClient(client);
-    setWatchedTableSearch('');
-
-    try {
-      setWatchedTablesLoading(true);
-      const res = await api.get(`/admin/clients/${client.id}/detail`);
-      setClientCdcDetails(prev => ({
-        ...prev,
-        [client.id]: res.data || {},
-      }));
-    } catch (err) {
-      console.error("Failed to load watched tables:", err);
-      setCdcActionError(err.response?.data?.error || 'Failed to load watched table details.');
-    } finally {
-      setWatchedTablesLoading(false);
-    }
-  }, []);
-
-  const handleCloseWatchedTables = useCallback((afterClose) => {
-    if (watchedTablesCloseTimerRef.current) {
-      clearTimeout(watchedTablesCloseTimerRef.current);
-    }
-
-    if (!watchedTablesClient) {
-      if (afterClose) afterClose();
-      return;
-    }
-
-    setWatchedTablesClosing(true);
-    watchedTablesCloseTimerRef.current = setTimeout(() => {
-      setWatchedTablesClient(null);
-      setWatchedTablesClosing(false);
-      watchedTablesCloseTimerRef.current = null;
-      if (afterClose) afterClose();
-    }, 260);
-  }, [watchedTablesClient]);
-
-  const handleSubmitUserTableConfig = useCallback(async (e) => {
-    e.preventDefault();
-    if (!userTableModalClient) return;
-
-    try {
-      setUserTableSaving(true);
-      setUserTableNotice(null);
-      const res = await api.put(`/admin/clients/${userTableModalClient.id}/user-table-config`, {
-        user_table_name: userTableForm.user_table_name.trim(),
-        user_column_name: userTableForm.user_column_name.trim(),
-      });
-      const status = res.data?.status;
-      setUserTableNotice({
-        tone: status === 'success_full' ? 'success' : 'warning',
-        message: res.data?.message || 'User table configuration saved.',
-      });
-      fetchData();
-    } catch (err) {
-      console.error("Failed to save user table config:", err);
-      setUserTableNotice({
-        tone: 'error',
-        message: err.response?.data?.error || 'Failed to save user table configuration.',
-      });
-    } finally {
-      setUserTableSaving(false);
-    }
-  }, [fetchData, userTableForm, userTableModalClient]);
-
   const handleDeleteKafkaConfig = useCallback(async (configId, companyName) => {
     if (!window.confirm(`Are you sure you want to delete Kafka configuration for "${companyName || 'client'}"?`)) {
       return;
     }
     try {
       await api.delete(`/admin/kafka-config/${configId}`);
-      fetchData();
+      if (selectedRegistryClient) {
+        setSelectedClientDetail(detail => detail ? { ...detail, kafka_config: {} } : detail);
+        await fetchData();
+      } else {
+        await fetchData();
+      }
     } catch (err) {
       console.error("Failed to delete Kafka config:", err);
       alert(err.response?.data?.error || "Failed to delete Kafka configuration.");
     }
-  }, [fetchData]);
+  }, [fetchData, selectedRegistryClient]);
 
   const isMobileSidebar = typeof window !== 'undefined' && window.innerWidth <= 768;
   const isSidebarPreviewOpen = !isMobileSidebar && sidebarCollapsed && sidebarHoverOpen;
@@ -1084,23 +1019,6 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
             <span className="ac-sidebar__nav-label">User Management</span>
           </button>
 
-          <button
-            className={`ac-sidebar__nav-item${activeTab === 'client-users' ? ' ac-sidebar__nav-item--active' : ''}`}
-            onClick={() => { handleAdminTabChange('client-users'); setSidebarOpen(false); }}
-            title="Client Users CDC"
-          >
-            <Icon name="list" size={18} />
-            <span className="ac-sidebar__nav-label">Client Users CDC</span>
-          </button>
-
-          <button
-            className={`ac-sidebar__nav-item${activeTab === 'kafka' ? ' ac-sidebar__nav-item--active' : ''}`}
-            onClick={() => { handleAdminTabChange('kafka'); setSidebarOpen(false); }}
-            title="Kafka Configuration"
-          >
-            <Icon name="link" size={18} />
-            <span className="ac-sidebar__nav-label">Kafka Configuration</span>
-          </button>
           <div className="ac-sidebar__divider" />
           <button className="ac-sidebar__nav-item" onClick={() => navigate('/dashboard')} title="Auditor Dashboard">
             <Icon name="dashboard" size={18} />
@@ -1232,11 +1150,11 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                         <small>Create tenant and API key</small>
                       </span>
                     </button>
-                    <button onClick={() => setShowKafkaModal(true)}>
+                    <button onClick={() => handleAdminTabChange('clients')}>
                       <Icon name="link" size={19} />
                       <span>
                         <strong>Configure Stream</strong>
-                        <small>Configure Kafka ingestion</small>
+                        <small>Select a client in Registry</small>
                       </span>
                     </button>
                     <button onClick={() => handleAdminTabChange('users')}>
@@ -1341,250 +1259,41 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
 
           {/* ===== TAB: DAFTAR KLIEN ===== */}
           {activeTab === 'clients' && (
-            <section className="ac-card ac-admin-registry-card" style={{ animation: 'fadeIn 0.3s ease' }}>
-              <div className="ac-card__header ac-admin-registry-header">
-                <div className="ac-admin-registry-header__copy">
-                  <div className="ac-card__title">Client Registry</div>
-                  <div className="ac-admin-card-sub">All client companies and systems registered under the AuditChain Gateway</div>
-                </div>
-                <div className="ac-admin-registry-header__meta">
-                  <span className="ac-admin-mini-stat">
-                    <strong>{clientStats.active}</strong>
-                    Active
-                  </span>
-                  <span className="ac-admin-mini-stat ac-admin-mini-stat--soft">
-                    <strong>{clientStats.configured}</strong>
-                    Configured
-                  </span>
-                  {clientStats.pending > 0 && (
-                    <span className="ac-admin-mini-stat ac-admin-mini-stat--warning">
-                      <strong>{clientStats.pending}</strong>
-                      Pending
-                    </span>
-                  )}
-                </div>
-                <button className="ac-btn-primary ac-admin-register-btn" onClick={() => setShowClientModal(true)}>
-                  <Icon name="database" size={15} />
-                  Register Client
-                </button>
-              </div>
-              <div className="ac-table-wrap">
-                <table className="ac-table ac-admin-client-table">
-                  <thead>
-                    <tr>
-                      <th>Company Name</th>
-                      <th>Status</th>
-                      <th>DB Engine</th>
-
-                      <th>Field Mapping</th>
-                      <th>Registration Date</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {clients.length === 0 && (
-                      <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--color-outline)', padding: '32px 0' }}>No registered clients found.</td></tr>
-                    )}
-                    {clients.map(client => {
-                      const matchingKafka = kafkaConfigs.find(k => k.client_id === client.id);
-                      const dbEngine = client.db_engine || matchingKafka?.db_engine || matchingKafka?.source_system || '';
-
-                      return (
-                        <tr key={client.id}>
-                          <td>
-                            <div className="ac-admin-client-cell">
-                              <div className="ac-admin-client-cell__avatar">
-                                {client.company_name?.charAt(0)?.toUpperCase() || 'C'}
-                              </div>
-                              <div className="ac-admin-client-cell__content">
-                                <div className="ac-admin-client-cell__name">{client.company_name}</div>
-                                <div className="ac-admin-client-cell__id">{client.id}</div>
-                              </div>
-                            </div>
-                            {matchingKafka && (
-                              <div className="ac-admin-client-meta">
-                                <span className="ac-admin-client-meta__source">{matchingKafka.source_system}</span>
-                                <code className="ac-code-chip ac-code-chip--xs">{matchingKafka.kafka_brokers}</code>
-                              </div>
-                            )}
-                          </td>
-                          <td>
-                            <span className={`ac-dot-status${client.status === 'active' ? ' ac-dot-status--active' : client.status === 'pending_setup' ? ' ac-dot-status--pending' : ' ac-dot-status--inactive'}`}>
-                              {client.status === 'active' ? 'Active' : client.status === 'pending_setup' ? 'Pending Setup 🟡' : 'Inactive'}
-                            </span>
-                          </td>
-                          <td>
-                            <DBEngineBadge engine={dbEngine} />
-                          </td>
-                          <td>
-                            <div className="ac-field-map">
-                              <div className="ac-field-map__item"><span className="ac-field-map__key">actor</span> {client.actor_field || '—'}</div>
-                              {client.fallback_actor_field && (
-                                <div className="ac-field-map__item"><span className="ac-field-map__key">fallback</span> {client.fallback_actor_field}</div>
-                              )}
-                            </div>
-                          </td>
-                          <td className="ac-table__time">{formatTimestamp(client.created_at)}</td>
-                          <td className="ac-admin-actions-cell">
-                            <div className="ac-admin-action-group">
-                              <button
-                                className={`ac-admin-action-btn ac-admin-action-btn--icon ${client.status === 'active' ? 'ac-admin-action-btn--warning' : 'ac-admin-action-btn--success'}`}
-                                onClick={() => handleToggleClientStatus(client)}
-                                title={client.status === 'active' ? 'Block client access' : 'Activate client access'}
-                              >
-                                <Icon name={client.status === 'active' ? 'lock' : 'shield'} size={14} />
-                              </button>
-                              <button
-                                className="ac-admin-action-btn ac-admin-action-btn--agent ac-admin-action-btn--icon"
-                                onClick={() => handleOpenAgentModal(client)}
-                                title="Configure local Agent"
-                              >
-                                <Icon name="link" size={14} />
-                              </button>
-                              <button
-                                className="ac-admin-action-btn ac-admin-action-btn--neutral ac-admin-action-btn--icon"
-                                onClick={() => handleOpenUserTableConfig(client)}
-                                title="Configure client user source table"
-                              >
-                                <Icon name="database" size={14} />
-                              </button>
-                              <button
-                                className="ac-admin-action-btn ac-admin-action-btn--primary ac-admin-action-btn--icon"
-                                onClick={() => handleManageUsers(client)}
-                                title="Manage client users"
-                              >
-                                <Icon name="user" size={14} />
-                              </button>
-                              <button
-                                className="ac-admin-action-btn ac-admin-action-btn--danger ac-admin-action-btn--icon"
-                                onClick={() => handleDeleteClient(client)}
-                                title="Delete client"
-                              >
-                                <Icon name="x" size={14} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
-
-
-          {activeTab === 'client-users' && (
-            <section className="ac-admin-cdc-page" style={{ animation: 'fadeIn 0.3s ease' }}>
-              <div className="ac-admin-cdc-summary">
-                <div className="ac-admin-overview-stat">
-                  <span className="ac-admin-overview-stat__icon ac-admin-overview-stat__icon--teal">
-                    <Icon name="user" size={20} />
-                  </span>
-                  <div>
-                    <div className="ac-admin-overview-stat__label">Discovered Users</div>
-                    <div className="ac-admin-overview-stat__value">{cdcStats.totalUsers}</div>
-                    <div className="ac-admin-overview-stat__sub">Users captured from client-side CDC</div>
-                  </div>
-                </div>
-                <div className="ac-admin-overview-stat">
-                  <span className="ac-admin-overview-stat__icon ac-admin-overview-stat__icon--blue">
-                    <Icon name="database" size={20} />
-                  </span>
-                  <div>
-                    <div className="ac-admin-overview-stat__label">Clients With Users</div>
-                    <div className="ac-admin-overview-stat__value">{cdcStats.activeSources}</div>
-                    <div className="ac-admin-overview-stat__sub">Sources returning user records</div>
-                  </div>
-                </div>
-                <div className="ac-admin-overview-stat">
-                  <span className="ac-admin-overview-stat__icon ac-admin-overview-stat__icon--amber">
-                    <Icon name="link" size={20} />
-                  </span>
-                  <div>
-                    <div className="ac-admin-overview-stat__label">Watched Tables</div>
-                    <div className="ac-admin-overview-stat__value">{cdcStats.monitoredTables}</div>
-                    <div className="ac-admin-overview-stat__sub">Tables listed by client agent configs</div>
-                  </div>
-                </div>
-              </div>
-
-              {cdcActionError && (
-                <div className="ac-admin-inline-alert">
-                  <Icon name="warn" size={15} />
-                  {cdcActionError}
-                </div>
-              )}
-
-              <section className="ac-card ac-admin-registry-card">
+            <>
+              {cdcActionError && <div className="ac-admin-inline-alert"><Icon name="warn" size={15} />{cdcActionError}</div>}
+              <section className="ac-card ac-admin-registry-card" style={{ animation: 'fadeIn 0.3s ease' }}>
                 <div className="ac-card__header ac-admin-registry-header">
                   <div className="ac-admin-registry-header__copy">
-                    <div className="ac-card__title">Client Database Users</div>
-                    <div className="ac-admin-card-sub">Data from <code>GET /api/admin/client-cdc-users</code>. Configure the watched table when a client has no detected users yet.</div>
+                    <div className="ac-card__title">Client Registry</div>
+                    <div className="ac-admin-card-sub">Client access, CDC identity, and Kafka readiness in one workspace</div>
                   </div>
-                  <button className="ac-btn-ghost-action" onClick={fetchData}>
-                    <Icon name="history" size={15} />
-                    Refresh
-                  </button>
+                  <div className="ac-admin-registry-header__meta">
+                    <span className="ac-admin-mini-stat"><strong>{clientStats.active}</strong>Active</span>
+                    <span className="ac-admin-mini-stat ac-admin-mini-stat--soft"><strong>{clientStats.configured}</strong>Kafka</span>
+                    <span className="ac-admin-mini-stat ac-admin-mini-stat--soft"><strong>{cdcRegistryStats.activeSources}</strong>With CDC Users</span>
+                    {clientStats.pending > 0 && <span className="ac-admin-mini-stat ac-admin-mini-stat--warning"><strong>{clientStats.pending}</strong>Pending</span>}
+                  </div>
+                  <button className="ac-btn-primary ac-admin-register-btn" onClick={() => setShowClientModal(true)}><Icon name="database" size={15} />Register Client</button>
                 </div>
                 <div className="ac-table-wrap">
-                  <table className="ac-table ac-admin-cdc-table">
-                    <thead>
-                      <tr>
-                        <th>Client</th>
-                        <th>Detected Users</th>
-                        <th>Latest Activity</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
+                  <table className="ac-table ac-admin-client-table ac-admin-client-table--unified">
+                    <thead><tr><th>Client</th><th>Client Status</th><th>Database</th><th>CDC Users</th><th>Kafka</th><th>Registration Date</th><th>Detail</th></tr></thead>
                     <tbody>
-                      {clients.length === 0 && (
-                        <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--color-outline)', padding: '32px 0' }}>No registered clients found.</td></tr>
-                      )}
+                      {clients.length === 0 && <tr><td colSpan={7} className="ac-admin-table-empty">No registered clients found.</td></tr>}
                       {clients.map(client => {
-                        const cdcEntry = cdcUsersByClientId.get(client.id);
-                        const detectedUsers = cdcEntry?.users || [];
+                        const matchingKafka = kafkaConfigs.find(config => config.client_id === client.id);
+                        const detectedUsers = cdcUsersByClientId.get(client.id)?.users || [];
                         const latestSeen = getLatestUserActivity(detectedUsers);
-
+                        const dbEngine = client.db_engine || matchingKafka?.db_engine || '';
                         return (
-                          <tr key={client.id}>
-                            <td>
-                              <div className="ac-admin-client-cell">
-                                <div className="ac-admin-client-cell__avatar">
-                                  {client.company_name?.charAt(0)?.toUpperCase() || 'C'}
-                                </div>
-                                <div className="ac-admin-client-cell__content">
-                                  <div className="ac-admin-client-cell__name">{client.company_name}</div>
-                                  <div className="ac-admin-client-cell__id">{client.id}</div>
-                                </div>
-                              </div>
-                            </td>
-                            <td>
-                              <span className={`ac-cdc-count-badge${detectedUsers.length > 0 ? ' ac-cdc-count-badge--active' : ''}`}>
-                                {detectedUsers.length}
-                              </span>
-                            </td>
-                            <td className="ac-table__time">
-                              {latestSeen ? formatTimestamp(latestSeen) : 'No activity yet'}
-                            </td>
-                            <td className="ac-admin-actions-cell">
-                              <div className="ac-admin-action-group">
-                                <button
-                                  className="ac-admin-action-btn ac-admin-action-btn--neutral"
-                                  onClick={() => handleOpenWatchedTables(client)}
-                                >
-                                  <Icon name="list" size={14} />
-                                  <span>View Tables</span>
-                                </button>
-                                <button
-                                  className="ac-admin-action-btn ac-admin-action-btn--primary"
-                                  onClick={() => handleOpenUserTableConfig(client)}
-                                >
-                                  <Icon name="database" size={14} />
-                                  <span>Configure</span>
-                                </button>
-                              </div>
-                            </td>
+                          <tr key={client.id} className="ac-admin-client-row" tabIndex={0} onClick={() => handleOpenClientDrawer(client)} onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); handleOpenClientDrawer(client); } }} aria-label={`Open details for ${client.company_name}`}>
+                            <td><div className="ac-admin-client-cell"><div className="ac-admin-client-cell__avatar">{client.company_name?.charAt(0)?.toUpperCase() || 'C'}</div><div className="ac-admin-client-cell__content"><div className="ac-admin-client-cell__name">{client.company_name}</div><div className="ac-admin-client-cell__id">{client.id}</div></div></div></td>
+                            <td><span className={`ac-dot-status${client.status === 'active' ? ' ac-dot-status--active' : client.status === 'pending_setup' ? ' ac-dot-status--pending' : ' ac-dot-status--inactive'}`}>{client.status === 'active' ? 'Active' : client.status === 'pending_setup' ? 'Pending Setup' : 'Inactive'}</span></td>
+                            <td><div className="ac-admin-registry-stack"><DBEngineBadge engine={dbEngine} />{client.db_name && <small>{client.db_name}</small>}</div></td>
+                            <td><div className="ac-admin-registry-stack"><span className={`ac-cdc-count-badge${detectedUsers.length ? ' ac-cdc-count-badge--active' : ''}`}>{detectedUsers.length}</span><small>{latestSeen ? formatTimestamp(latestSeen) : 'No activity yet'}</small></div></td>
+                            <td><span className={`ac-client-readiness-badge${matchingKafka ? matchingKafka.is_active ? ' ac-client-readiness-badge--active' : ' ac-client-readiness-badge--inactive' : ''}`}>{matchingKafka ? matchingKafka.is_active ? 'Active' : 'Inactive' : 'Not configured'}</span></td>
+                            <td className="ac-table__time">{formatTimestamp(client.created_at)}</td>
+                            <td><button type="button" className="ac-admin-detail-button" onClick={event => { event.stopPropagation(); handleOpenClientDrawer(client); }}><span>Detail</span><Icon name="chevronRight" size={15} /></button></td>
                           </tr>
                         );
                       })}
@@ -1592,7 +1301,7 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                   </table>
                 </div>
               </section>
-            </section>
+            </>
           )}
 
 
@@ -1703,80 +1412,6 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
               </div>
             </section>
           )}
-
-
-
-          {/* ===== TAB: KONFIGURASI KAFKA ===== */}
-          {activeTab === 'kafka' && (
-            <section className="ac-card" style={{ animation: 'fadeIn 0.3s ease' }}>
-              <div className="ac-card__header">
-                <div>
-                  <div className="ac-card__title">Kafka Stream Configuration</div>
-                  <div className="ac-admin-card-sub">Kafka consumer configurations per client for real-time audit log ingestion</div>
-                </div>
-                <button className="ac-btn-primary" onClick={() => setShowKafkaModal(true)}>
-                  <Icon name="link" size={15} />
-                  Add Configuration
-                </button>
-              </div>
-              <div className="ac-table-wrap">
-                <table className="ac-table">
-                  <thead>
-                    <tr>
-                      <th>Client</th>
-                      <th>Kafka Brokers</th>
-                      <th>Topic Prefix</th>
-                      <th>Source System</th>
-                      <th>PK Field</th>
-                      <th>Status</th>
-                      <th style={{ textAlign: 'center' }}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {kafkaConfigs.length === 0 && (
-                      <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--color-outline)', padding: '32px 0' }}>No Kafka configurations found. Click "+ Add Configuration" to get started.</td></tr>
-                    )}
-                    {kafkaConfigs.map(cfg => (
-                      <tr key={cfg.id}>
-                        <td>
-                          <div style={{ fontWeight: 600 }}>{cfg.company_name}</div>
-                          <div style={{ fontSize: 11, color: 'var(--color-outline)', fontFamily: 'var(--font-mono)', marginTop: 2 }}>{cfg.client_id}</div>
-                        </td>
-                        <td><code className="ac-code-chip">{cfg.kafka_brokers}</code></td>
-                        <td><code className="ac-code-chip">{cfg.topic_prefix}</code></td>
-                        <td>{cfg.source_system}</td>
-                        <td><code className="ac-code-chip">{cfg.pk_field}</code></td>
-                        <td>
-                          <label className="ac-toggle-wrap" title={cfg.is_active ? 'Click to deactivate' : 'Click to activate'}>
-                            <input
-                              type="checkbox"
-                              checked={cfg.is_active}
-                              onChange={() => handleToggleKafka(cfg.id)}
-                              style={{ display: 'none' }}
-                            />
-                            <span className={`ac-toggle${cfg.is_active ? ' ac-toggle--on' : ''}`} />
-                            <span className={`ac-toggle-label${cfg.is_active ? ' ac-toggle-label--on' : ''}`}>
-                              {cfg.is_active ? 'Active' : 'Inactive'}
-                            </span>
-                          </label>
-                        </td>
-                        <td style={{ textAlign: 'center' }}>
-                          <button
-                            className="ac-btn-primary ac-btn-primary--danger"
-                            style={{ padding: '4px 10px', fontSize: '11px' }}
-                            onClick={() => handleDeleteKafkaConfig(cfg.id, cfg.company_name)}
-                          >
-                            Delete
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
-
           {activeTab === 'profile' && (
             <section className="ac-admin-profile-layout">
               <form className="ac-profile-card ac-profile-form" onSubmit={handleProfileSubmit}>
@@ -1947,35 +1582,9 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                   </div>
                 </section>
 
-                <section className="ac-form-section">
-                  <div className="ac-form-section__head">
-                    <div className="ac-form-section__icon ac-form-section__icon--teal">
-                      <Icon name="link" size={17} />
-                    </div>
-                    <div>
-                      <div className="ac-form-section__title">Audit Field Mapping</div>
-                      <div className="ac-form-section__subtitle">Map the primary source field used to identify the actor in audit logs.</div>
-                    </div>
-                  </div>
-                  <div className="ac-form-grid ac-form-grid--register">
-                    <div className="ac-form-field ac-form-field--wide">
-                      <label className="ac-form-label">Actor Field</label>
-                      <input className="ac-form-input ac-form-input--lg" placeholder="actor"
-                        value={clientForm.actor_field}
-                        onChange={e => setClientForm(f => ({ ...f, actor_field: e.target.value }))} />
-                    </div>
-                    <div className="ac-form-field">
-                      <label className="ac-form-label">Fallback Actor Field</label>
-                      <input className="ac-form-input ac-form-input--lg" placeholder="Optional, e.g. db_user"
-                        value={clientForm.fallback_actor_field}
-                        onChange={e => setClientForm(f => ({ ...f, fallback_actor_field: e.target.value }))} />
-                    </div>
-                  </div>
-                </section>
-
                 <div className="ac-register-form__note">
                   <Icon name="lock" size={15} />
-                  API key will be generated after registration and displayed once.
+                  API key will be generated after registration and displayed once. Configure audit actor mapping later from Actor Tracking.
                 </div>
 
                 <div className="ac-form-actions ac-register-form__actions">
@@ -2089,64 +1698,6 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                   I Have Copied - Close
                 </button>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ===== MODAL: TAMBAH KONFIGURASI KAFKA ===== */}
-      {showKafkaModal && (
-        <div className="ac-modal-overlay" onClick={() => setShowKafkaModal(false)}>
-          <div className="ac-modal ac-modal--sm" onClick={e => e.stopPropagation()}>
-            <div className="ac-modal__header">
-              <div className="ac-modal-title-lockup">
-                <span className="ac-modal__title-icon ac-modal__title-icon--teal">
-                  <Icon name="settings" size={18} />
-                </span>
-                <div>
-                  <div className="ac-modal__title">Add Kafka Configuration</div>
-                  <div className="ac-modal__subtitle">Establish a connection between the client and a Kafka stream for log ingestion</div>
-                </div>
-              </div>
-              <button className="ac-modal__close" onClick={() => setShowKafkaModal(false)} aria-label="Close Kafka configuration">
-                <Icon name="x" size={18} />
-              </button>
-            </div>
-            <div className="ac-modal__body">
-              <form onSubmit={handleSubmitKafka}>
-                <div className="ac-form-grid">
-                  <div className="ac-form-field" style={{ gridColumn: '1 / -1' }}>
-                    <label className="ac-form-label">Client <span style={{ color: 'var(--color-error)' }}>*</span></label>
-                    <select className="ac-form-input" required value={kafkaForm.client_id}
-                      onChange={e => setKafkaForm(f => ({ ...f, client_id: e.target.value }))}>
-                      <option value="">-- Select Client --</option>
-                      {clients.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
-                    </select>
-                  </div>
-                  <div className="ac-form-field">
-                    <label className="ac-form-label">Kafka Brokers <span style={{ color: 'var(--color-error)' }}>*</span></label>
-                    <input className="ac-form-input" required placeholder="192.168.1.1:9092"
-                      value={kafkaForm.kafka_brokers}
-                      onChange={e => setKafkaForm(f => ({ ...f, kafka_brokers: e.target.value }))} />
-                  </div>
-                  <div className="ac-form-field">
-                    <label className="ac-form-label">Topic Prefix <span style={{ color: 'var(--color-error)' }}>*</span></label>
-                    <input className="ac-form-input" required placeholder="cdc_simrs"
-                      value={kafkaForm.topic_prefix}
-                      onChange={e => setKafkaForm(f => ({ ...f, topic_prefix: e.target.value }))} />
-                  </div>
-                  <div className="ac-form-field">
-                    <label className="ac-form-label">PK Field</label>
-                    <input className="ac-form-input" placeholder="ID"
-                      value={kafkaForm.pk_field}
-                      onChange={e => setKafkaForm(f => ({ ...f, pk_field: e.target.value }))} />
-                  </div>
-                </div>
-                <div className="ac-form-actions">
-                  <button type="button" className="ac-btn-ghost-action" onClick={() => setShowKafkaModal(false)}>Cancel</button>
-                  <button type="submit" className="ac-btn-primary">Add Configuration</button>
-                </div>
-              </form>
             </div>
           </div>
         </div>
@@ -2282,7 +1833,7 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
 
       {/* ===== MODAL: KELOLA USER KLIEN ===== */}
       {manageUsersClient && (
-        <div className="ac-modal-overlay" onClick={() => setManageUsersClient(null)}>
+        <div className="ac-modal-overlay ac-modal-overlay--above-drawer" onClick={() => setManageUsersClient(null)}>
           <div className="ac-modal" style={{ maxWidth: '800px', width: '90%' }} onClick={e => e.stopPropagation()}>
             <div className="ac-modal__header">
               <div className="ac-modal-title-lockup">
@@ -2426,244 +1977,34 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
         </div>
       )}
 
-      {/* ===== DRAWER: WATCHED TABLES DETAIL ===== */}
-      {watchedTablesClient && (() => {
-        const cdcEntry = cdcUsersByClientId.get(watchedTablesClient.id);
-        const detectedUsers = cdcEntry?.users || [];
-        const detail = clientCdcDetails[watchedTablesClient.id] || {};
-        const agentCfg = detail.agent_config || {};
-        const watchedTables = splitListValue(agentCfg.db_tables);
-        const filteredTables = watchedTables.filter(table => (
-          table.toLowerCase().includes(watchedTableSearch.trim().toLowerCase())
-        ));
-        const sourceCounts = detectedUsers.reduce((acc, user) => {
-          const key = user.source_table || agentCfg.user_table_name || 'Unknown source';
-          acc[key] = (acc[key] || 0) + 1;
-          return acc;
-        }, {});
-
-        return (
-          <div
-            className={`ac-drawer-overlay${watchedTablesClosing ? ' ac-drawer-overlay--closing' : ''}`}
-            onClick={() => handleCloseWatchedTables()}
-          >
-            <aside
-              className={`ac-detail-drawer ac-admin-watched-drawer${watchedTablesClosing ? ' ac-detail-drawer--closing' : ''}`}
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="ac-modal__header" style={{ flexDirection: 'column', alignItems: 'stretch', padding: '0' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '20px 24px 14px' }}>
-                  <div>
-                    <div className="ac-modal__title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Icon name="database" size={18} />
-                      Watched Tables
-                    </div>
-                    <div className="ac-modal__subtitle">{watchedTablesClient.company_name}</div>
-                  </div>
-                  <button className="ac-modal__close" onClick={() => handleCloseWatchedTables()} aria-label="Close watched tables">
-                    <Icon name="x" size={18} />
-                  </button>
-                </div>
-              </div>
-
-              <div className="ac-modal__body ac-drawer-tab-content">
-                <div className="ac-watched-drawer-summary">
-                  <div>
-                    <span>Monitored Tables</span>
-                    <strong>{watchedTables.length}</strong>
-                  </div>
-                  <div>
-                    <span>Detected Users</span>
-                    <strong>{detectedUsers.length}</strong>
-                  </div>
-                  <div>
-                    <span>Connector</span>
-                    <strong>{agentCfg.connector_status || 'unknown'}</strong>
-                  </div>
-                </div>
-
-                <section className="ac-watched-drawer-section">
-                  <div className="ac-watched-drawer-section__head">
-                    <div>
-                      <h3>User Source</h3>
-                      <p>{agentCfg.db_engine || 'Unknown engine'} · {agentCfg.db_name || 'No database metadata'}</p>
-                    </div>
-                    <button
-                      type="button"
-                      className="ac-btn-ghost-action"
-                      onClick={() => {
-                        const client = watchedTablesClient;
-                        handleCloseWatchedTables(() => handleOpenUserTableConfig(client));
-                      }}
-                    >
-                      <Icon name="database" size={14} />
-                      Configure
-                    </button>
-                  </div>
-                  <div className="ac-watched-source-card">
-                    <span>Table</span>
-                    <code>{agentCfg.user_table_name || 'Not configured'}</code>
-                    <span>Column</span>
-                    <code>{agentCfg.user_column_name || 'Not configured'}</code>
-                  </div>
-                </section>
-
-                <section className="ac-watched-drawer-section">
-                  <div className="ac-watched-drawer-section__head">
-                    <div>
-                      <h3>All Monitored Tables</h3>
-                      <p>Tables listed in the client agent config from install/telemetry.</p>
-                    </div>
-                  </div>
-                  <label className="ac-watched-search">
-                    <Icon name="search" size={15} />
-                    <input
-                      value={watchedTableSearch}
-                      onChange={e => setWatchedTableSearch(e.target.value)}
-                      placeholder="Search table name..."
-                    />
-                  </label>
-
-                  {watchedTablesLoading ? (
-                    <div className="ac-profile-loading">
-                      <Icon name="spinner" size={18} />
-                      Loading watched tables...
-                    </div>
-                  ) : filteredTables.length > 0 ? (
-                    <div className="ac-watched-table-list">
-                      {filteredTables.map((table, index) => {
-                        const isUserSource = table === agentCfg.user_table_name;
-                        return (
-                          <div className={`ac-watched-table-row${isUserSource ? ' ac-watched-table-row--source' : ''}`} key={`${watchedTablesClient.id}-${table}-${index}`}>
-                            <span>{index + 1}</span>
-                            <code>{table}</code>
-                            {isUserSource && <em>User Source</em>}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="ac-admin-empty-state">
-                      {watchedTableSearch.trim() ? 'No table matched your search.' : 'No monitored table metadata yet.'}
-                    </div>
-                  )}
-                </section>
-
-                <section className="ac-watched-drawer-section">
-                  <div className="ac-watched-drawer-section__head">
-                    <div>
-                      <h3>Detected User Sources</h3>
-                      <p>Grouped from CDC user records when source table data is available.</p>
-                    </div>
-                  </div>
-                  {Object.keys(sourceCounts).length > 0 ? (
-                    <div className="ac-watched-source-list">
-                      {Object.entries(sourceCounts).map(([source, count]) => (
-                        <div key={`${watchedTablesClient.id}-${source}`}>
-                          <code>{source}</code>
-                          <strong>{count}</strong>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="ac-admin-empty-state">No detected users yet.</div>
-                  )}
-                </section>
-              </div>
-            </aside>
-          </div>
-        );
-      })()}
-
-      {/* ===== MODAL: USER TABLE CDC CONFIG ===== */}
-      {userTableModalClient && (
-        <div className="ac-modal-overlay" onClick={() => setUserTableModalClient(null)}>
-          <div className="ac-modal" style={{ maxWidth: '620px', width: '90%' }} onClick={e => e.stopPropagation()}>
-            <div className="ac-modal__header">
-              <div>
-                <div className="ac-modal__title">Client User Source: {userTableModalClient.company_name}</div>
-                <div className="ac-modal__subtitle">Point CDC to the table and column that identify users in the client database.</div>
-              </div>
-              <button className="ac-modal__close" onClick={() => setUserTableModalClient(null)} aria-label="Close user source">
-                <Icon name="x" size={18} />
-              </button>
-            </div>
-            <div className="ac-modal__body" style={{ padding: '20px 24px' }}>
-              {userTableNotice && (
-                <div className={`ac-cdc-config-notice ac-cdc-config-notice--${userTableNotice.tone}`}>
-                  {userTableNotice.message}
-                </div>
-              )}
-
-              {userTableLoading ? (
-                <div className="ac-profile-loading">
-                  <Icon name="spinner" size={18} />
-                  Loading user table config...
-                </div>
-              ) : (
-                <form onSubmit={handleSubmitUserTableConfig}>
-                  {(() => {
-                    const detail = clientCdcDetails[userTableModalClient.id] || {};
-                    const agentCfg = detail.agent_config || {};
-                    const watchedTables = splitListValue(agentCfg.db_tables);
-                    if (watchedTables.length === 0 && !agentCfg.db_name && !agentCfg.connector_status) return null;
-
-                    return (
-                      <div className="ac-cdc-config-context">
-                        <div>
-                          <strong>{agentCfg.db_engine || 'Unknown engine'}</strong>
-                          <span>{agentCfg.db_name || 'No database name'} · {agentCfg.connector_status || 'unknown connector'}</span>
-                        </div>
-                        {watchedTables.length > 0 && (
-                          <div className="ac-cdc-table-chips">
-                            {watchedTables.map(table => <code key={`${userTableModalClient.id}-modal-${table}`}>{table}</code>)}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-                  <div className="ac-form-grid">
-                    <label className="ac-form-field">
-                      <span className="ac-form-label">User Table Name</span>
-                      <input
-                        className="ac-form-input ac-form-input--lg"
-                        value={userTableForm.user_table_name}
-                        onChange={e => setUserTableForm(form => ({ ...form, user_table_name: e.target.value }))}
-                        placeholder="public.users or account"
-                        required
-                      />
-                    </label>
-                    <label className="ac-form-field">
-                      <span className="ac-form-label">User Column Name</span>
-                      <input
-                        className="ac-form-input ac-form-input--lg"
-                        value={userTableForm.user_column_name}
-                        onChange={e => setUserTableForm(form => ({ ...form, user_column_name: e.target.value }))}
-                        placeholder="username or email"
-                        required
-                      />
-                    </label>
-                  </div>
-                  <div className="ac-cdc-config-help">
-                    This saves locally first, then asks the remote client agent through VPN to include the user table in Debezium. Offline clients return a warning while keeping the local config.
-                  </div>
-                  <div className="ac-form-actions" style={{ marginTop: 20, justifyContent: 'flex-end' }}>
-                    <button type="button" className="ac-btn-ghost-action" onClick={() => setUserTableModalClient(null)}>Close</button>
-                    <button type="submit" className="ac-btn-primary" disabled={userTableSaving}>
-                      <Icon name={userTableSaving ? 'spinner' : 'checkmark'} size={15} />
-                      {userTableSaving ? 'Saving...' : 'Save User Source'}
-                    </button>
-                  </div>
-                </form>
-              )}
-            </div>
-          </div>
-        </div>
+      {/* ===== DRAWER: CLIENT REGISTRY DETAIL ===== */}
+      {selectedRegistryClient && (
+        <ClientDetailDrawer
+          client={selectedRegistryClient}
+          detail={selectedClientDetail}
+          cdcUsers={cdcUsersByClientId.get(selectedRegistryClient.id)?.users || []}
+          kafkaConfig={kafkaConfigs.find(config => config.client_id === selectedRegistryClient.id)}
+          activeTab={clientDrawerTab}
+          onTabChange={setClientDrawerTab}
+          loading={clientDetailLoading}
+          error={clientDetailError}
+          closing={clientDrawerClosing}
+          onClose={handleCloseClientDrawer}
+          onToggleClient={handleToggleClientStatus}
+          onConfigureAgent={handleOpenAgentModal}
+          onManageUsers={handleManageUsers}
+          onDeleteClient={handleDeleteClient}
+          onCreateKafka={form => handleCreateKafka(selectedRegistryClient.id, form)}
+          onToggleKafka={handleToggleKafka}
+          onDeleteKafka={handleDeleteKafkaConfig}
+          escapeDisabled={showAgentModal || Boolean(manageUsersClient)}
+        />
       )}
+
 
       {/* ===== MODAL: KONFIGURASI AGENT LAPIS 3 ===== */}
       {showAgentModal && selectedAgentClient && (
-        <div className="ac-modal-overlay" onClick={() => setShowAgentModal(false)}>
+        <div className="ac-modal-overlay ac-modal-overlay--above-drawer" onClick={() => setShowAgentModal(false)}>
           <div className="ac-modal" style={{ maxWidth: '650px', width: '90%' }} onClick={e => e.stopPropagation()}>
             <div className="ac-modal__header">
               <div className="ac-modal-title-lockup">
@@ -2681,8 +2022,6 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
             </div>
 
             <div className="ac-modal__body" style={{ padding: '20px 24px' }}>
-
-              {/* Status Bar */}
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -2717,7 +2056,6 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                 )}
               </div>
 
-              {/* Ping Result Banner */}
               {agentPingResult && (
                 <div style={{
                   padding: '12px 16px',
@@ -2741,7 +2079,6 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                 </div>
               )}
 
-              {/* Action Alerts */}
               {agentActionError && (
                 <div style={{ padding: '10px 14px', borderRadius: '6px', backgroundColor: 'rgba(186,26,26,0.1)', color: 'var(--color-error)', fontSize: '12px', fontWeight: 600, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Icon name="warn" size={14} />
@@ -2755,7 +2092,6 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                 </div>
               )}
 
-              {/* Agent Form */}
               {agentLoading ? (
                 <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--color-outline)' }}>Loading Agent configuration...</div>
               ) : (
@@ -2844,13 +2180,10 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                   )}
                 </>
               )}
-
             </div>
           </div>
         </div>
       )}
-
-
 
     </div>
   );

@@ -3,8 +3,6 @@ import { Link } from 'react-router-dom';
 
 function Navbar({
   t,
-  lang,
-  setLang,
   navLinks,
   handleNavClick,
   activeSection,
@@ -39,17 +37,8 @@ function Navbar({
           ))}
         </div>
 
-        {/* Right CTA Buttons + Lang Toggle */}
+        {/* Right CTA Buttons */}
         <div className="lp-nav-right">
-          <button
-            onClick={() => setLang(lang === 'id' ? 'en' : 'id')}
-            className="lp-nav-lang-btn"
-            title="Toggle Language"
-          >
-            <span className="material-symbols-outlined lp-icon-lg lp-icon-blue">language</span>
-            <span>{lang === 'id' ? 'EN' : 'ID'}</span>
-          </button>
-
           <Link to="/login" className="lp-nav-login-btn">
             {t.navLogin}
           </Link>
@@ -60,15 +49,10 @@ function Navbar({
           </a>
         </div>
 
-        {/* Mobile Right: Lang Toggle + Hamburger */}
+        {/* Mobile Right */}
         <div className="lp-nav-mobile-right">
           <button
-            onClick={() => setLang(lang === 'id' ? 'en' : 'id')}
-            className="lp-nav-mobile-lang"
-          >
-            {lang === 'id' ? 'EN' : 'ID'}
-          </button>
-          <button
+            type="button"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             className="lp-nav-hamburger"
             aria-label="Toggle menu"

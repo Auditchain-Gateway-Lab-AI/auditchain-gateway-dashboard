@@ -3,7 +3,7 @@ import React from 'react';
 // ================================================================
 // ICON — tiny inline SVG helpers (no external icon dep needed)
 // ================================================================
-const Icon = ({ name, size = 18, style = {} }) => {
+const Icon = ({ name, size = 18, style = {}, className = '' }) => {
   const icons = {
     shield: (
       <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" fill="currentColor" />
@@ -66,6 +66,12 @@ const Icon = ({ name, size = 18, style = {} }) => {
         <path d="M12 7v5M12 16v1" stroke="white" strokeWidth="2" strokeLinecap="round" />
       </>
     ),
+    alertTriangle: (
+      <>
+        <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        <path d="M12 9v4M12 17h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </>
+    ),
     warn: (
       <>
         <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" fill="#f59e0b" stroke="#d97706" strokeWidth="0.5" />
@@ -85,6 +91,9 @@ const Icon = ({ name, size = 18, style = {} }) => {
         <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2" fill="none" />
         <line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       </>
+    ),
+    filter: (
+      <path d="M4 5h16M7 12h10M10 19h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     ),
     menu: (
       <>
@@ -262,6 +271,27 @@ const Icon = ({ name, size = 18, style = {} }) => {
         <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" fill="none" />
       </>
     ),
+    refresh: (
+      <>
+        <path d="M20 11a8 8 0 0 0-14.9-3.9L3 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        <polyline points="3 4 3 9 8 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        <path d="M4 13a8 8 0 0 0 14.9 3.9L21 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        <polyline points="21 20 21 15 16 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      </>
+    ),
+    send: (
+      <>
+        <path d="M22 2L11 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M22 2l-7 20-4-9-9-4 20-7z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      </>
+    ),
+    download: (
+      <>
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        <polyline points="7 10 12 15 17 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        <line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </>
+    ),
     hash: (
       <>
         <line x1="4" y1="9" x2="20" y2="9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -328,6 +358,7 @@ const Icon = ({ name, size = 18, style = {} }) => {
       height={size}
       viewBox="0 0 24 24"
       fill="none"
+      className={className}
       style={style}
     >
       {icons[name] || null}

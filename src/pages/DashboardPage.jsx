@@ -6,7 +6,10 @@ import AppearanceMenu from '../components/common/AppearanceMenu';
 import AuditDashboardOverview from '../components/dashboard/AuditDashboardOverview';
 import AuditLogsView from '../components/dashboard/AuditLogsView';
 import WebUsersView from '../components/dashboard/WebUsersView';
+import ReportsView from '../components/dashboard/ReportsView';
 import ResourceDetailModal from '../components/dashboard/ResourceDetailModal';
+import ActorTrackingSettings from '../components/dashboard/ActorTrackingSettings';
+import RecoveryDataView from '../components/dashboard/recovery/RecoveryDataView';
 import { parseJwt, mapRangeItemToVerifyStatus } from '../utils/formatters';
 
 const areStatsEqual = (a = {}, b = {}) => (
@@ -61,44 +64,6 @@ const buildRangeInspectionLog = (item, fallbackLog) => {
   };
 };
 
-const fetchAllLogsForRange = async ({ fromISO, toISO, selectedClient }) => {
-  const pageSize = 200;
-  const baseParams = {
-    page_size: pageSize,
-    sort_order: 'asc',
-    from: fromISO,
-    to: toISO,
-  };
-
-  if (selectedClient) {
-    baseParams.client_id = selectedClient;
-  }
-
-  const firstRes = await api.get('/dashboard/logs', {
-    params: { ...baseParams, page: 1 },
-  });
-
-  const firstData = Array.isArray(firstRes.data) ? firstRes.data : (firstRes.data?.data || []);
-  const totalPages = Array.isArray(firstRes.data)
-    ? 1
-    : (firstRes.data?.pagination?.total_pages || 1);
-
-  if (totalPages <= 1) return firstData;
-
-  const restResponses = await Promise.all(
-    Array.from({ length: totalPages - 1 }, (_, index) => (
-      api.get('/dashboard/logs', {
-        params: { ...baseParams, page: index + 2 },
-      })
-    ))
-  );
-
-  return restResponses.reduce((allLogs, response) => {
-    const pageData = Array.isArray(response.data) ? response.data : (response.data?.data || []);
-    return allLogs.concat(pageData);
-  }, firstData);
-};
-
 function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePreference = 'system', resolvedTheme = 'light', onThemeChange }) {
   const navigate = useNavigate();
   const [stats, setStats] = useState({ total_logs: 0, pending_logs: 0, anchored_logs: 0 });
@@ -130,6 +95,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
   const [filterDateTo, setFilterDateTo] = useState('');
   const [rangeVerifyResult, setRangeVerifyResult] = useState(null);
   const [isVerifyRangeLoading, setIsVerifyRangeLoading] = useState(false);
+  const [verifyRangeProgress, setVerifyRangeProgress] = useState(null);
   const logsRequestSeq = useRef(0);
 
   // Decode JWT info for Workspace Context Indicator
@@ -161,6 +127,20 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState('');
   const [profileSuccess, setProfileSuccess] = useState('');
+  const [auditorCompanyName, setAuditorCompanyName] = useState('');
+
+  // Latar belakang fetch company name untuk Auditor jika tidak ada di token
+  useEffect(() => {
+    let cancelled = false;
+    api.get('/auth/me')
+      .then(res => {
+        if (!cancelled && res.data?.company_name) {
+          setAuditorCompanyName(res.data.company_name);
+        }
+      })
+      .catch(() => {}); // silent catch
+    return () => { cancelled = true; };
+  }, []);
 
   // Fetch client list for admin dropdown
   useEffect(() => {
@@ -416,6 +396,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
     const toVal = toDate || tempDateTo;
     if (!fromVal || !toVal) return;
     setRangeVerifyResult(null);
+    setVerifyRangeProgress(null);
     setFilterDateFrom(fromVal);
     setFilterDateTo(toVal);
     setCurrentPage(1);
@@ -428,6 +409,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
     setFilterDateFrom('');
     setFilterDateTo('');
     setRangeVerifyResult(null);
+    setVerifyRangeProgress(null);
     setFilterVerification('ALL');
     setSortOrder('desc');
     setCurrentPage(1);
@@ -458,6 +440,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
   const handleVerifyRange = useCallback(async () => {
     if (!filterDateFrom || !filterDateTo) return;
     setIsVerifyRangeLoading(true);
+    setVerifyRangeProgress({ phase: 'estimating', message: 'Counting logs in the selected range...' });
     try {
       const fromISO = new Date(filterDateFrom).toISOString();
       const toISO = new Date(filterDateTo).toISOString();
@@ -470,20 +453,40 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
         params.client_id = selectedClient;
       }
 
-      const res = await api.get('/dashboard/verify-range', { params });
-      const results = res.data.results || [];
-      let rangeLogs = [];
+      const estimateRes = await api.get('/dashboard/verify-range/estimate', { params });
+      const estimatedItems = Number(estimateRes.data?.estimated_items || 0);
+      const syncLimit = Number(estimateRes.data?.sync_limit || 100);
 
-      try {
-        rangeLogs = await fetchAllLogsForRange({ fromISO, toISO, selectedClient });
-      } catch (logsErr) {
-        console.error("Failed to hydrate range inspection logs:", logsErr);
+      if (!estimateRes.data?.can_verify_sync) {
+        setRangeVerifyResult(null);
+        setVerifyRangeProgress({
+          phase: 'blocked',
+          estimatedItems,
+          syncLimit,
+          message: `${estimatedItems.toLocaleString()} logs match this range. Synchronous verification is limited to ${syncLimit}; narrow the date range.`
+        });
+        return;
       }
 
-      const rangeLogsById = new Map(rangeLogs.map(log => [log.log_id, log]));
+      setVerifyRangeProgress({
+        phase: 'verifying',
+        estimatedItems,
+        syncLimit,
+        message: `Verifying ${estimatedItems.toLocaleString()} log${estimatedItems === 1 ? '' : 's'}...`
+      });
+
+      const res = await api.get('/dashboard/verify-range', { params });
+      const results = res.data.results || [];
+      setVerifyRangeProgress({
+        phase: 'preparing',
+        estimatedItems,
+        syncLimit,
+        message: 'Preparing verification results...'
+      });
+
       const hydratedResults = results.map(item => ({
         ...item,
-        log: item.log || item.audit_log || rangeLogsById.get(item.log_id) || null,
+        log: item.log || item.audit_log || null,
       }));
 
       setVerifyStatuses(prev => {
@@ -505,14 +508,30 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
         results: hydratedResults
       });
       setCurrentPage(1);
+      setVerifyRangeProgress({
+        phase: 'completed',
+        estimatedItems: hydratedResults.length,
+        syncLimit,
+        message: `Verification completed for ${hydratedResults.length.toLocaleString()} log${hydratedResults.length === 1 ? '' : 's'}.`
+      });
     } catch (err) {
       console.error("Failed to verify range:", err);
+      const errorData = err.response?.data;
+      const estimatedItems = Number(errorData?.estimated_items || 0);
+      const syncLimit = Number(errorData?.sync_limit || 100);
+      const message = errorData?.error || 'Connection error while verifying log range.';
+      setVerifyRangeProgress({
+        phase: errorData?.code === 'VERIFY_RANGE_TOO_LARGE' ? 'blocked' : 'error',
+        estimatedItems,
+        syncLimit,
+        message
+      });
       setRangeVerifyResult({
         range: { from: filterDateFrom, to: filterDateTo },
         summary: { total: 0, valid: 0, invalid: 0, pending: 0 },
         results: [],
         status: 'failed_local',
-        message: err.response?.data?.error || 'Connection error while verifying log range.'
+        message
       });
     } finally {
       setIsVerifyRangeLoading(false);
@@ -607,10 +626,30 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
 
   const hasLocalFilter = searchQuery || filterAction !== 'ALL' || filterVerification !== 'ALL';
   const displayTotal = isRangeInspectionMode ? filteredLogs.length : (hasLocalFilter ? filteredLogs.length : totalLogsCount);
+  const workspaceName = auditorCompanyName || clientInfo?.company_name || adminClients.find(c => c.id === clientInfo?.client_id)?.company_name || 'Client Workspace';
+  const latestActivity = recentLogs[0];
+  const profileStats = [
+    { label: 'Total Logs', value: stats.total_logs || 0, icon: 'database', tone: 'blue' },
+    { label: 'Anchored', value: stats.anchored_logs || 0, icon: 'checkCircle', tone: 'teal' },
+    { label: 'Pending', value: stats.pending_logs || 0, icon: 'clock', tone: 'amber' },
+  ];
+  const accessItems = [
+    { label: 'Dashboard', description: 'Ringkasan integritas data dan status gateway', icon: 'dashboard' },
+    { label: 'Audit Logs', description: 'Investigasi transaksi, hash, dan hasil verifikasi', icon: 'history' },
+    { label: 'Recovery Data', description: 'Preview dan pemulihan log yang terdeteksi tampered', icon: 'shield' },
+    { label: 'Web Users', description: 'Melihat akun aplikasi yang tercatat di workspace', icon: 'users' },
+  ];
 
   // Status badge for transaction table
   const renderStatusBadge = useCallback((log) => {
-    if (!log || !log.log_id || !log.hash_value) return <span className="ac-status ac-status--invalid">🚨 INVALID</span>;
+    if (!log || !log.log_id || !log.hash_value) {
+      return (
+        <span className="ac-status ac-status--invalid">
+          <Icon name="xCircle" size={12} />
+          INVALID
+        </span>
+      );
+    }
     const v = verifyStatuses[log.log_id];
 
     if (!v) {
@@ -620,18 +659,39 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
           style={{ padding: '4px 10px', fontSize: '11px' }}
           onClick={(e) => { e.stopPropagation(); handleVerifyLog(log.log_id); }}
         >
-          🔍 Verify
+          <Icon name="search" size={12} />
+          Verify
         </button>
       );
     }
 
     if (v.status === 'loading')
-      return <span className="ac-status ac-status--checking">⏳ Memeriksa...</span>;
+      return (
+        <span className="ac-status ac-status--checking">
+          <Icon name="spinner" size={12} />
+          Memeriksa...
+        </span>
+      );
     if (v.status === 'success' || v.status === 'valid')
-      return <span className="ac-status ac-status--valid" onClick={() => setSelectedVerifyResult(v)}>✅ VALID</span>;
+      return (
+        <span className="ac-status ac-status--valid" onClick={() => setSelectedVerifyResult(v)}>
+          <Icon name="checkCircle" size={12} />
+          VALID
+        </span>
+      );
     if (v.status === 'pending')
-      return <span className="ac-status ac-status--pending" onClick={() => setSelectedVerifyResult(v)}>⏱️ PENDING</span>;
-    return <span className="ac-status ac-status--invalid" onClick={() => setSelectedVerifyResult(v)}>🚨 INVALID</span>;
+      return (
+        <span className="ac-status ac-status--checking" onClick={() => setSelectedVerifyResult(v)}>
+          <Icon name="spinner" size={12} />
+          Memeriksa...
+        </span>
+      );
+    return (
+      <span className="ac-status ac-status--invalid" onClick={() => setSelectedVerifyResult(v)}>
+        <Icon name="xCircle" size={12} />
+        INVALID
+      </span>
+    );
   }, [handleVerifyLog, verifyStatuses]);
 
 
@@ -796,12 +856,33 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
           </button>
 
           <button
+            className={`ac-sidebar__nav-item${view === 'recovery-data' ? ' ac-sidebar__nav-item--active' : ''}`}
+            onClick={() => { navigate('/recovery-data'); setSidebarOpen(false); }}
+            title="Recovery Data"
+          >
+            <Icon name="shield" size={18} />
+            <span className="ac-sidebar__nav-label">Recovery Data</span>
+          </button>
+
+          <button
             className={`ac-sidebar__nav-item${view === 'web-users' ? ' ac-sidebar__nav-item--active' : ''}`}
             onClick={() => { navigate('/web-users'); setSidebarOpen(false); }}
             title="Web Users"
           >
             <Icon name="user" size={18} />
             <span className="ac-sidebar__nav-label">Web Users</span>
+          </button>
+
+          <button
+            className={`ac-sidebar__nav-item${view === 'reports' ? ' ac-sidebar__nav-item--active' : ''}`}
+            onClick={() => { navigate('/reports'); setSidebarOpen(false); }}
+            title="Reports"
+          >
+            <Icon name="fileText" size={18} />
+            <span className="ac-sidebar__nav-label">Reports</span>
+          </button>
+          <button className={`ac-sidebar__nav-item${view === 'actor-tracking' ? ' ac-sidebar__nav-item--active' : ''}`} onClick={() => { navigate('/actor-tracking'); setSidebarOpen(false); }} title="Actor Tracking">
+            <Icon name="activity" size={18} /><span className="ac-sidebar__nav-label">Actor Tracking</span>
           </button>
 
           {clientInfo && clientInfo.role?.toLowerCase() === 'admin' && (
@@ -832,15 +913,15 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
                   </span>
                 </div>
               </div>
-              {clientInfo.role?.toLowerCase() === 'admin' && (
-                <div className="ac-sidebar__identity-client">
-                  <Icon name="database" size={14} />
-                  <span className="ac-sidebar__identity-workspace">
-                    <strong>{adminClients.find(c => c.id === clientInfo.client_id)?.company_name || clientInfo.company_name || 'Client Workspace'}</strong>
+              <div className="ac-sidebar__identity-client">
+                <Icon name="database" size={14} />
+                <span className="ac-sidebar__identity-workspace">
+                  <strong>{workspaceName}</strong>
+                  {clientInfo.role?.toLowerCase() === 'admin' && clientInfo.client_id && (
                     <small title={clientInfo.client_id}>{clientInfo.client_id}</small>
-                  </span>
-                </div>
-              )}
+                  )}
+                </span>
+              </div>
             </div>
           )}
           <button
@@ -870,17 +951,39 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
 
 
           {view === 'profile' ? (
-            <section className="ac-hero ac-hero--legacy-dashboard">
-              <div className="ac-hero__pattern" />
-              <div className="ac-hero__content">
-                <div className="ac-hero__left">
-                  <span className="ac-page-kicker">Account Center</span>
-                  <h1 className="ac-hero__title">{displayName}</h1>
-                  <p className="ac-hero__subtitle">
-                    Manage the identity used across your Auditchain workspace.
-                  </p>
+            <section className="ac-profile-page">
+              <div className="ac-profile-hero">
+                <div className="ac-profile-hero__identity">
+                  <span className="ac-profile-hero__avatar">{initials}</span>
+                  <div>
+                    <span className="ac-page-kicker">Account Center</span>
+                    <h1>{displayName}</h1>
+                    <p>Kelola identitas, keamanan, dan akses workspace Auditchain Gateway.</p>
+                  </div>
+                </div>
+                <div className="ac-profile-hero__meta">
+                  <span className="ac-status ac-status--valid">
+                    <Icon name="checkCircle" size={13} />
+                    Active Session
+                  </span>
+                  <span>{workspaceName}</span>
                 </div>
               </div>
+
+              <div className="ac-profile-stat-grid">
+                {profileStats.map(item => (
+                  <div className={`ac-profile-stat ac-profile-stat--${item.tone}`} key={item.label}>
+                    <span className="ac-profile-stat__icon">
+                      <Icon name={item.icon} size={18} />
+                    </span>
+                    <div>
+                      <strong>{item.value.toLocaleString('id-ID')}</strong>
+                      <span>{item.label}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
               <div className="ac-profile-layout">
                 <form className="ac-profile-card ac-profile-form" onSubmit={handleProfileSubmit}>
                   <div className="ac-profile-card__header">
@@ -977,7 +1080,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
                   <div className="ac-profile-card__header">
                     <div>
                       <h2>Workspace</h2>
-                      <p>Session identity assigned by admin.</p>
+                      <p>Identitas sesi yang terhubung dengan akun ini.</p>
                     </div>
                     <span className="ac-profile-card__icon ac-profile-card__icon--teal">
                       <Icon name="shield" size={18} />
@@ -993,22 +1096,103 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
                   </div>
                   <div className="ac-profile-summary__row">
                     <span>Company</span>
-                    <strong>{clientInfo?.company_name || adminClients.find(c => c.id === clientInfo?.client_id)?.company_name || 'Workspace'}</strong>
+                    <strong>{workspaceName}</strong>
+                  </div>
+                  <div className="ac-profile-summary__row">
+                    <span>Username</span>
+                    <strong>{profileForm.username || clientInfo?.username || '-'}</strong>
+                  </div>
+                  <div className="ac-profile-summary__row">
+                    <span>Security</span>
+                    <strong>Password protected</strong>
                   </div>
                 </aside>
               </div>
-              <div className="ac-profile-card ac-profile-settings-card">
-                <h3>Notification Settings</h3>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                    <input type="checkbox" style={{ marginRight: '8px', width: '16px', height: '16px' }} defaultChecked />
-                    <span>Enable Email Alerts</span>
+
+              <div className="ac-profile-secondary-grid">
+                <div className="ac-profile-card ac-profile-access-card">
+                  <div className="ac-profile-card__header">
+                    <div>
+                      <h2>Akses Portal</h2>
+                      <p>Menu yang tersedia untuk role kamu.</p>
+                    </div>
+                    <span className="ac-profile-card__icon">
+                      <Icon name="key" size={18} />
+                    </span>
+                  </div>
+                  <div className="ac-profile-access-list">
+                    {accessItems.map(item => (
+                      <div className="ac-profile-access-item" key={item.label}>
+                        <span>
+                          <Icon name={item.icon} size={16} />
+                        </span>
+                        <div>
+                          <strong>{item.label}</strong>
+                          <small>{item.description}</small>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="ac-profile-card ac-profile-settings-card">
+                  <div className="ac-profile-card__header">
+                    <div>
+                      <h2>Preferensi</h2>
+                      <p>Pengaturan ringan untuk pengalaman kerja harian.</p>
+                    </div>
+                    <span className="ac-profile-card__icon ac-profile-card__icon--teal">
+                      <Icon name="settings" size={18} />
+                    </span>
+                  </div>
+                  <label className="ac-profile-toggle-row">
+                    <input type="checkbox" defaultChecked />
+                    <span>
+                      <strong>Email Alerts</strong>
+                      <small>Notifikasi saat ada audit log yang perlu ditinjau.</small>
+                    </span>
                   </label>
+                  <label className="ac-profile-toggle-row">
+                    <input type="checkbox" defaultChecked={resolvedTheme === 'dark'} readOnly />
+                    <span>
+                      <strong>Appearance</strong>
+                      <small>{themePreference === 'system' ? 'Following system theme' : `${resolvedTheme} mode`}</small>
+                    </span>
+                  </label>
+                </div>
+
+                <div className="ac-profile-card ac-profile-activity-card">
+                  <div className="ac-profile-card__header">
+                    <div>
+                      <h2>Aktivitas Terakhir</h2>
+                      <p>Audit event terbaru dari workspace aktif.</p>
+                    </div>
+                    <span className="ac-profile-card__icon">
+                      <Icon name="activity" size={18} />
+                    </span>
+                  </div>
+                  {latestActivity ? (
+                    <div className="ac-profile-activity">
+                      <strong>{latestActivity.action || 'Audit event'}</strong>
+                      <span>{latestActivity.resource || latestActivity.source_table || 'Gateway resource'}</span>
+                      <code>{latestActivity.timestamp || 'Timestamp unavailable'}</code>
+                    </div>
+                  ) : (
+                    <div className="ac-profile-activity ac-profile-activity--empty">
+                      Belum ada aktivitas terbaru yang bisa ditampilkan.
+                    </div>
+                  )}
                 </div>
               </div>
             </section>
+          ) : view === 'actor-tracking' ? (
+            <ActorTrackingSettings />
           ) : view === 'web-users' ? (
             <WebUsersView onLogout={onLogout} />
+          ) : view === 'reports' ? (
+            <ReportsView selectedClient={selectedClient} />
+          ) : view === 'recovery-data' ? (
+            <RecoveryDataView selectedClient={selectedClient} />
           ) : view === 'audit-logs' ? (
             <AuditLogsView
               paginatedLogs={paginatedLogs}
@@ -1040,6 +1224,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
               rangeVerifyResult={rangeVerifyResult}
               setRangeVerifyResult={setRangeVerifyResult}
               isVerifyRangeLoading={isVerifyRangeLoading}
+              verifyRangeProgress={verifyRangeProgress}
               selectedVerifyResult={selectedVerifyResult}
               setSelectedVerifyResult={setSelectedVerifyResult}
               onSelectResource={setSelectedLog}
@@ -1049,32 +1234,33 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
               setCurrentPage={setCurrentPage}
               totalPages={totalPages}
               renderPageNumbers={renderPageNumbers}
+              stats={stats}
             />
           ) : (
-          <>
-            {/* Hero Section */}
-            <section className="ac-hero">
-              <div className="ac-hero__pattern" />
-              <div className="ac-hero__content">
-                <div className="ac-hero__left">
-                  <h1 className="ac-hero__title">
-                    🛡️ Auditchain Gateway Dashboard
-                  </h1>
-                  <p className="ac-hero__subtitle">
-                    Monitor audit logs and verify blockchain transactions in real-time.
-                    Ensure the highest data integrity across the database infrastructure network.
-                  </p>
+            <>
+              {/* Hero Section */}
+              <section className="ac-hero">
+                <div className="ac-hero__pattern" />
+                <div className="ac-hero__content">
+                  <div className="ac-hero__left">
+                    <h1 className="ac-hero__title">
+                      🛡️ Auditchain Gateway Dashboard
+                    </h1>
+                    <p className="ac-hero__subtitle">
+                      Monitor audit logs and verify blockchain transactions in real-time.
+                      Ensure the highest data integrity across the database infrastructure network.
+                    </p>
+                  </div>
                 </div>
-              </div>
-            </section>
+              </section>
 
-            <AuditDashboardOverview
-              stats={stats}
-              selectedClient={selectedClient}
-              onOpenAuditLogs={() => navigate('/audit-logs')}
-            />
+              <AuditDashboardOverview
+                stats={stats}
+                selectedClient={selectedClient}
+                onOpenAuditLogs={() => navigate('/audit-logs')}
+              />
 
-          </>
+            </>
           )}
 
         </div>
@@ -1085,6 +1271,14 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
         <ResourceDetailModal
           log={selectedLog}
           selectedClient={selectedClient}
+          onRefreshLogs={() => fetchTransactionLogs({
+            page: currentPage,
+            pageSize: rowsPerPage,
+            fromDate: filterDateFrom,
+            toDate: filterDateTo,
+            activeSort: sortOrder,
+            activeTable: filterTable,
+          })}
           onClose={() => setSelectedLog(null)}
         />
       )}

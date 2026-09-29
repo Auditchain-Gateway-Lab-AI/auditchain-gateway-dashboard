@@ -82,7 +82,15 @@ function App() {
     <Router>
       <Suspense fallback={<div className="ac-route-loading">Loading...</div>}>
         <Routes>
-          <Route path="/" element={<LandingPage />} />
+          <Route
+            path="/"
+            element={
+              <LandingPage
+                resolvedTheme={resolvedTheme}
+                onThemeChange={setThemePreference}
+              />
+            }
+          />
           <Route
             path="/login"
             element={
@@ -151,6 +159,48 @@ function App() {
                 />
               </ProtectedRoute>
             }
+          />
+          <Route
+            path="/audit-logs/recovery"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated}>
+                <Navigate to="/recovery-data" replace />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/recovery-data"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated}>
+                <DashboardPage
+                  view="recovery-data"
+                  onLogout={handleLogout}
+                  onProfileUpdated={handleAuthRefresh}
+                  themePreference={themePreference}
+                  resolvedTheme={resolvedTheme}
+                  onThemeChange={setThemePreference}
+                />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/reports"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated}>
+                <DashboardPage
+                  view="reports"
+                  onLogout={handleLogout}
+                  onProfileUpdated={handleAuthRefresh}
+                  themePreference={themePreference}
+                  resolvedTheme={resolvedTheme}
+                  onThemeChange={setThemePreference}
+                />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/actor-tracking"
+            element={<ProtectedRoute isAuthenticated={isAuthenticated}><DashboardPage view="actor-tracking" onLogout={handleLogout} onProfileUpdated={handleAuthRefresh} themePreference={themePreference} resolvedTheme={resolvedTheme} onThemeChange={setThemePreference} /></ProtectedRoute>}
           />
           <Route
             path="/admin"

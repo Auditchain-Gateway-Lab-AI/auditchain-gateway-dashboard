@@ -241,7 +241,7 @@ const DATA_FLOW_STEPS_EN = [
 
 const WA_LINK = 'https://wa.me/';
 
-function LandingPage() {
+function LandingPage({ resolvedTheme = 'light', onThemeChange }) {
   const [lang, setLang] = useState('id');
   const t = translations[lang];
   const INTEGRITY_LAYERS_CURRENT = lang === 'id' ? INTEGRITY_LAYERS : INTEGRITY_LAYERS_EN;
@@ -256,7 +256,9 @@ function LandingPage() {
   const [activeStep, setActiveStep] = useState(1);
   const [activeTab, setActiveTab] = useState('go');
   const [activeSection, setActiveSection] = useState('');
+  const [isPreferenceOpen, setIsPreferenceOpen] = useState(false);
   const sectionRefs = useRef({});
+  const preferenceRef = useRef(null);
 
   // IntersectionObserver for active nav highlighting
   useEffect(() => {
@@ -274,6 +276,17 @@ function LandingPage() {
       observers.push(observer);
     });
     return () => observers.forEach((o) => o.disconnect());
+  }, []);
+
+  useEffect(() => {
+    const handlePointerDown = (event) => {
+      if (preferenceRef.current && !preferenceRef.current.contains(event.target)) {
+        setIsPreferenceOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
   }, []);
 
   // Auto-verify on audit log data change
@@ -395,13 +408,14 @@ curl -X POST https://gateway.auditchain.io/v1/logs \\
     { href: '#threat-model', label: t.navThreat, id: 'threat-model' },
     { href: '#integration', label: t.navIntegration, id: 'integration' },
   ];
+  const preferenceLabel = resolvedTheme === 'dark'
+    ? `Dark mode, ${lang.toUpperCase()} language`
+    : `Light mode, ${lang.toUpperCase()} language`;
 
   return (
     <div className="lp-root">
       <Navbar
         t={t}
-        lang={lang}
-        setLang={setLang}
         navLinks={navLinks}
         handleNavClick={handleNavClick}
         activeSection={activeSection}
@@ -409,6 +423,74 @@ curl -X POST https://gateway.auditchain.io/v1/logs \\
         setIsMobileMenuOpen={setIsMobileMenuOpen}
         waLink={WA_LINK}
       />
+      <div className="lp-floating-preferences" ref={preferenceRef}>
+        <button
+          type="button"
+          className={`lp-floating-preferences-trigger ${isPreferenceOpen ? 'lp-floating-preferences-trigger--open' : ''}`}
+          onClick={() => setIsPreferenceOpen((open) => !open)}
+          aria-label={preferenceLabel}
+          aria-haspopup="menu"
+          aria-expanded={isPreferenceOpen}
+        >
+          <span className="material-symbols-outlined">tune</span>
+          <span className="lp-floating-preferences-summary">
+            {resolvedTheme === 'dark' ? 'Dark' : 'Light'} / {lang.toUpperCase()}
+          </span>
+          <span className="material-symbols-outlined lp-floating-preferences-arrow">expand_more</span>
+        </button>
+
+        {isPreferenceOpen && (
+          <div className="lp-floating-preferences-menu" role="menu" aria-label="Landing preferences">
+            <div className="lp-floating-preferences-section">
+              <span className="lp-floating-preferences-label">Appearance</span>
+              <div className="lp-floating-preferences-options" role="group" aria-label="Appearance">
+                <button
+                  type="button"
+                  className={`lp-floating-preferences-option ${resolvedTheme === 'light' ? 'lp-floating-preferences-option--active' : ''}`}
+                  onClick={() => onThemeChange && onThemeChange('light')}
+                  aria-pressed={resolvedTheme === 'light'}
+                >
+                  <span className="material-symbols-outlined">light_mode</span>
+                  Light
+                </button>
+                <button
+                  type="button"
+                  className={`lp-floating-preferences-option ${resolvedTheme === 'dark' ? 'lp-floating-preferences-option--active' : ''}`}
+                  onClick={() => onThemeChange && onThemeChange('dark')}
+                  aria-pressed={resolvedTheme === 'dark'}
+                >
+                  <span className="material-symbols-outlined">dark_mode</span>
+                  Dark
+                </button>
+              </div>
+            </div>
+
+            <div className="lp-floating-preferences-section">
+              <span className="lp-floating-preferences-label">Language</span>
+              <div className="lp-floating-preferences-options" role="group" aria-label="Language">
+                <button
+                  type="button"
+                  className={`lp-floating-preferences-option ${lang === 'id' ? 'lp-floating-preferences-option--active' : ''}`}
+                  onClick={() => setLang('id')}
+                  aria-pressed={lang === 'id'}
+                >
+                  <span className="material-symbols-outlined">language</span>
+                  ID
+                </button>
+                <button
+                  type="button"
+                  className={`lp-floating-preferences-option ${lang === 'en' ? 'lp-floating-preferences-option--active' : ''}`}
+                  onClick={() => setLang('en')}
+                  aria-pressed={lang === 'en'}
+                >
+                  <span className="material-symbols-outlined">language</span>
+                  EN
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
       <Hero t={t} handleNavClick={handleNavClick} />
       <Simulator
         t={t}
