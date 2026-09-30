@@ -475,7 +475,10 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
         message: `Verifying ${estimatedItems.toLocaleString()} log${estimatedItems === 1 ? '' : 's'}...`
       });
 
-      const res = await api.get('/dashboard/verify-range', { params });
+      // The gateway dashboard displays every verified log, so it uses the
+      // internal range contract. The client portal uses the resource-summary
+      // contract instead and must not render this response as a log table.
+      const res = await api.get('/dashboard/verify-range/internal', { params });
       const results = res.data.results || [];
       setVerifyRangeProgress({
         phase: 'preparing',
