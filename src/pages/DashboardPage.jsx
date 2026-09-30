@@ -64,6 +64,8 @@ const buildRangeInspectionLog = (item, fallbackLog) => {
   };
 };
 
+const wait = (duration) => new Promise(resolve => setTimeout(resolve, duration));
+
 function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePreference = 'system', resolvedTheme = 'light', onThemeChange }) {
   const navigate = useNavigate();
   const [stats, setStats] = useState({ total_logs: 0, pending_logs: 0, anchored_logs: 0 });
@@ -458,12 +460,64 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
       const syncLimit = Number(estimateRes.data?.sync_limit || 100);
 
       if (!estimateRes.data?.can_verify_sync) {
-        setRangeVerifyResult(null);
         setVerifyRangeProgress({
-          phase: 'blocked',
+          phase: 'queued',
           estimatedItems,
           syncLimit,
-          message: `${estimatedItems.toLocaleString()} logs match this range. Synchronous verification is limited to ${syncLimit}; narrow the date range.`
+          message: `${estimatedItems.toLocaleString()} logs queued for background verification...`
+        });
+
+        const queueRes = await api.post('/dashboard/verification-runs', {
+          from: fromISO,
+          to: toISO,
+          batch_size: syncLimit
+        }, { params: selectedClient ? { client_id: selectedClient } : {} });
+        const runId = queueRes.data?.data?.id;
+        if (!runId) {
+          throw new Error('Background verification did not return a run ID.');
+        }
+
+        let run = queueRes.data.data;
+        for (let attempt = 0; attempt < 1800; attempt += 1) {
+          if (run?.status === 'COMPLETED' || run?.status === 'FAILED') break;
+          await wait(2000);
+          const runRes = await api.get(`/dashboard/verification-runs/${runId}`, {
+            params: selectedClient ? { client_id: selectedClient } : {}
+          });
+          run = runRes.data?.data || runRes.data;
+          setVerifyRangeProgress({
+            phase: run?.status === 'QUEUED' ? 'queued' : 'verifying',
+            estimatedItems: Number(run?.total_items || estimatedItems),
+            syncLimit: Number(run?.batch_size || syncLimit),
+            message: `Background verification: ${Number(run?.processed_items || 0).toLocaleString()} / ${Number(run?.total_items || estimatedItems).toLocaleString()} logs processed...`
+          });
+        }
+
+        if (run?.status === 'FAILED') {
+          throw new Error(run.error_message || 'Background verification failed.');
+        }
+        if (run?.status !== 'COMPLETED') {
+          throw new Error('Background verification is still running. Check the latest run status before retrying.');
+        }
+
+        setRangeVerifyResult({
+          range: { from: filterDateFrom, to: filterDateTo },
+          summary: {
+            total: Number(run.total_items || estimatedItems),
+            valid: Number(run.total_valid || 0),
+            invalid: Number(run.total_invalid || 0),
+            pending: Number(run.total_pending || 0),
+            already_verified: Number(run.already_verified || 0),
+            verified_now: Number(run.verified_now || 0)
+          },
+          results: []
+        });
+        setCurrentPage(1);
+        setVerifyRangeProgress({
+          phase: 'completed',
+          estimatedItems: Number(run.total_items || estimatedItems),
+          syncLimit: Number(run.batch_size || syncLimit),
+          message: `Background verification completed for ${Number(run.total_items || estimatedItems).toLocaleString()} logs.`
         });
         return;
       }
