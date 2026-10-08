@@ -6,6 +6,8 @@ import { recoveryApi } from '../../../services/recoveryApi';
 jest.mock('../../../services/recoveryApi', () => ({
   recoveryApi: {
     listIncidents: jest.fn(),
+    verifyLog: jest.fn(),
+    verifyResource: jest.fn(),
     listEvents: jest.fn(),
     listRequests: jest.fn(),
     getIncident: jest.fn(),
@@ -26,6 +28,7 @@ const incidents = [
     log_id: 'log-140',
     resource: 'RUANGAN:140',
     incident_type: 'METADATA_HASH_MISMATCH',
+    incident_scope: 'CLIENT_SOURCE',
     expected_hash: 'trusted-hash-140',
     detected_hash: 'tampered-hash-140',
     tampered_metadata: { room: 140, owner: 'tampered' },
@@ -38,6 +41,7 @@ const incidents = [
     log_id: 'log-141',
     resource: 'RUANGAN:141',
     incident_type: 'METADATA_HASH_MISMATCH',
+    incident_scope: 'CLIENT_SOURCE',
     expected_hash: 'trusted-hash-141',
     detected_hash: 'tampered-hash-141',
     tampered_metadata: { room: 141, owner: 'tampered' },
@@ -50,6 +54,7 @@ const incidents = [
     log_id: 'log-blocked',
     resource: 'RUANGAN:142',
     incident_type: 'METADATA_HASH_MISMATCH',
+    incident_scope: 'CLIENT_SOURCE',
     expected_hash: 'trusted-hash-blocked',
     detected_hash: 'tampered-hash-blocked',
     status: 'RESOLVED',
@@ -90,6 +95,7 @@ const recoveredIncident = {
 beforeEach(() => {
   jest.clearAllMocks();
   recoveryApi.listIncidents.mockResolvedValue(incidents);
+  recoveryApi.verifyResource.mockResolvedValue({ resource: 'RUANGAN', chain_status: 'valid', total_logs: 3, logs: [] });
   recoveryApi.listEvents.mockResolvedValue({
     data: [recoveryEvent],
     page: 1,
@@ -102,12 +108,12 @@ beforeEach(() => {
     incidents.find(item => item.id === incidentId)
   ));
   recoveryApi.listAuditLogsByResource.mockResolvedValue([]);
-  recoveryApi.listCandidates.mockResolvedValue([{
-    log_id: 'log-140',
+  recoveryApi.listCandidates.mockImplementation(({ incidentId }) => Promise.resolve([{
+    log_id: incidentId === 'incident-140' ? 'log-140' : 'log-141',
     eligible: true,
-    reason: 'verified snapshot',
-    object_version_id: 'version-140',
-  }]);
+    reason: 'verified client event reference',
+    reference_log_hash: `reference-hash-${incidentId}`,
+  }]));
   recoveryApi.runPreflight.mockImplementation(({ incidentId }) => Promise.resolve({
     status: 'VALID',
     recoverable: true,
@@ -124,6 +130,7 @@ beforeEach(() => {
   }));
   recoveryApi.createRequest.mockResolvedValue({
     id: 'request-140',
+    status: 'PENDING_EXECUTION',
     before_hash: 'tampered-hash-140',
   });
   recoveryApi.executeRequest.mockResolvedValue({
@@ -136,7 +143,7 @@ beforeEach(() => {
   recoveryApi.verifyEvent.mockResolvedValue({ status: 'VALID' });
 });
 
-test('loads backend incidents, previews multiple records, and executes each ready recovery', async () => {
+test('previews multiple client-source incidents without exposing live row values, then executes each ready recovery', async () => {
   recoveryApi.listAuditLogsByResource.mockImplementation(({ resource }) => Promise.resolve([{
     log_id: resource.endsWith('140') ? 'log-140' : 'log-141',
     metadata: { room: resource.endsWith('140') ? 140 : 141, owner: 'live-tampered-log' },
@@ -146,14 +153,15 @@ test('loads backend incidents, previews multiple records, and executes each read
   expect(await screen.findByText('log-140')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Filter recovery data' }));
   fireEvent.click(screen.getByRole('option', { name: /^Open/ }));
-  fireEvent.click(screen.getByRole('button', { name: 'Select all open incidents (2)' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Select matching incidents (2)' }));
   expect(screen.getByRole('button', { name: 'Preview selected (2)' })).toBeEnabled();
 
   fireEvent.click(screen.getByRole('button', { name: 'Preview selected (2)' }));
   expect(await screen.findByRole('dialog', { name: 'Review recovery data' })).toBeInTheDocument();
-  expect(await screen.findAllByText('Tampered data')).toHaveLength(2);
-  expect(screen.getAllByText(/live-tampered-log/).length).toBeGreaterThan(0);
-  expect(await screen.findAllByText('Original trusted data')).toHaveLength(2);
+  expect(await screen.findAllByText('Live client state hash')).toHaveLength(2);
+  expect(screen.queryByText(/live-tampered-log/)).not.toBeInTheDocument();
+  expect(screen.getAllByText(/Gateway does not return the live client row values/)).toHaveLength(2);
+  expect(await screen.findAllByText('Trusted reference data (redacted)')).toHaveLength(2);
   expect(recoveryApi.runPreflight).toHaveBeenCalledTimes(2);
 
   fireEvent.click(screen.getByRole('button', { name: 'Execute recovery (2)' }));
@@ -163,12 +171,11 @@ test('loads backend incidents, previews multiple records, and executes each read
   fireEvent.click(screen.getByRole('button', { name: 'Execute recovery' }));
 
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Latest recovery results' })).toBeInTheDocument());
-  expect(screen.getByRole('heading', { name: 'Tampered incidents' })).toBeInTheDocument();
   expect(screen.getAllByText('log-140').length).toBeGreaterThan(0);
   expect(recoveryApi.createRequest).toHaveBeenCalledTimes(2);
   expect(recoveryApi.executeRequest).toHaveBeenCalledTimes(2);
-  expect(screen.getAllByText('Tampered hash').length).toBe(2);
-  expect(screen.getAllByText('Recovery result hash').length).toBe(2);
+  expect(screen.getAllByText('Live client state hash').length).toBe(2);
+  expect(screen.getAllByText('Recovered client state hash').length).toBe(2);
 });
 
 test('selects every incident from the master checkbox, including resolved incidents', async () => {
@@ -184,14 +191,59 @@ test('selects every incident from the master checkbox, including resolved incide
   expect(masterCheckbox).toBeChecked();
 });
 
+test('shows open Gateway integrity incidents separately from Client Source recovery eligibility', async () => {
+  recoveryApi.listIncidents.mockResolvedValue([
+    ...incidents,
+    {
+      ...incidents[0],
+      id: 'incident-gateway',
+      log_id: 'log-620',
+      resource: 'RUANGAN:620',
+      incident_scope: 'GATEWAY_INTEGRITY',
+    },
+  ]);
+
+  const { container } = render(<RecoveryDataView selectedClient="client-1" />);
+
+  expect(await screen.findByText('RUANGAN:620')).toBeInTheDocument();
+  expect(screen.getByText('Open tamper incidents')).toBeInTheDocument();
+  expect(container.querySelector('.ac-recovery-data-selection-note')).toHaveTextContent('1 open Gateway Integrity read only');
+});
+
+test('scans the matching resource from Recovery Data and refreshes the incident list', async () => {
+  const detectedIncident = {
+    ...incidents[0],
+    id: 'incident-620',
+    log_id: 'log-620',
+    resource: 'RUANGAN:620',
+    incident_scope: 'GATEWAY_INTEGRITY',
+  };
+  recoveryApi.listIncidents.mockResolvedValue([...incidents, detectedIncident]);
+  recoveryApi.verifyResource.mockResolvedValue({
+    resource: 'RUANGAN',
+    chain_status: 'tampered',
+    total_logs: 1,
+    logs: [{ log_id: 'log-620', integrity_status: 'TAMPERED' }],
+  });
+
+  render(<RecoveryDataView selectedClient="client-1" />);
+  expect(await screen.findByText('log-140')).toBeInTheDocument();
+  fireEvent.change(screen.getByRole('textbox', { name: 'Search recovery data' }), { target: { value: 'ruangan' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Verify RUANGAN' }));
+
+  expect(recoveryApi.verifyResource).toHaveBeenCalledWith({ resource: 'RUANGAN', clientId: 'client-1' });
+  expect(await screen.findByRole('status')).toHaveTextContent('Integrity issues were found and matching incidents are listed.');
+  expect(await screen.findByText('incident-620')).toBeInTheDocument();
+});
+
 test('shows recovery history as read-only and inspects an event from the full row', async () => {
   render(<RecoveryDataView selectedClient="client-1" />);
 
   fireEvent.click(await screen.findByRole('button', { name: /Recovery history/ }));
   expect(await screen.findByText('event-140')).toBeInTheDocument();
   fireEvent.click(screen.getByText('event-140'));
-  expect(await screen.findByRole('dialog', { name: 'Trusted data restored' })).toBeInTheDocument();
-  expect(await screen.findByText('Trusted data restored')).toBeInTheDocument();
+  expect(await screen.findByRole('dialog', { name: 'Client record recovery completed' })).toBeInTheDocument();
+  expect(await screen.findByText('Client record recovery completed')).toBeInTheDocument();
   expect(await screen.findByText('Recovered data')).toBeInTheDocument();
   fireEvent.click(screen.getByText('Technical evidence'));
   expect(await screen.findByText('Before recovery hash')).toBeInTheDocument();
@@ -274,9 +326,11 @@ test('previews open, resolved, and recovered incidents but executes only the ope
 
   fireEvent.click(screen.getByRole('button', { name: 'Preview selected (3)' }));
   expect(await screen.findByRole('dialog', { name: 'Review recovery data' })).toBeInTheDocument();
-  expect(await screen.findAllByText('Tampered data')).toHaveLength(3);
+  expect(await screen.findAllByText('Live client state hash')).toHaveLength(3);
+  expect(screen.queryByText('tampered-before-recovery')).not.toBeInTheDocument();
   expect(await screen.findAllByText('Recovery result')).toHaveLength(2);
   expect(screen.getByRole('button', { name: 'Execute recovery (1)' })).toBeEnabled();
+  expect(recoveryApi.listCandidates).toHaveBeenCalledWith({ incidentId: 'incident-140' });
   expect(recoveryApi.runPreflight).toHaveBeenCalledTimes(1);
 
   fireEvent.click(screen.getByRole('button', { name: 'Execute recovery (1)' }));
@@ -335,6 +389,7 @@ test('opens incident preview by clicking the full row', async () => {
 test('shows the recorded recovery result for a closed incident instead of rerunning verification', async () => {
   const resolvedIncident = {
     ...incidents[0],
+    incident_scope: undefined,
     status: 'RESOLVED',
     detected_at: '2026-09-22T03:08:23.793Z',
     tampered_metadata: { room: 140, owner: 'tampered-before-recovery' },
@@ -393,15 +448,15 @@ test('selects only resolved incidents when the resolved filter is active', async
 
   fireEvent.click(await screen.findByRole('button', { name: 'Filter recovery data' }));
   fireEvent.click(screen.getByRole('option', { name: /^Resolved/ }));
-  expect(screen.getByRole('button', { name: 'Select all resolved incidents (1)' })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Select all resolved incidents (1)' }));
+  expect(screen.getByRole('button', { name: 'Select matching incidents (1)' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Select matching incidents (1)' }));
   fireEvent.click(screen.getByRole('button', { name: 'Preview selected (1)' }));
 
   expect(await screen.findByText('Recovery result')).toBeInTheDocument();
   expect(recoveryApi.runPreflight).not.toHaveBeenCalled();
 });
 
-test('keeps the current tampered log visible when backend preflight blocks recovery', async () => {
+test('keeps a blocked client-source incident visible without exposing live row values', async () => {
   const blockedIncident = { ...incidents[2], status: 'OPEN', tampered_metadata: undefined };
   recoveryApi.listIncidents.mockResolvedValue([blockedIncident]);
   recoveryApi.getIncident.mockResolvedValue(blockedIncident);
@@ -419,7 +474,8 @@ test('keeps the current tampered log visible when backend preflight blocks recov
   render(<RecoveryDataView selectedClient="client-1" />);
   fireEvent.click(await screen.findByText('log-blocked'));
 
-  expect(await screen.findByText(/tampered-from-audit-log/)).toBeInTheDocument();
+  expect(screen.queryByText(/tampered-from-audit-log/)).not.toBeInTheDocument();
+  expect(await screen.findByText(/Gateway does not return the live client row values/)).toBeInTheDocument();
   expect(screen.getAllByText('legacy_recovery_out_of_scope').length).toBeGreaterThan(0);
   expect(screen.getByRole('button', { name: 'Execute recovery (0)' })).toBeDisabled();
 });

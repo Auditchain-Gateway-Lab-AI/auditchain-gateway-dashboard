@@ -118,7 +118,7 @@ function LogPayloadViewer({ currentLog, previousLog = null }) {
 // ================================================================
 // KOMPONEN: Modal Detail Log per Resource (LEVEL 2)
 // ================================================================
-function ResourceDetailModal({ log: activeLog, selectedClient, onClose, onRefreshLogs }) {
+function ResourceDetailModal({ log: activeLog, selectedClient, onClose, onRefreshLogs, canRecover = true }) {
   const [logs, setLogs] = useState([]);
   const [chainStatus, setChainStatus] = useState(null); // hasil verify-resource
   const [loading, setLoading] = useState(true);
@@ -448,16 +448,16 @@ function ResourceDetailModal({ log: activeLog, selectedClient, onClose, onRefres
             >
               History
             </button>
-            <button
+            {canRecover && <button
               className={`ac-drawer-tab ac-drawer-tab--recovery ${activeTab === 'recovery' ? 'ac-drawer-tab--active' : ''}`}
               onClick={() => setActiveTab('recovery')}
             >
               <Icon name="shield" size={13} /> Recovery
-            </button>
+            </button>}
           </div>
         </div>
 
-        {activeTab === 'overview' ? renderOverviewTab()
+        {activeTab === 'overview' || (!canRecover && activeTab === 'recovery') ? renderOverviewTab()
           : activeTab === 'history' ? renderHistoryTab()
             : <div className="ac-modal__body ac-drawer-tab-content"><RecoveryTab activeLog={activeLog} selectedClient={selectedClient} onRefreshLogs={onRefreshLogs} /></div>}
 

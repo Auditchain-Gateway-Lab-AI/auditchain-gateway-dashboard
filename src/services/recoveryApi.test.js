@@ -55,6 +55,30 @@ test('supports recovery event detail and integrity verification', async () => {
   expect(api.get).toHaveBeenNthCalledWith(2, '/dashboard/recovery/events/event%2F1/verify');
 });
 
+test('returns HTTP 409 as a detected tamper result so Recovery can refresh incidents', async () => {
+  const failedCheck = { status: 'failed', layer: '2_local_hash', data: { log_id: 'log/620' } };
+  api.get.mockRejectedValueOnce({ response: { status: 409, data: failedCheck } });
+
+  const result = await recoveryApi.verifyLog({ logId: 'log/620', clientId: 'client-1' });
+
+  expect(api.get).toHaveBeenCalledWith('/dashboard/verify/log%2F620', {
+    params: { client_id: 'client-1' },
+  });
+  expect(result).toEqual(failedCheck);
+});
+
+test('verifies a resource and returns conflict details as detection results', async () => {
+  const failedCheck = { resource: 'RUANGAN:620', chain_status: 'tampered', total_logs: 1 };
+  api.get.mockRejectedValueOnce({ response: { status: 409, data: failedCheck } });
+
+  const result = await recoveryApi.verifyResource({ resource: 'RUANGAN:620', clientId: 'client-1' });
+
+  expect(api.get).toHaveBeenCalledWith('/dashboard/verify-resource/RUANGAN%3A620', {
+    params: { client_id: 'client-1' },
+  });
+  expect(result).toEqual(failedCheck);
+});
+
 test('loads the current audit payload separately for the tampered before view', async () => {
   api.get.mockResolvedValueOnce({
     data: [{ log_id: 'log-1', metadata: { room: 161, owner: 'tampered' } }],

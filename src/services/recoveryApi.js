@@ -58,6 +58,33 @@ export const recoveryApi = {
     params: buildParams({ status }),
   })),
 
+  // A failed integrity check is returned as HTTP 409 by the audit API. It is
+  // still a successful detection result for the Recovery screen, because the
+  // backend records the corresponding incident as part of that check.
+  verifyLog: async ({ logId, clientId }) => {
+    try {
+      const response = await api.get(`/dashboard/verify/${encodeURIComponent(logId)}`, {
+        params: buildParams({ client_id: clientId }),
+      });
+      return response?.data;
+    } catch (error) {
+      if (error?.response?.status === 409) return error.response.data;
+      throw normalizeError(error);
+    }
+  },
+
+  verifyResource: async ({ resource, clientId }) => {
+    try {
+      const response = await api.get(`/dashboard/verify-resource/${encodeURIComponent(resource)}`, {
+        params: buildParams({ client_id: clientId }),
+      });
+      return response?.data;
+    } catch (error) {
+      if (error?.response?.status === 409) return error.response.data;
+      throw normalizeError(error);
+    }
+  },
+
   getIncident: ({ incidentId }) => call(() => api.get(`/dashboard/recovery/incidents/${encodeURIComponent(incidentId)}`)),
 
   listCandidates: ({ incidentId }) => call(() => api.get(`/dashboard/recovery/incidents/${encodeURIComponent(incidentId)}/candidates`)),
