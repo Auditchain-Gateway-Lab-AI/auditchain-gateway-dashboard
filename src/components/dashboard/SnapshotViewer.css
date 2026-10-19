@@ -8,6 +8,16 @@
   font-size: 12px;
 }
 
+.ac-history-notice {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--color-tertiary);
+  background: var(--color-surface-container);
+  color: var(--color-on-surface-variant);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 .ac-diff th {
   padding: 4px 8px;
   text-align: left;

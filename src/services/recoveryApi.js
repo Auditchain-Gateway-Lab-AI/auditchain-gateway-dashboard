@@ -53,10 +53,26 @@ const callEnvelope = async (request) => {
   }
 };
 
+const listAllPages = async (path, params = {}) => {
+  const pageSize = 100;
+  const first = await callEnvelope(() => api.get(path, {
+    params: buildParams({ ...params, page: 1, page_size: pageSize }),
+  }));
+  const rows = value => Array.isArray(value) ? value : (Array.isArray(value?.data) ? value.data : []);
+  const firstRows = rows(first);
+  const totalPages = Math.max(1, Number(first?.total_pages) || 1);
+  if (totalPages === 1) return firstRows;
+
+  const remaining = await Promise.all(Array.from({ length: totalPages - 1 }, (_, index) => (
+    callEnvelope(() => api.get(path, {
+      params: buildParams({ ...params, page: index + 2, page_size: pageSize }),
+    }))
+  )));
+  return [firstRows, ...remaining.map(rows)].flat();
+};
+
 export const recoveryApi = {
-  listIncidents: ({ status } = {}) => call(() => api.get('/dashboard/recovery/incidents', {
-    params: buildParams({ status }),
-  })),
+  listIncidents: ({ status } = {}) => listAllPages('/dashboard/recovery/incidents', { status }),
 
   // A failed integrity check is returned as HTTP 409 by the audit API. It is
   // still a successful detection result for the Recovery screen, because the
@@ -97,9 +113,7 @@ export const recoveryApi = {
   // audit-log endpoint supplies the current payload for the before-recovery UI.
   listAuditLogsByResource: ({ resource }) => call(() => api.get(`/dashboard/logs/by-resource/${encodeURIComponent(resource)}`)),
 
-  listRequests: ({ status } = {}) => call(() => api.get('/dashboard/recovery/requests', {
-    params: buildParams({ status }),
-  })),
+  listRequests: ({ status } = {}) => listAllPages('/dashboard/recovery/requests', { status }),
 
   listEvents: ({ page = 1, pageSize = 100, resultStatus, resource, includeLegacy = false } = {}) => callEnvelope(() => api.get('/dashboard/recovery/events', {
     params: buildParams({
