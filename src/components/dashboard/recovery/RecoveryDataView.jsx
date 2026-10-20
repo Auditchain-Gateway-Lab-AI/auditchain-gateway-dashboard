@@ -15,18 +15,22 @@ const INCIDENT_STATUS_OPTIONS = [
 
 const EVENT_STATUS_OPTIONS = [
   { value: 'ALL', label: 'All statuses', description: 'Show every recovery event', tone: 'all' },
+  { value: 'APPLIED_AWAITING_CDC', label: 'Waiting for CDC', description: 'Agent write is applied and awaiting CDC plus evidence verification', tone: 'info' },
   { value: 'SUCCEEDED', label: 'Succeeded', description: 'Recovery completed successfully', tone: 'success' },
+  { value: 'APPLIED_CDC_TIMEOUT', label: 'CDC timed out', description: 'Check the applied write before starting another attempt', tone: 'danger' },
   { value: 'FAILED_VERIFICATION', label: 'Verification failed', description: 'Integrity check did not pass', tone: 'danger' },
   { value: 'FAILED_EXECUTION', label: 'Execution failed', description: 'Recovery could not be completed', tone: 'danger' },
 ];
 
 const NON_REEXECUTABLE_REQUEST_STATUSES = new Set([
-  'PENDING_EXECUTION',
   'PENDING_APPROVAL',
   'APPROVED',
   'EXECUTING',
+  'APPLIED_AWAITING_CDC',
+  'APPLIED_CDC_TIMEOUT',
   'SUCCEEDED',
 ]);
+const ACTIVE_REQUEST_STATUSES = new Set(['PENDING_EXECUTION', 'EXECUTING', 'APPLIED_AWAITING_CDC']);
 const CLOSED_INCIDENT_STATUSES = new Set(['RESOLVED', 'RECOVERED']);
 const PREVIEW_BATCH_SIZE = 20;
 
@@ -327,32 +331,33 @@ function RecoveryContextFacts({ context, showRecoveryAt = false }) {
   );
 }
 
-function RecoveryDataReview({ tampered, trusted, tamperedHash, trustedHash, trustedLabel, emptyTrustedLabel }) {
+function RecoveryDataReview({ tampered, trusted, tamperedHash, trustedHash, trustedLabel, emptyTrustedLabel, emptyTamperedLabel = 'Tampered payload is protected or unavailable.', tamperedHashLabel = 'Tampered hash', trustedHashLabel }) {
   const hasTrusted = trusted !== undefined && trusted !== null && trusted !== '';
+  const hasTampered = tampered !== undefined && tampered !== null && tampered !== '';
 
   return (
     <div className="ac-recovery-data-review">
       <div className="ac-recovery-data-review__hashes">
         <div className="ac-recovery-data-review__hash ac-recovery-data-review__hash--danger">
-          <span>Tampered hash</span>
+          <span>{tamperedHashLabel}</span>
           <code>{tamperedHash || '—'}</code>
         </div>
         <div className="ac-recovery-data-review__hash ac-recovery-data-review__hash--success">
-          <span>{trustedLabel} hash</span>
+          <span>{trustedHashLabel || `${trustedLabel} hash`}</span>
           <code>{trustedHash || '—'}</code>
         </div>
       </div>
-      {hasTrusted ? (
+      {hasTrusted && hasTampered ? (
         <ComparisonTable tampered={tampered} trusted={trusted} trustedLabel={trustedLabel} />
       ) : (
         <div className="ac-recovery-data-columns">
           <div className="ac-recovery-data-block ac-recovery-data-block--danger">
             <span className="ac-recovery-data-label ac-recovery-data-label--danger">Tampered data</span>
-            <StructuredValueList value={tampered} emptyLabel="Tampered payload is protected or unavailable." />
+            <StructuredValueList value={tampered} emptyLabel={emptyTamperedLabel} />
           </div>
           <div className="ac-recovery-data-block ac-recovery-data-block--success">
             <span className="ac-recovery-data-label ac-recovery-data-label--success">{trustedLabel}</span>
-            <div className="ac-recovery-blocked-note"><Icon name="alertTriangle" size={16} /><span>{emptyTrustedLabel}</span></div>
+            {hasTrusted ? <StructuredValueList value={trusted} /> : <div className="ac-recovery-blocked-note"><Icon name="alertTriangle" size={16} /><span>{emptyTrustedLabel}</span></div>}
           </div>
         </div>
       )}
@@ -363,6 +368,8 @@ function RecoveryDataReview({ tampered, trusted, tamperedHash, trustedHash, trus
 const getPreviewStatus = item => {
   const eventStatus = String(item.recoveryEvent?.result_status || '').toUpperCase();
   if (eventStatus) return eventStatus;
+  const requestStatus = String(item.request?.status || '').toUpperCase();
+  if (requestStatus) return requestStatus;
   if (item.ready) return 'PREVIEW_READY';
   if (item.incidentClosed) return String(item.incident?.status || 'RESOLVED').toUpperCase();
   if (item.preflight?.status) return item.preflight.status;
@@ -373,10 +380,12 @@ function RecoveryPreviewItem({ item }) {
   const incident = item.incident || {};
   const recoveryEvent = item.recoveryEvent;
   const recoverySucceeded = String(recoveryEvent?.result_status || '').toUpperCase() === 'SUCCEEDED';
+  const awaitingCDC = String(recoveryEvent?.result_status || item.request?.status || '').toUpperCase() === 'APPLIED_AWAITING_CDC';
+  const directRecovery = String(incident.incident_scope || '').toUpperCase() === 'CLIENT_SOURCE';
   const trustedData = recoverySucceeded ? recoveryEvent?.recovered_metadata : item.preflight?.snapshot_preview?.metadata;
   const context = getRecoveryContext(item);
   const tamperedData = getTamperedData(incident, item.auditLog);
-  const changedFields = getChangedFields(tamperedData, trustedData);
+  const changedFields = directRecovery ? [] : getChangedFields(tamperedData, trustedData);
   const previewStatus = getPreviewStatus(item);
   const emptyTrustedLabel = recoverySucceeded
     ? 'The recovery event did not include recovered metadata.'
@@ -393,14 +402,17 @@ function RecoveryPreviewItem({ item }) {
       <RecoveryContextFacts context={context} showRecoveryAt={recoverySucceeded} />
       <div className={`ac-recovery-preview-state${recoverySucceeded ? ' ac-recovery-preview-state--success' : item.ready ? ' ac-recovery-preview-state--ready' : ' ac-recovery-preview-state--blocked'}`}>
         <Icon name={recoverySucceeded ? 'checkCircle' : item.ready ? 'shield' : 'alertTriangle'} size={15} />
-        <span>{recoverySucceeded ? 'This incident has already been recovered. The trusted result is shown below.' : item.ready ? 'Trusted snapshot verified. This incident is ready to recover.' : item.incidentClosed ? 'This incident is already closed, so a new recovery cannot be executed.' : (item.error || item.candidate?.reason || 'Recovery is not currently available.')}</span>
+        <span>{recoverySucceeded ? 'Recovery has completed and its recorded result is shown below.' : awaitingCDC ? 'The Agent write was applied. The gateway is waiting for CDC and evidence verification.' : item.ready ? 'The client event reference passed preflight. This client row is ready to recover.' : item.incidentClosed ? 'This incident is already closed, so a new recovery cannot be executed.' : (item.error || item.candidate?.reason || 'Recovery is not currently available.')}</span>
       </div>
       <RecoveryDataReview
         tampered={tamperedData}
         trusted={trustedData}
-        tamperedHash={item.preflight?.current_hash || incident.detected_hash}
-        trustedHash={item.preflight?.snapshot_hash || recoveryEvent?.after_hash || incident.expected_hash}
-        trustedLabel={recoverySucceeded ? 'Recovery result' : 'Original trusted data'}
+        tamperedHash={directRecovery ? item.preflight?.client_state_hash || incident.detected_state_hash || incident.detected_hash : item.preflight?.current_hash || incident.detected_hash}
+        trustedHash={directRecovery ? item.preflight?.desired_state_hash || recoveryEvent?.client_after_hash : item.preflight?.snapshot_hash || recoveryEvent?.after_hash || incident.expected_hash}
+        tamperedHashLabel={directRecovery ? 'Live client state hash' : 'Tampered hash'}
+        trustedHashLabel={directRecovery ? 'Trusted desired state hash' : undefined}
+        trustedLabel={recoverySucceeded ? 'Recovery result' : directRecovery ? 'Trusted reference data (redacted)' : 'Original trusted data'}
+        emptyTamperedLabel={directRecovery ? 'Gateway does not return the live client row values. State hash and changed field names are shown above.' : undefined}
         emptyTrustedLabel={emptyTrustedLabel}
       />
       {changedFields.length > 0 && <div className="ac-recovery-changed-fields"><strong>Fields with changes</strong><div>{changedFields.map(field => <span key={field}><Icon name="alertTriangle" size={12} /><em>{field}</em></span>)}</div></div>}
@@ -412,6 +424,11 @@ function RecoveryPreviewItem({ item }) {
 function RecoveryResultCard({ item }) {
   const incident = item.incident || {};
   const recoveryEvent = item.event || {};
+  const resultStatus = String(item.status || '').toUpperCase();
+  const awaitingCDC = resultStatus === 'APPLIED_AWAITING_CDC';
+  const cdcTimedOut = resultStatus === 'APPLIED_CDC_TIMEOUT';
+  const requestInProgress = ACTIVE_REQUEST_STATUSES.has(resultStatus);
+  const directRecovery = String(incident.incident_scope || '').toUpperCase() === 'CLIENT_SOURCE';
   const tamperedData = getTamperedData(incident, item.auditLog);
   const trustedData = recoveryEvent.recovered_metadata;
   const context = getRecoveryContext({
@@ -420,7 +437,7 @@ function RecoveryResultCard({ item }) {
     preflight: item.preflight,
     recoveryEvent,
   });
-  const changedFields = getChangedFields(tamperedData, trustedData);
+  const changedFields = directRecovery ? [] : getChangedFields(tamperedData, trustedData);
 
   return (
     <article className="ac-recovery-result-card">
@@ -429,24 +446,30 @@ function RecoveryResultCard({ item }) {
       <RecoveryDataReview
         tampered={tamperedData}
         trusted={trustedData}
-        tamperedHash={item.request?.before_hash || incident.detected_hash}
-        trustedHash={item.request?.after_hash || recoveryEvent.after_hash}
-        trustedLabel="Recovery result"
+        tamperedHash={directRecovery ? item.preflight?.client_state_hash || item.request?.client_before_hash || item.request?.before_hash || incident.detected_state_hash || incident.detected_hash : item.request?.before_hash || incident.detected_hash}
+        trustedHash={directRecovery ? item.preflight?.desired_state_hash || item.request?.client_after_hash || item.request?.after_hash || recoveryEvent.client_after_hash || recoveryEvent.after_hash : item.request?.after_hash || recoveryEvent.after_hash}
+        tamperedHashLabel={directRecovery ? 'Live client state hash' : 'Before recovery hash'}
+        trustedHashLabel={directRecovery ? 'Recovered client state hash' : 'After recovery hash'}
+        trustedLabel={directRecovery ? 'Recovered reference data' : 'Recovery result'}
+        emptyTamperedLabel={directRecovery ? 'The recovery API does not expose live client values.' : undefined}
         emptyTrustedLabel={item.error || 'Recovery result metadata is not available.'}
       />
       {changedFields.length > 0 && <div className="ac-recovery-changed-fields"><strong>Fields with changes</strong><div>{changedFields.map(field => <span key={field}><Icon name="alertTriangle" size={12} /><em>{field}</em></span>)}</div></div>}
-      {item.status !== 'SUCCEEDED' && <p className="ac-recovery-result-card__message"><Icon name="alertTriangle" size={14} /> {item.error || 'Recovery did not complete for this item.'}</p>}
+      {item.status !== 'SUCCEEDED' && <p className="ac-recovery-result-card__message"><Icon name={awaitingCDC || requestInProgress ? 'clock' : 'alertTriangle'} size={14} /> {item.error || (awaitingCDC ? 'The client record was written. Waiting for CDC and recovery evidence verification.' : cdcTimedOut ? 'CDC confirmation timed out. Review client state before attempting another recovery.' : requestInProgress ? 'The gateway is processing this recovery request.' : String(item.status || '').startsWith('FAILED') ? 'Recovery did not complete for this item.' : `Recovery is ${String(item.status || 'pending').toLowerCase().replaceAll('_', ' ')}.`)}</p>}
     </article>
   );
 }
 
-// TamperIncident currently omits TamperedPayload from JSON. The current audit
-// row is therefore loaded from the tenant-scoped resource endpoint for the
-// before-recovery view, with incident projections kept as a fallback.
 const getTamperedData = (incident, auditLog) => {
   const preservedTamperedData = incident?.tampered_metadata
     ?? incident?.tampered_data
     ?? incident?.tampered_payload;
+
+  if (incident?.incident_scope) {
+    // Scoped direct incidents expose hashes and changed field names. Event or
+    // audit metadata must not be presented as a live source before image.
+    return null;
+  }
 
   if (isClosedIncident(incident)) {
     // Once recovery succeeds, the live audit row contains the trusted value.
@@ -538,6 +561,11 @@ const eventIntegrityStatus = event => event?.integrity_status || 'NOT_CHECKED';
 const eventNeedsAutomaticVerification = event => {
   const integrity = String(eventIntegrityStatus(event)).toUpperCase();
   const snapshot = String(event?.snapshot_status || '').toUpperCase();
+  const directEvent = Boolean(event?.operation);
+  if (directEvent) {
+    return ['NOT_CHECKED', 'PENDING'].includes(integrity)
+      && ['CONFIRMED', 'TIMEOUT', 'CONFLICT'].includes(String(event?.cdc_status || '').toUpperCase());
+  }
   return ['NOT_CHECKED', 'PENDING'].includes(integrity)
     && !['FAILED', 'LEGACY_MISSING'].includes(snapshot);
 };
@@ -545,12 +573,17 @@ const eventNeedsAutomaticVerification = event => {
 function RecoveryEventDetail({ eventDetail, loading, onClose }) {
   const resultStatus = String(eventDetail?.result_status || '').toUpperCase();
   const succeeded = resultStatus === 'SUCCEEDED';
+  const awaitingCDC = resultStatus === 'APPLIED_AWAITING_CDC';
+  const cdcTimedOut = resultStatus === 'APPLIED_CDC_TIMEOUT';
   const integrityStatus = eventIntegrityStatus(eventDetail);
+  const directRecovery = Boolean(eventDetail?.operation);
   const resource = eventDetail?.resource || eventDetail?.target_log_id || 'Recovery target';
-  const resultTitle = succeeded ? 'Trusted data restored' : 'Recovery needs attention';
+  const resultTitle = succeeded ? 'Client record recovery completed' : awaitingCDC ? 'Waiting for CDC confirmation' : cdcTimedOut ? 'CDC confirmation timed out' : 'Recovery needs attention';
   const resultDescription = succeeded
-    ? 'The original trusted snapshot is now active on the target log.'
-    : eventDetail?.failure_reason || 'The recovery event was recorded without restoring the target data.';
+    ? 'The Agent write, CDC event, and recovery evidence verification completed.'
+    : awaitingCDC
+      ? 'The Agent applied the client write. The gateway is waiting for CDC and recovery event verification.'
+      : eventDetail?.failure_reason || 'The recovery event needs review before another attempt.';
 
   return (
     <div className="ac-recovery-preview-overlay" role="presentation" onClick={() => !loading && onClose()}>
@@ -622,14 +655,16 @@ function RecoveryEventDetail({ eventDetail, loading, onClose }) {
               </section>
 
               <details className="ac-recovery-event-technical" open={!succeeded}>
-                <summary><span><Icon name="shield" size={14} /> Technical evidence</span><small>Hash, snapshot, Merkle, and pipeline details</small><Icon name="chevronDown" size={15} /></summary>
+                <summary><span><Icon name="shield" size={14} /> Technical evidence</span><small>{directRecovery ? 'Client state, CDC, Merkle, and event details' : 'Hash, snapshot, Merkle, and pipeline details'}</small><Icon name="chevronDown" size={15} /></summary>
                 <div className="ac-recovery-event-technical__body">
                   <div className="ac-recovery-event-hash-grid">
-                    <div className="ac-recovery-event-hash ac-recovery-event-hash--danger"><span>Before recovery hash</span><code>{eventDetail?.before_hash || '—'}</code></div>
-                    <div className="ac-recovery-event-hash ac-recovery-event-hash--success"><span>Recovered data hash</span><code>{eventDetail?.after_hash || '—'}</code></div>
+                    <div className="ac-recovery-event-hash ac-recovery-event-hash--danger"><span>{directRecovery ? 'Client before state hash' : 'Before recovery hash'}</span><code>{eventDetail?.client_before_hash || eventDetail?.before_hash || '—'}</code></div>
+                    <div className="ac-recovery-event-hash ac-recovery-event-hash--success"><span>{directRecovery ? 'Client after state hash' : 'Recovered data hash'}</span><code>{eventDetail?.client_after_hash || eventDetail?.after_hash || '—'}</code></div>
                   </div>
                   <div className="ac-recovery-event-facts">
-                    <span><strong>Snapshot</strong>{eventDetail?.snapshot_status || '—'} · {eventDetail?.snapshot_version_id || eventDetail?.source_snapshot_version_id || '—'}</span>
+                    {directRecovery
+                      ? <span><strong>Direct client event / CDC</strong>{eventDetail?.operation || '—'} · {eventDetail?.cdc_status || 'PENDING'}</span>
+                      : <span><strong>Snapshot</strong>{eventDetail?.snapshot_status || '—'} · {eventDetail?.snapshot_version_id || eventDetail?.source_snapshot_version_id || '—'}</span>}
                     <span><strong>Pipeline</strong>{eventDetail?.pipeline_status || '—'} · {eventDetail?.merkle_root || '—'}</span>
                     <span><strong>Event hash</strong>{eventDetail?.event_hash || '—'}</span>
                     <span><strong>Failure / integrity note</strong>{eventDetail?.failure_reason || eventDetail?.integrity_error || 'No issue recorded'}</span>
@@ -671,9 +706,18 @@ function RecoveryDataView({ selectedClient }) {
   const [loading, setLoading] = useState(true);
   const [executing, setExecuting] = useState(false);
   const [error, setError] = useState('');
+  const [resourceScanSummary, setResourceScanSummary] = useState('');
+  const [scanningResource, setScanningResource] = useState(false);
   const executionInFlight = useRef(false);
   const refreshInFlight = useRef(false);
+  const incidentRefreshInFlight = useRef(false);
+  const resultPollInFlight = useRef(false);
   const previewRun = useRef(0);
+  const resultItemsRef = useRef(resultItems);
+
+  useEffect(() => {
+    resultItemsRef.current = resultItems;
+  }, [resultItems]);
 
   const loadData = useCallback(async ({ silent = false } = {}) => {
     if (refreshInFlight.current) return;
@@ -715,6 +759,23 @@ function RecoveryDataView({ selectedClient }) {
     }
   }, [selectedClient]);
 
+  const refreshIncidents = useCallback(async () => {
+    if (incidentRefreshInFlight.current) return;
+    incidentRefreshInFlight.current = true;
+    try {
+      const result = await recoveryApi.listIncidents();
+      const rows = normalizeList(result);
+      setIncidents(current => mergeIncidentLists(current, rows));
+      return rows;
+    } catch {
+      // Keep the last known list on transient polling errors. The manual
+      // Refresh button still reports failures through the page-level alert.
+      return null;
+    } finally {
+      incidentRefreshInFlight.current = false;
+    }
+  }, []);
+
   useEffect(() => {
     previewRun.current += 1;
     setSelectedIds(new Set());
@@ -726,26 +787,99 @@ function RecoveryDataView({ selectedClient }) {
     loadData();
   }, [loadData]);
 
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') refreshIncidents();
+    };
+    const timer = window.setInterval(refreshWhenVisible, 30000);
+    window.addEventListener('focus', refreshWhenVisible);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refreshWhenVisible);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, [refreshIncidents]);
+
   const awaitingAutomaticVerification = useMemo(
     () => events.some(eventNeedsAutomaticVerification),
     [events]
   );
+  const awaitingRecoveryCompletion = useMemo(
+    () => requests.some(request => ACTIVE_REQUEST_STATUSES.has(String(request?.status || '').toUpperCase())),
+    [requests]
+  );
 
   useEffect(() => {
-    if (!awaitingAutomaticVerification) return undefined;
-    const timer = window.setInterval(() => loadData({ silent: true }), 5000);
+    if (!awaitingAutomaticVerification && !awaitingRecoveryCompletion) return undefined;
+    const timer = window.setInterval(() => loadData({ silent: true }), 4000);
     return () => window.clearInterval(timer);
-  }, [awaitingAutomaticVerification, loadData]);
+  }, [awaitingAutomaticVerification, awaitingRecoveryCompletion, loadData]);
+
+  const pendingResultSignature = resultItems
+    .filter(item => item?.request?.id && ACTIVE_REQUEST_STATUSES.has(String(item.request.status || '').toUpperCase()))
+    .map(item => `${item.request.id}:${item.request.status}`)
+    .join('|');
+
+  useEffect(() => {
+    if (!pendingResultSignature) return undefined;
+    let active = true;
+    const poll = async () => {
+      if (resultPollInFlight.current) return;
+      resultPollInFlight.current = true;
+      try {
+        const pending = resultItemsRef.current.filter(item => item?.request?.id && ACTIVE_REQUEST_STATUSES.has(String(item.request.status || '').toUpperCase()));
+        const updates = await Promise.all(pending.map(async item => {
+          try {
+            const request = await recoveryApi.getRequest({ requestId: item.request.id });
+            let event = item.event;
+            const eventId = request.recovery_event_id || event?.id;
+            if (eventId) {
+              try { event = await recoveryApi.getEvent({ eventId }); } catch { /* Event projection may lag the request update. */ }
+            }
+            return { request, event };
+          } catch {
+            return { request: item.request, event: item.event };
+          }
+        }));
+        if (!active) return;
+        setResultItems(current => current.map(item => {
+          const update = updates.find(value => value.request?.id === item.request?.id);
+          if (!update) return item;
+          return { ...item, request: update.request, event: update.event, status: update.request?.status || item.status };
+        }));
+        await loadData({ silent: true });
+      } finally {
+        resultPollInFlight.current = false;
+      }
+    };
+    const timer = window.setInterval(() => void poll(), 4000);
+    void poll();
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [pendingResultSignature, loadData]);
 
   const requestByIncident = useMemo(() => {
     const map = new Map();
     requests.forEach(request => {
-      if (request?.incident_id) map.set(request.incident_id, request);
+      if (!request?.incident_id) return;
+      const current = map.get(request.incident_id);
+      if (!current || new Date(request.requested_at || 0).getTime() > new Date(current.requested_at || 0).getTime()) {
+        map.set(request.incident_id, request);
+      }
     });
     return map;
   }, [requests]);
 
   const normalizedSearch = search.trim().toLowerCase();
+  const resourceScanTarget = useMemo(() => {
+    const value = search.trim();
+    if (!/^[a-zA-Z0-9_-]+(?::[a-zA-Z0-9_-]+)?$/.test(value)) return '';
+    const [table, recordId] = value.split(':');
+    return recordId ? `${table.toUpperCase()}:${recordId}` : table.toUpperCase();
+  }, [search]);
   const incidentStatusOptions = useMemo(() => getAvailableStatusOptions(incidents, 'status', INCIDENT_STATUS_OPTIONS, incidentFilter), [incidents, incidentFilter]);
   const eventStatusOptions = useMemo(() => getAvailableStatusOptions(events, 'result_status', EVENT_STATUS_OPTIONS, eventFilter), [events, eventFilter]);
   const visibleIncidents = useMemo(() => incidents.filter(item => {
@@ -772,18 +906,9 @@ function RecoveryDataView({ selectedClient }) {
     return matchesFilter && (!normalizedSearch || haystack.includes(normalizedSearch));
   }), [events, eventFilter, normalizedSearch]);
 
-  const isSelectable = useCallback((incident) => {
-    // Selection is for review as well as execution. Keep every incident in
-    // the bulk-selection scope, including already-resolved records and any
-    // future backend status. `isReadyForRecovery` remains the execution gate.
-    return Boolean(incident?.id);
-  }, []);
-
-  const isReadyForRecovery = useCallback((incident) => {
-    const status = String(incident?.status || '').toUpperCase();
-    const requestStatus = String(requestByIncident.get(incident?.id)?.status || '').toUpperCase();
-    return status === 'OPEN' && !NON_REEXECUTABLE_REQUEST_STATUSES.has(requestStatus);
-  }, [requestByIncident]);
+  // Selection is for review. Recovery eligibility is checked separately by
+  // loadPreviewItem and must not prevent selecting closed/read-only incidents.
+  const isSelectable = useCallback(incident => Boolean(incident?.id), []);
 
   const selectedIncidents = useMemo(
     () => incidents.filter(item => selectedIds.has(item.id)),
@@ -798,20 +923,53 @@ function RecoveryDataView({ selectedClient }) {
   const allVisibleSelected = visibleSelectableIds.length > 0
     && visibleSelectableIds.every(id => selectedIds.has(id));
 
-  const selectedIncidentStatus = incidentStatusOptions.find(option => option.value === incidentFilter);
   const bulkSelectionLabel = incidentFilter === 'ALL'
     ? 'Select all incidents'
-    : `Select all ${selectedIncidentStatus?.label?.toLowerCase() || 'matching'} incidents`;
+    : 'Select matching incidents';
   const bulkClearLabel = incidentFilter === 'ALL'
-    ? 'Clear all incident selection'
-    : `Clear ${selectedIncidentStatus?.label?.toLowerCase() || 'matching'} incident selection`;
+    ? 'Clear all selected incidents'
+    : 'Clear matching incident selection';
 
   const stats = useMemo(() => ({
-    readyIncidents: incidents.filter(isReadyForRecovery).length,
+    openIncidents: incidents.filter(item => String(item?.status || '').toUpperCase() === 'OPEN').length,
+    readyIncidents: incidents.filter(item => String(item?.incident_scope || '').toUpperCase() === 'CLIENT_SOURCE' && String(item?.status || '').toUpperCase() === 'OPEN').length,
+    gatewayIntegrityIncidents: incidents.filter(item => String(item?.incident_scope || '').toUpperCase() === 'GATEWAY_INTEGRITY' && String(item?.status || '').toUpperCase() === 'OPEN').length,
     recoveredEvents: events.filter(item => String(item.result_status || '').toUpperCase() === 'SUCCEEDED').length,
     selected: selectedIncidents.length,
     verifiedEvents: events.filter(item => String(eventIntegrityStatus(item)).toUpperCase() === 'VALID').length,
-  }), [events, incidents, isReadyForRecovery, selectedIncidents]);
+  }), [events, incidents, selectedIncidents]);
+
+  const runResourceScan = async () => {
+    if (!resourceScanTarget || !selectedClient || scanningResource) return;
+    setScanningResource(true);
+    setResourceScanSummary('');
+    setError('');
+    try {
+      const result = await recoveryApi.verifyResource({ resource: resourceScanTarget, clientId: selectedClient });
+      const incidentsAfterScan = await refreshIncidents();
+      const checked = Number(result?.total_logs ?? result?.logs?.length ?? 0);
+      const chainStatus = String(result?.chain_status || '').toLowerCase();
+      const tamperedLogs = (Array.isArray(result?.logs) ? result.logs : []).filter(item => (
+        ['TAMPERED', 'INVALID'].includes(String(item?.integrity_status || item?.chain_status || '').toUpperCase())
+      ));
+      const detected = chainStatus === 'tampered' || tamperedLogs.length > 0;
+      const detectedLogIds = new Set(tamperedLogs.map(item => String(item?.log_id || '')).filter(Boolean));
+      const persisted = Array.isArray(incidentsAfterScan) && incidentsAfterScan.some(item => (
+        detectedLogIds.has(String(item?.log_id || ''))
+        || detectedLogIds.has(String(item?.reference_log_id || ''))
+      ));
+      const outcome = !detected
+        ? 'No integrity mismatch was reported.'
+        : persisted
+          ? 'Integrity issues were found and matching incidents are listed.'
+          : 'Integrity issues were found, but no matching incident was returned. Check gateway incident persistence and tenant scope.';
+      setResourceScanSummary(`Checked ${checked} audit record${checked === 1 ? '' : 's'} for ${resourceScanTarget}. ${outcome}`);
+    } catch (scanError) {
+      setError(getErrorMessage(scanError));
+    } finally {
+      setScanningResource(false);
+    }
+  };
 
   const toggleSelection = (incident) => {
     if (!isSelectable(incident)) return;
@@ -835,17 +993,20 @@ function RecoveryDataView({ selectedClient }) {
   const loadPreviewItem = async (incident) => {
     const incidentStatus = String(incident?.status || '').toUpperCase();
     const incidentOpen = incidentStatus === 'OPEN';
+    const clientSourceIncident = String(incident?.incident_scope || '').toUpperCase() === 'CLIENT_SOURCE';
     const incidentClosed = CLOSED_INCIDENT_STATUSES.has(incidentStatus);
     const relatedRequest = requestByIncident.get(incident?.id);
-    const existingEvent = incidentClosed
+    const existingEvent = incidentClosed || relatedRequest?.recovery_event_id
       ? events.find(item => item?.incident_id === incident?.id)
         || (relatedRequest?.recovery_event_id ? { id: relatedRequest.recovery_event_id, incident_id: incident.id } : null)
       : null;
-    const [detailResult, candidateResult, preflightResult, auditLogsResult] = await Promise.allSettled([
-      recoveryApi.getIncident({ incidentId: incident.id }),
-      incidentOpen ? recoveryApi.listCandidates({ incidentId: incident.id }) : Promise.resolve([]),
-      incidentOpen ? recoveryApi.runPreflight({ incidentId: incident.id }) : Promise.resolve(null),
-      recoveryApi.listAuditLogsByResource({ resource: incident.resource }),
+    const [detailResult, auditLogsResult] = await Promise.allSettled([
+      incidentOpen && clientSourceIncident
+        ? recoveryApi.getIncident({ incidentId: incident.id })
+        : Promise.resolve(incident),
+      incident?.incident_scope
+        ? Promise.resolve([])
+        : recoveryApi.listAuditLogsByResource({ resource: incident.resource }),
     ]);
 
     let recoveryEvent = existingEvent;
@@ -858,23 +1019,43 @@ function RecoveryDataView({ selectedClient }) {
     }
 
     const detail = detailResult.status === 'fulfilled' ? detailResult.value : incident;
-    const candidates = candidateResult.status === 'fulfilled' ? normalizeList(candidateResult.value) : [];
-    const candidate = candidates.find(item => item.log_id === incident.log_id) || candidates[0] || null;
-    const preflight = preflightResult.status === 'fulfilled' ? preflightResult.value : null;
+    let candidate = null;
+    let preflight = null;
+    let candidateError = null;
+    let preflightError = null;
+    if (incidentOpen && clientSourceIncident) {
+      try {
+        const candidates = normalizeList(await recoveryApi.listCandidates({ incidentId: incident.id }));
+        const targetLogId = detail.reference_log_id || incident.reference_log_id || incident.log_id;
+        candidate = candidates.find(item => item.log_id === targetLogId) || candidates[0] || null;
+        if (candidate?.eligible && !['APPLIED_CDC_TIMEOUT', 'FAILED_EXECUTION', 'FAILED_VERIFICATION'].includes(String(relatedRequest?.status || '').toUpperCase())) {
+          preflight = await recoveryApi.runPreflight({ incidentId: incident.id });
+        }
+      } catch (previewError) {
+        if (!candidate) candidateError = previewError;
+        else preflightError = previewError;
+      }
+    }
     const auditLogs = auditLogsResult.status === 'fulfilled' ? normalizeList(auditLogsResult.value) : [];
-    const auditLog = auditLogs.find(item => item?.log_id === incident.log_id) || null;
+    const targetLogId = detail.reference_log_id || incident.reference_log_id || incident.log_id;
+    const auditLog = auditLogs.find(item => item?.log_id === targetLogId) || null;
     const previewIncident = auditLog ? { ...detail, auditLog } : detail;
     const requestStatus = String(relatedRequest?.status || '').toUpperCase();
-    const failures = [detailResult, candidateResult, preflightResult]
-      .filter(result => result.status === 'rejected')
-      .map(result => result.reason);
+    const failures = [detailResult.status === 'rejected' ? detailResult.reason : null, candidateError, preflightError].filter(Boolean);
     const ready = Boolean(
       incidentOpen
+      && clientSourceIncident
       && !NON_REEXECUTABLE_REQUEST_STATUSES.has(requestStatus)
       && candidate?.eligible
       && preflight?.recoverable
       && String(preflight?.status || '').toUpperCase() === 'VALID'
     );
+
+    let blockedReason = '';
+    if (!clientSourceIncident) blockedReason = 'This is a Gateway integrity incident. It is read only in agent direct recovery.';
+    else if (requestStatus === 'APPLIED_CDC_TIMEOUT') blockedReason = 'The previous Agent write may have applied. Review its event and client state before another attempt.';
+    else if (ACTIVE_REQUEST_STATUSES.has(requestStatus) && requestStatus !== 'PENDING_EXECUTION') blockedReason = 'Recovery is already waiting for CDC or event verification.';
+    else if (!incidentOpen) blockedReason = 'This incident is closed; review its recorded recovery result.';
 
     return {
       incident: previewIncident,
@@ -883,9 +1064,10 @@ function RecoveryDataView({ selectedClient }) {
       candidate,
       preflight,
       recoveryEvent,
+      request: relatedRequest,
       incidentClosed,
       ready,
-      error: failures.length ? getErrorMessage(failures[0]) : '',
+      error: blockedReason || (failures.length ? getErrorMessage(failures[0]) : candidate?.reason || ''),
     };
   };
 
@@ -922,15 +1104,19 @@ function RecoveryDataView({ selectedClient }) {
 
   const executeOne = async (item) => {
     const incident = item.incident;
-    const request = await recoveryApi.createRequest({
-      incidentId: incident.id,
-      selectedLogId: incident.log_id,
-      // Backend still requires this field for the immutable request record;
-      // the user is not asked to provide a message in the new UI.
-      reason: INTERNAL_RECOVERY_REASON,
-      idempotencyKey: createIdempotencyKey(),
-    });
-    const executed = await recoveryApi.executeRequest({ requestId: request.id });
+    const request = String(item.request?.status || '').toUpperCase() === 'PENDING_EXECUTION'
+      ? item.request
+      : await recoveryApi.createRequest({
+        incidentId: incident.id,
+        selectedLogId: item.candidate?.log_id || incident.reference_log_id || incident.log_id,
+        // Backend keeps this field for the immutable request record; the user
+        // is not asked to supply an explanation in the direct recovery flow.
+        reason: INTERNAL_RECOVERY_REASON,
+        idempotencyKey: createIdempotencyKey(),
+      });
+    const executed = String(request.status || '').toUpperCase() === 'PENDING_EXECUTION'
+      ? await recoveryApi.executeRequest({ requestId: request.id })
+      : request;
     let event = null;
     const eventId = executed?.recovery_event_id || request?.recovery_event_id;
     if (eventId) {
@@ -940,7 +1126,7 @@ function RecoveryDataView({ selectedClient }) {
         // The request result remains useful even if event detail is briefly unavailable.
       }
     }
-    return { ...item, incident, request, executed, event, status: executed?.status || 'SUCCEEDED' };
+    return { ...item, incident, request: executed || request, executed, event, status: executed?.status || request?.status || 'UNKNOWN' };
   };
 
   const executeRecovery = async () => {
@@ -950,13 +1136,14 @@ function RecoveryDataView({ selectedClient }) {
 
     executionInFlight.current = true;
     setExecuting(true);
-    const settled = await Promise.all(readyItems.map(async item => {
+    const settled = [];
+    for (const item of readyItems) {
       try {
-        return await executeOne(item);
+        settled.push(await executeOne(item));
       } catch (executionError) {
-        return { ...item, incident: item.incident, status: 'FAILED_EXECUTION', error: getErrorMessage(executionError) };
+        settled.push({ ...item, incident: item.incident, status: 'FAILED_EXECUTION', error: getErrorMessage(executionError) });
       }
-    }));
+    }
 
     const successfulByIncident = new Map(
       settled
@@ -1033,7 +1220,7 @@ function RecoveryDataView({ selectedClient }) {
       {error && <div className="ac-recovery-alert ac-recovery-alert--error" role="alert"><Icon name="alertTriangle" size={16} /><span>{error}</span><button type="button" onClick={loadData} aria-label="Retry recovery data"><Icon name="refresh" size={15} /></button></div>}
 
       <div className="ac-recovery-stat-grid">
-        <div className="ac-recovery-stat"><span className="ac-recovery-stat__icon ac-recovery-stat__icon--danger"><Icon name="alertTriangle" size={17} /></span><div><strong>{stats.readyIncidents}</strong><span>Ready to recover</span></div></div>
+        <div className="ac-recovery-stat"><span className="ac-recovery-stat__icon ac-recovery-stat__icon--danger"><Icon name="alertTriangle" size={17} /></span><div><strong>{stats.openIncidents}</strong><span>Open tamper incidents</span></div></div>
         <div className="ac-recovery-stat"><span className="ac-recovery-stat__icon ac-recovery-stat__icon--success"><Icon name="checkCircle" size={17} /></span><div><strong>{stats.recoveredEvents}</strong><span>Recovered events</span></div></div>
         <div className="ac-recovery-stat"><span className="ac-recovery-stat__icon ac-recovery-stat__icon--info"><Icon name="list" size={17} /></span><div><strong>{stats.selected}</strong><span>Selected incidents</span></div></div>
         <div className="ac-recovery-stat"><span className="ac-recovery-stat__icon ac-recovery-stat__icon--warning"><Icon name="shield" size={17} /></span><div><strong>{stats.verifiedEvents}</strong><span>Verified events</span></div></div>
@@ -1041,22 +1228,24 @@ function RecoveryDataView({ selectedClient }) {
 
       <div className="ac-recovery-center__toolbar ac-recovery-data-toolbar">
         <div className="ac-recovery-segmented ac-recovery-section-tabs" role="tablist" aria-label="Recovery data section">
-          <button type="button" className={activeSection === 'incidents' ? 'is-active' : ''} onClick={() => setActiveSection('incidents')}><Icon name="alertTriangle" size={13} /> Tampered incidents <span>{incidents.length}</span></button>
+          <button type="button" className={activeSection === 'incidents' ? 'is-active' : ''} onClick={() => setActiveSection('incidents')}><Icon name="alertTriangle" size={13} /> Recovery incidents <span>{incidents.length}</span></button>
           <button type="button" className={activeSection === 'events' ? 'is-active' : ''} onClick={() => setActiveSection('events')}><Icon name="database" size={13} /> Recovery history <span>{eventPage.totalItems}</span></button>
         </div>
-        <label className="ac-recovery-search"><Icon name="search" size={15} /><input aria-label="Search recovery data" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search incident, log, resource, or event" /></label>
+        <label className="ac-recovery-search"><Icon name="search" size={15} /><input aria-label="Search recovery data" value={search} onChange={event => { setSearch(event.target.value); setResourceScanSummary(''); }} placeholder="Search incident, log, resource, or event" /></label>
         <RecoveryStatusFilter
           activeSection={activeSection}
           options={activeSection === 'incidents' ? incidentStatusOptions : eventStatusOptions}
           value={activeSection === 'incidents' ? incidentFilter : eventFilter}
           onChange={value => activeSection === 'incidents' ? setIncidentFilter(value) : setEventFilter(value)}
         />
-        {activeSection === 'incidents' && <div className="ac-recovery-data-toolbar__actions"><button type="button" className="ac-btn-ghost-action" onClick={toggleSelectAll} disabled={!visibleSelectableIds.length} title="Only incidents matching the active status and search filters are selected"><Icon name={allVisibleSelected ? 'check' : 'list'} size={14} /> {allVisibleSelected ? bulkClearLabel : `${bulkSelectionLabel} (${visibleSelectableIds.length})`}</button><button type="button" className="ac-btn-ghost-action" onClick={() => setSelectedIds(new Set())} disabled={!selectedIncidents.length}><Icon name="x" size={14} /> Clear selection</button><button type="button" className="ac-btn-primary" onClick={() => openPreview()} disabled={!selectedIncidents.length}><Icon name="eye" size={15} /> Preview selected ({selectedIncidents.length})</button></div>}
+        {activeSection === 'incidents' && <div className="ac-recovery-data-toolbar__actions">{resourceScanTarget && selectedClient && <button type="button" className="ac-btn-ghost-action" onClick={runResourceScan} disabled={scanningResource} title="Verify this resource through the gateway and refresh recovery incidents"><Icon name={scanningResource ? 'spinner' : 'shield'} size={14} /> {scanningResource ? 'Verifying...' : `Verify ${resourceScanTarget}`}</button>}<button type="button" className="ac-btn-ghost-action" onClick={toggleSelectAll} disabled={!visibleSelectableIds.length} title="Select every incident matching the active status and search filters"><Icon name={allVisibleSelected ? 'check' : 'list'} size={14} /> {allVisibleSelected ? bulkClearLabel : `${bulkSelectionLabel} (${visibleSelectableIds.length})`}</button><button type="button" className="ac-btn-ghost-action" onClick={() => setSelectedIds(new Set())} disabled={!selectedIncidents.length}><Icon name="x" size={14} /> Clear selection</button><button type="button" className="ac-btn-primary" onClick={() => openPreview()} disabled={!selectedIncidents.length}><Icon name="eye" size={15} /> Preview selected ({selectedIncidents.length})</button></div>}
       </div>
+
+      {resourceScanSummary && <div className="ac-recovery-alert ac-recovery-alert--success" role="status"><Icon name="checkCircle" size={15} /><span>{resourceScanSummary}</span></div>}
 
       {activeSection === 'incidents' ? (
         <section className="ac-recovery-center__panel ac-recovery-data-panel">
-           <div className="ac-recovery-center__panel-head"><div className="ac-recovery-center__panel-title"><div className="ac-recovery-center__panel-title-row"><h2>Tampered incidents</h2><span>{visibleIncidents.length} of {incidents.length}</span></div><p>Select any incident for review, including resolved and recovered incidents. Open incidents can be recovered; closed incidents remain selectable so you can compare the original tampered data with the recovery result.</p></div><div className="ac-recovery-data-selection-note"><Icon name="shield" size={14} /> {stats.readyIncidents} ready to recover · {incidents.filter(isClosedIncident).length} available for review</div></div>
+           <div className="ac-recovery-center__panel-head"><div className="ac-recovery-center__panel-title"><div className="ac-recovery-center__panel-title-row"><h2>Recovery incidents</h2><span>{visibleIncidents.length} of {incidents.length}</span></div><p>Only open Client Source incidents can run preflight and recovery. Gateway Integrity incidents remain read only. Select any row to inspect its evidence and status.</p></div><div className="ac-recovery-data-selection-note"><Icon name="shield" size={14} /> {stats.readyIncidents} open Client Source recoverable · {stats.gatewayIntegrityIncidents} open Gateway Integrity read only · {incidents.filter(isClosedIncident).length} closed incidents</div></div>
           {loading ? <div className="ac-recovery-empty ac-recovery-empty--loading"><Icon name="spinner" size={25} /> Loading tampered incidents...</div> : visibleIncidents.length === 0 ? <div className="ac-recovery-empty"><Icon name="inbox" size={25} /><strong>No tampered incidents found</strong><p>The backend returned no records for this workspace and filter.</p></div> : (
             <div className="ac-recovery-table-wrap"><table className="ac-recovery-table ac-recovery-data-table"><thead><tr><th className="ac-recovery-checkbox-cell"><input type="checkbox" aria-label="Select all incidents matching current filters" checked={allVisibleSelected} onChange={toggleSelectAll} disabled={!visibleSelectableIds.length} /></th><th>Incident</th><th>Target log / resource</th><th>Detected</th><th>Integrity evidence</th><th>Status</th></tr></thead><tbody>
               {visibleIncidents.map(item => {
@@ -1064,11 +1253,11 @@ function RecoveryDataView({ selectedClient }) {
                 const selectable = isSelectable(item);
                 return <tr key={item.id} className={selectedIds.has(item.id) ? 'is-selected' : ''} data-previewable="true" tabIndex={0} aria-label={`Preview ${item.log_id}`} onClick={() => openPreview([item])} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openPreview([item]); } }}>
                   <td className="ac-recovery-checkbox-cell" onClick={event => event.stopPropagation()}><input type="checkbox" aria-label={`Select ${item.log_id}`} checked={selectedIds.has(item.id)} onChange={() => toggleSelection(item)} disabled={!selectable} /></td>
-                  <td><code>{item.id}</code><small>{item.incident_type || 'Integrity mismatch'}</small></td>
-                  <td><code>{item.log_id}</code><small>{item.resource || '-'}</small></td>
+                  <td><code>{item.id}</code><small>{item.incident_scope || 'Scope unavailable'} · {item.incident_type || 'Integrity mismatch'}</small></td>
+                  <td><code>{item.reference_log_id || item.log_id}</code><small>{item.resource || '-'}</small></td>
                   <td>{item.detected_at ? formatTimestamp(item.detected_at) : '-'}<small>{item.client_id || selectedClient || '-'}</small></td>
                   <td><strong>{item.expected_hash ? 'Expected hash available' : 'Hash evidence pending'}</strong><small>{item.detected_hash || 'Detected hash unavailable'}</small></td>
-                  <td><RecoveryStatusBadge status={request?.status === 'EXECUTING' ? 'EXECUTING' : item.status} compact /></td>
+                  <td><RecoveryStatusBadge status={request && ACTIVE_REQUEST_STATUSES.has(String(request.status || '').toUpperCase()) ? request.status : item.status} compact /></td>
                 </tr>;
               })}
             </tbody></table></div>
@@ -1079,7 +1268,7 @@ function RecoveryDataView({ selectedClient }) {
           <div className="ac-recovery-center__panel-head"><div className="ac-recovery-center__panel-title"><div className="ac-recovery-center__panel-title-row"><h2>Recovery history</h2><span>{visibleEvents.length} of {events.length}</span></div><p>Read-only recovery evidence from the backend. Verification runs automatically after execution; click a row to inspect its details.</p></div><div className="ac-recovery-data-selection-note"><Icon name="database" size={14} /> {eventPage.totalItems} total recovery event{eventPage.totalItems === 1 ? '' : 's'}</div></div>
           {loading ? <div className="ac-recovery-empty ac-recovery-empty--loading"><Icon name="spinner" size={25} /> Loading recovery history...</div> : visibleEvents.length === 0 ? <div className="ac-recovery-empty"><Icon name="inbox" size={25} /><strong>No recovery history found</strong><p>Successful or failed recovery executions will appear here after the backend records them.</p></div> : (
             <div className="ac-recovery-table-wrap"><table className="ac-recovery-table ac-recovery-event-table"><thead><tr><th>Event</th><th>Target log / resource</th><th>Result</th><th>Integrity</th><th>Pipeline</th><th>Executed</th></tr></thead><tbody>
-              {visibleEvents.map(event => <tr key={event.id} data-previewable="true" tabIndex={0} aria-label={`View recovery history ${event.id}`} onClick={() => openEvent(event)} onKeyDown={keyboardEvent => { if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') { keyboardEvent.preventDefault(); openEvent(event); } }}><td><code>{event.id}</code><small>{event.event_type || 'RECOVERY_EXECUTION'} · {event.legacy ? 'Legacy' : event.storage_kind || 'RECOVERY_EVENT'}</small></td><td><code>{event.target_log_id || event.selected_log_id || '-'}</code><small>{event.resource || '-'}</small></td><td><RecoveryStatusBadge status={event.result_status} compact /><small>{event.failure_reason || event.executed_by || '-'}</small></td><td><RecoveryStatusBadge status={eventIntegrityStatus(event)} compact /></td><td><strong>{event.pipeline_status || '-'}</strong><small>{event.snapshot_status || 'Snapshot status unavailable'}</small></td><td>{event.executed_at ? formatTimestamp(event.executed_at) : '-'}</td></tr>)}
+              {visibleEvents.map(event => <tr key={event.id} data-previewable="true" tabIndex={0} aria-label={`View recovery history ${event.id}`} onClick={() => openEvent(event)} onKeyDown={keyboardEvent => { if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') { keyboardEvent.preventDefault(); openEvent(event); } }}><td><code>{event.id}</code><small>{event.event_type || 'RECOVERY_EXECUTION'} · {event.legacy ? 'Legacy' : event.storage_kind || 'RECOVERY_EVENT'}</small></td><td><code>{event.target_log_id || event.selected_log_id || '-'}</code><small>{event.resource || '-'}</small></td><td><RecoveryStatusBadge status={event.result_status} compact /><small>{event.failure_reason || event.executed_by || '-'}</small></td><td><RecoveryStatusBadge status={eventIntegrityStatus(event)} compact /></td><td><strong>{event.pipeline_status || '-'}</strong><small>{event.operation ? `CDC ${event.cdc_status || 'PENDING'}` : event.snapshot_status || 'Snapshot status unavailable'}</small></td><td>{event.executed_at ? formatTimestamp(event.executed_at) : '-'}</td></tr>)}
             </tbody></table></div>
           )}
         </section>
@@ -1087,7 +1276,7 @@ function RecoveryDataView({ selectedClient }) {
 
       {!!resultItems.length && <section className="ac-recovery-center__panel ac-recovery-results-panel"><div className="ac-recovery-center__panel-head"><div className="ac-recovery-center__panel-title"><div className="ac-recovery-center__panel-title-row"><h2>Latest recovery results</h2><span>{resultItems.filter(item => item.status === 'SUCCEEDED').length} succeeded · {resultItems.filter(item => item.status !== 'SUCCEEDED').length} other</span></div><p>Each item keeps the tampered data beside the recovery result for audit review.</p></div><button type="button" className="ac-btn-ghost-action" onClick={() => setResultItems([])}><Icon name="x" size={14} /> Clear results</button></div><div className="ac-recovery-results-list">{resultItems.map(item => <RecoveryResultCard key={`${item.incident?.id}-${item.request?.id || item.status}`} item={item} />)}</div></section>}
 
-      {previewOpen && <div className="ac-recovery-preview-overlay" role="presentation" onClick={closePreview}><section className="ac-recovery-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="recovery-preview-title" onClick={event => event.stopPropagation()}><header className="ac-recovery-preview-dialog__header"><div><span className="ac-recovery-eyebrow"><Icon name="eye" size={14} /> Backend preflight preview</span><h2 id="recovery-preview-title">Review recovery data</h2><p>{previewLoading ? `${previewItems.length} of ${previewTotal || '...'} incidents loaded` : `${previewItems.length} incident${previewItems.length === 1 ? '' : 's'}`} · {readyPreviewCount} ready · {recoveredPreviewCount} recovered · {notActionablePreviewCount} not actionable</p></div><button type="button" className="ac-modal__close" onClick={closePreview} disabled={executing} aria-label="Close preview"><Icon name="x" size={18} /></button></header><div className="ac-recovery-preview-dialog__body">{previewError ? <div className="ac-recovery-alert ac-recovery-alert--error" role="alert"><Icon name="alertTriangle" size={16} /><span>{previewError}</span></div> : <>{previewItems.map(item => <RecoveryPreviewItem item={item} key={item.incident?.id || item.incident?.log_id} />)}{previewLoading && <div className="ac-recovery-empty ac-recovery-empty--loading"><Icon name="spinner" size={25} /> Loading preview data ({previewItems.length} of {previewTotal})...</div>}</>}</div><footer className="ac-recovery-preview-dialog__footer"><span><Icon name="checkCircle" size={13} /> Snapshot verified means the trusted data passed preflight; recovery is completed only after execution.</span><div><button type="button" className="ac-btn-ghost-action" onClick={closePreview} disabled={executing}>Close</button><button type="button" className="ac-btn-primary" onClick={() => setConfirmationOpen(true)} disabled={!readyPreviewCount || previewLoading || executing}><Icon name={executing ? 'spinner' : 'refresh'} size={15} /> Execute recovery ({readyPreviewCount})</button></div></footer></section></div>}
+      {previewOpen && <div className="ac-recovery-preview-overlay" role="presentation" onClick={closePreview}><section className="ac-recovery-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="recovery-preview-title" onClick={event => event.stopPropagation()}><header className="ac-recovery-preview-dialog__header"><div><span className="ac-recovery-eyebrow"><Icon name="eye" size={14} /> Backend preflight preview</span><h2 id="recovery-preview-title">Review recovery data</h2><p>{previewLoading ? `${previewItems.length} of ${previewTotal || '...'} incidents loaded` : `${previewItems.length} incident${previewItems.length === 1 ? '' : 's'}`} · {readyPreviewCount} ready · {recoveredPreviewCount} recovered · {notActionablePreviewCount} not actionable</p></div><button type="button" className="ac-modal__close" onClick={closePreview} disabled={executing} aria-label="Close preview"><Icon name="x" size={18} /></button></header><div className="ac-recovery-preview-dialog__body">{previewError ? <div className="ac-recovery-alert ac-recovery-alert--error" role="alert"><Icon name="alertTriangle" size={16} /><span>{previewError}</span></div> : <>{previewItems.map(item => <RecoveryPreviewItem item={item} key={item.incident?.id || item.incident?.log_id} />)}{previewLoading && <div className="ac-recovery-empty ac-recovery-empty--loading"><Icon name="spinner" size={25} /> Loading preview data ({previewItems.length} of {previewTotal})...</div>}</>}</div><footer className="ac-recovery-preview-dialog__footer"><span><Icon name="checkCircle" size={13} /> Preflight validates the client event reference. Recovery completes after CDC and recovery evidence verification.</span><div><button type="button" className="ac-btn-ghost-action" onClick={closePreview} disabled={executing}>Close</button><button type="button" className="ac-btn-primary" onClick={() => setConfirmationOpen(true)} disabled={!readyPreviewCount || previewLoading || executing}><Icon name={executing ? 'spinner' : 'refresh'} size={15} /> Execute recovery ({readyPreviewCount})</button></div></footer></section></div>}
 
       {eventDetail && <RecoveryEventDetail eventDetail={eventDetail} loading={eventDetailLoading} onClose={() => setEventDetail(null)} />}
 

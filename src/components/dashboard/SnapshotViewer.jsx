@@ -24,19 +24,28 @@ function SnapshotViewer({ currentLog, previousLog }) {
     return <span style={{ color: 'var(--color-on-surface-variant)', fontSize: '12px' }}>No metadata available</span>;
   }
 
+  const historyNotice = (
+    <p className="ac-history-notice" role="note">
+      Historical event comparison only. The previous value comes from the prior audit event; it is not an independently verified before-state.
+    </p>
+  );
+
   // INSERT — no previous, show all new values
   if (!previousLog || Object.keys(previousData).length === 0) {
     return (
-      <table className="ac-diff">
-        <tbody>
-          {allKeys.map(k => (
-            <tr key={k}>
-              <td className="field">{k}</td>
-              <td className="val-new">{String(currentData[k] ?? '—')}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <>
+        {historyNotice}
+        <table className="ac-diff">
+          <tbody>
+            {allKeys.map(k => (
+              <tr key={k}>
+                <td className="field">{k}</td>
+                <td className="val-new">{String(currentData[k] ?? '—')}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </>
     );
   }
 
@@ -46,27 +55,30 @@ function SnapshotViewer({ currentLog, previousLog }) {
     const deleteKeys = [...new Set([...Object.keys(deleteSource)])].filter(k => !SKIP.has(k));
 
     return (
-      <table className="ac-diff">
-        <thead>
-          <tr>
-            <th>Column</th>
-            <th className="after">Before</th>
-            <th className="before">After</th>
-          </tr>
-        </thead>
-        <tbody>
-          {deleteKeys.map(k => {
-            const beforeVal = String(deleteSource[k] ?? '—');
-            return (
-              <tr key={k}>
-                <td className="field">{k}</td>
-                <td className="val-after">{beforeVal}</td>
-                <td className="val-deleted">{beforeVal}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <>
+        {historyNotice}
+        <table className="ac-diff">
+          <thead>
+            <tr>
+              <th>Column</th>
+              <th className="after">Prior event</th>
+              <th className="before">Delete event</th>
+            </tr>
+          </thead>
+          <tbody>
+            {deleteKeys.map(k => {
+              const beforeVal = String(deleteSource[k] ?? '—');
+              return (
+                <tr key={k}>
+                  <td className="field">{k}</td>
+                  <td className="val-after">{beforeVal}</td>
+                  <td className="val-deleted">{beforeVal}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </>
     );
   }
 
@@ -77,12 +89,13 @@ function SnapshotViewer({ currentLog, previousLog }) {
 
   return (
     <div>
+      {historyNotice}
       <table className="ac-diff">
         <thead>
           <tr>
             <th>Column</th>
-            <th className="before">Before</th>
-            <th className="after">After</th>
+            <th className="before">Prior event</th>
+            <th className="after">Current event</th>
           </tr>
         </thead>
         <tbody>

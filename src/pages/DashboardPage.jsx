@@ -912,14 +912,14 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
             <span className="ac-sidebar__nav-label">Audit Logs</span>
           </button>
 
-          <button
+          {clientInfo && clientInfo.role?.toLowerCase() !== 'admin' && <button
             className={`ac-sidebar__nav-item${view === 'recovery-data' ? ' ac-sidebar__nav-item--active' : ''}`}
             onClick={() => { navigate('/recovery-data'); setSidebarOpen(false); }}
             title="Recovery Data"
           >
             <Icon name="shield" size={18} />
             <span className="ac-sidebar__nav-label">Recovery Data</span>
-          </button>
+          </button>}
 
           <button
             className={`ac-sidebar__nav-item${view === 'web-users' ? ' ac-sidebar__nav-item--active' : ''}`}
@@ -1249,7 +1249,16 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
           ) : view === 'reports' ? (
             <ReportsView selectedClient={selectedClient} />
           ) : view === 'recovery-data' ? (
-            <RecoveryDataView selectedClient={selectedClient} />
+            !clientInfo ? (
+              <section className="ac-card" role="status"><div className="ac-card__body"><p>Loading tenant scope...</p></div></section>
+            ) : clientInfo.role?.toLowerCase() === 'admin' ? (
+              <section className="ac-card" role="status">
+                <div className="ac-card__body">
+                  <h2>Recovery runs under the signed in tenant</h2>
+                  <p>The recovery API uses the authenticated tenant scope. The platform admin client selector does not grant cross-tenant recovery access.</p>
+                </div>
+              </section>
+            ) : <RecoveryDataView selectedClient={selectedClient} />
           ) : view === 'audit-logs' ? (
             <AuditLogsView
               paginatedLogs={paginatedLogs}
@@ -1328,6 +1337,7 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
         <ResourceDetailModal
           log={selectedLog}
           selectedClient={selectedClient}
+          canRecover={Boolean(clientInfo && clientInfo.role?.toLowerCase() !== 'admin')}
           onRefreshLogs={() => fetchTransactionLogs({
             page: currentPage,
             pageSize: rowsPerPage,

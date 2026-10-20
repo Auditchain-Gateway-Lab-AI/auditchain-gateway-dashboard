@@ -15,7 +15,7 @@ services:
         # Di-embed ke bundle JS saat build (CRA env var bersifat build-time).
         # Harus alamat yang bisa dijangkau BROWSER pengguna.
         REACT_APP_API_BASE_URL: ${DASHBOARD_API_BASE_URL:-http://localhost:8080/api}
-    container_name: auditchain-dashboard
+    container_name: ${AUDITCHAIN_DASHBOARD_CONTAINER:-auditchain-dashboard}
     restart: always
     ports:
-      - "3001:80"
+      - "${DASHBOARD_HOST_BIND_IP:-0.0.0.0}:${DASHBOARD_HOST_PORT:-3001}:80"

@@ -20,10 +20,26 @@ test('uses the JWT tenant and never sends a client selector', async () => {
   await recoveryApi.listRequests({ status: 'PENDING_EXECUTION' });
 
   expect(api.get).toHaveBeenNthCalledWith(1, '/dashboard/recovery/incidents', {
-    params: { status: 'OPEN' },
+    params: { status: 'OPEN', page: 1, page_size: 100 },
   });
   expect(api.get).toHaveBeenNthCalledWith(2, '/dashboard/recovery/requests', {
-    params: { status: 'PENDING_EXECUTION' },
+    params: { status: 'PENDING_EXECUTION', page: 1, page_size: 100 },
+  });
+});
+
+test('loads every server page for incident and request list callers', async () => {
+  api.get
+    .mockResolvedValueOnce({ data: { data: [{ id: 'incident-1' }], total_pages: 2 } })
+    .mockResolvedValueOnce({ data: { data: [{ id: 'incident-2' }], total_pages: 2 } });
+
+  const incidents = await recoveryApi.listIncidents();
+
+  expect(incidents.map(item => item.id)).toEqual(['incident-1', 'incident-2']);
+  expect(api.get).toHaveBeenNthCalledWith(1, '/dashboard/recovery/incidents', {
+    params: { page: 1, page_size: 100 },
+  });
+  expect(api.get).toHaveBeenNthCalledWith(2, '/dashboard/recovery/incidents', {
+    params: { page: 2, page_size: 100 },
   });
 });
 
@@ -53,6 +69,30 @@ test('supports recovery event detail and integrity verification', async () => {
 
   expect(api.get).toHaveBeenNthCalledWith(1, '/dashboard/recovery/events/event%2F1');
   expect(api.get).toHaveBeenNthCalledWith(2, '/dashboard/recovery/events/event%2F1/verify');
+});
+
+test('returns HTTP 409 as a detected tamper result so Recovery can refresh incidents', async () => {
+  const failedCheck = { status: 'failed', layer: '2_local_hash', data: { log_id: 'log/620' } };
+  api.get.mockRejectedValueOnce({ response: { status: 409, data: failedCheck } });
+
+  const result = await recoveryApi.verifyLog({ logId: 'log/620', clientId: 'client-1' });
+
+  expect(api.get).toHaveBeenCalledWith('/dashboard/verify/log%2F620', {
+    params: { client_id: 'client-1' },
+  });
+  expect(result).toEqual(failedCheck);
+});
+
+test('verifies a resource and returns conflict details as detection results', async () => {
+  const failedCheck = { resource: 'RUANGAN:620', chain_status: 'tampered', total_logs: 1 };
+  api.get.mockRejectedValueOnce({ response: { status: 409, data: failedCheck } });
+
+  const result = await recoveryApi.verifyResource({ resource: 'RUANGAN:620', clientId: 'client-1' });
+
+  expect(api.get).toHaveBeenCalledWith('/dashboard/verify-resource/RUANGAN%3A620', {
+    params: { client_id: 'client-1' },
+  });
+  expect(result).toEqual(failedCheck);
 });
 
 test('loads the current audit payload separately for the tampered before view', async () => {

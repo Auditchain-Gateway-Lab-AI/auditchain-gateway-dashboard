@@ -6,6 +6,7 @@ import { recoveryApi } from '../../../services/recoveryApi';
 jest.mock('../../../services/recoveryApi', () => ({
   recoveryApi: {
     listIncidents: jest.fn(),
+    verifyLog: jest.fn(),
     getIncident: jest.fn(),
     listRequests: jest.fn(),
     listEvents: jest.fn(),
@@ -34,6 +35,7 @@ const incident = {
   log_id: 'log-161',
   resource: 'RUANGAN:161',
   incident_type: 'METADATA_HASH_MISMATCH',
+  incident_scope: 'CLIENT_SOURCE',
   expected_hash: 'trusted-hash',
   detected_hash: 'tampered-hash',
   status: 'OPEN',
@@ -53,9 +55,67 @@ const event = {
   executed_at: '2026-09-21T08:05:00.000Z',
 };
 
+const gatewayIncident = {
+  ...incident,
+  id: 'incident-620',
+  log_id: 'log-620',
+  resource: 'RUANGAN:620',
+  incident_scope: 'GATEWAY_INTEGRITY',
+};
+
+const gatewayLog = {
+  ...activeLog,
+  log_id: gatewayIncident.log_id,
+  resource: gatewayIncident.resource,
+  metadata: { id: 620, nama: 'tampered-room-620' },
+};
+
+const gatewayCandidate = {
+  log_id: gatewayIncident.log_id,
+  eligible: true,
+  recovery_source: 'CLIENT_AUDIT_TRAIL',
+  reference_log_hash: 'trusted-hash-620',
+  reference_merkle_root: 'merkle-root-620',
+  reference_anchor_id: 'anchor-620',
+};
+
+const gatewayPreflight = {
+  status: 'VALID',
+  recoverable: true,
+  log_id: gatewayIncident.log_id,
+  current_hash: 'tampered-hash-620',
+  recovery_source: 'CLIENT_AUDIT_TRAIL',
+  snapshot_hash: 'trusted-hash-620',
+  anchor_id: 'anchor-620',
+  merkle_root: 'merkle-root-620',
+  reference_log_hash: 'trusted-hash-620',
+  reference_merkle_root: 'merkle-root-620',
+  reference_anchor_id: 'anchor-620',
+  fabric_root: 'merkle-root-620',
+  trusted_reference_preview: {
+    actor: 'operator-620',
+    action: 'DELETE',
+    resource: gatewayIncident.resource,
+    timestamp: '2026-09-21T07:50:00.000Z',
+    source_system: 'SIMRS Morbis 1',
+    metadata: { id: 620, nama: 'trusted-room-620' },
+  },
+};
+
+const gatewayEvent = {
+  ...event,
+  id: 'event-620',
+  incident_id: gatewayIncident.id,
+  target_log_id: gatewayIncident.log_id,
+  resource: gatewayIncident.resource,
+  recovered_metadata: { id: 620, nama: 'trusted-room-620' },
+  executed_at: undefined,
+};
+
 beforeEach(() => {
   jest.clearAllMocks();
   recoveryApi.listIncidents.mockResolvedValue([incident]);
+  recoveryApi.verifyLog.mockResolvedValue({ status: 'success' });
   recoveryApi.getIncident.mockResolvedValue(incident);
   recoveryApi.listRequests.mockResolvedValue([]);
   recoveryApi.listEvents.mockResolvedValue({ data: [] });
@@ -87,11 +147,13 @@ beforeEach(() => {
   recoveryApi.getEvent.mockResolvedValue(event);
 });
 
-test('keeps the contextual Recovery tab and shows tampered/trusted data without a reason form', async () => {
+test('keeps the contextual Recovery tab and shows client hashes without exposing live row values', async () => {
+  recoveryApi.listEvents.mockResolvedValue({ data: [] });
   render(<RecoveryTab activeLog={activeLog} selectedClient="client-1" />);
 
-  expect(await screen.findByText('Tampered data and original data')).toBeInTheDocument();
-  expect(screen.getByText(/tampered-room/)).toBeInTheDocument();
+  expect(await screen.findByText('Client state hash and trusted reference')).toBeInTheDocument();
+  expect(screen.queryByText(/tampered-room/)).not.toBeInTheDocument();
+  expect(screen.getByText('The recovery API does not expose live client row values.')).toBeInTheDocument();
   expect(screen.queryByText('Recovery request')).not.toBeInTheDocument();
   expect(screen.queryByLabelText(/Reason/i)).not.toBeInTheDocument();
 
@@ -99,12 +161,12 @@ test('keeps the contextual Recovery tab and shows tampered/trusted data without 
   expect(screen.getByText('Actor affected')).toBeInTheDocument();
   expect(screen.getByText('mbi')).toBeInTheDocument();
   expect(screen.getByText('UPDATE')).toBeInTheDocument();
-  expect(screen.getByRole('columnheader', { name: 'Tampered data' })).toBeInTheDocument();
-  expect(screen.getByRole('columnheader', { name: 'Original trusted data' })).toBeInTheDocument();
+  expect(screen.getByText('Live client state hash')).toBeInTheDocument();
+  expect(screen.getByText('Trusted desired state hash')).toBeInTheDocument();
   expect(screen.queryByText(/"nama"/)).not.toBeInTheDocument();
-  expect(screen.getByText('Changed fields')).toBeInTheDocument();
+  expect(screen.queryByText('Changed fields')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Execute recovery' }));
-  const confirmation = screen.getByRole('dialog', { name: 'Execute recovery?' });
+  const confirmation = screen.getByRole('dialog', { name: 'Execute client recovery?' });
   fireEvent.click(within(confirmation).getByRole('button', { name: 'Execute recovery' }));
 
   await waitFor(() => expect(recoveryApi.createRequest).toHaveBeenCalledWith(expect.objectContaining({
@@ -114,12 +176,13 @@ test('keeps the contextual Recovery tab and shows tampered/trusted data without 
   })));
   expect(recoveryApi.executeRequest).toHaveBeenCalledWith({ requestId: 'request-161' });
   expect(await screen.findByText('Recovery completed')).toBeInTheDocument();
-  expect(screen.getByText('Recovered data')).toBeInTheDocument();
+  expect(screen.getByText('Recovery event result (redacted)')).toBeInTheDocument();
 });
 
 test('uses the preserved before-image when a resolved incident is opened again', async () => {
   const resolvedIncident = {
     ...incident,
+    incident_scope: undefined,
     status: 'RESOLVED',
     tampered_metadata: { id: 161, nama: 'tampered-before-recovery' },
   };
@@ -149,7 +212,7 @@ test('uses the preserved before-image when a resolved incident is opened again',
 test('does not let an old successful request or another incident event lock the current execute action', async () => {
   recoveryApi.listRequests.mockResolvedValue([{
     id: 'old-request',
-    incident_id: incident.id,
+    incident_id: 'different-incident',
     status: 'SUCCEEDED',
   }]);
   recoveryApi.listEvents.mockResolvedValue({
@@ -175,4 +238,72 @@ test('explains a backend scope block instead of showing a dead execute button', 
   expect(screen.getAllByText('This log is outside the recovery scope configured by the backend.').length).toBeGreaterThan(0);
   expect(screen.queryByRole('button', { name: 'Execute recovery' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Check again' })).toBeEnabled();
+});
+
+test('runs integrity verification and reloads the incident list when a tampered log has no incident yet', async () => {
+  recoveryApi.listIncidents
+    .mockResolvedValueOnce([])
+    .mockResolvedValueOnce([gatewayIncident]);
+  recoveryApi.listCandidates.mockResolvedValue([{
+    log_id: gatewayIncident.log_id,
+    resource: gatewayIncident.resource,
+    eligible: false,
+    reason: 'audit_trail_reference_missing',
+  }]);
+  recoveryApi.verifyLog.mockResolvedValue({
+    status: 'failed',
+    layer: '2_local_hash',
+    data: { log_id: activeLog.log_id },
+  });
+
+  render(<RecoveryTab activeLog={gatewayLog} selectedClient="client-1" />);
+
+  const verifyButton = await screen.findByRole('button', { name: 'Verify and refresh' });
+  expect(screen.getAllByText(/Recovery requires a trusted source event/).length).toBeGreaterThan(0);
+  fireEvent.click(verifyButton);
+
+  expect(recoveryApi.verifyLog).toHaveBeenCalledWith({ logId: gatewayLog.log_id, clientId: 'client-1' });
+  expect((await screen.findAllByText('Gateway integrity incident')).length).toBeGreaterThan(0);
+  expect(screen.getAllByText(/original source audit event is not linked/).length).toBeGreaterThan(0);
+  expect(screen.queryByRole('button', { name: 'Execute recovery' })).not.toBeInTheDocument();
+});
+
+test('offers Gateway audit-log restore after the source event matches its anchored proof', async () => {
+  recoveryApi.listIncidents.mockResolvedValue([gatewayIncident]);
+  recoveryApi.listCandidates.mockResolvedValue([gatewayCandidate]);
+  recoveryApi.runPreflight.mockResolvedValue(gatewayPreflight);
+  recoveryApi.executeRequest.mockResolvedValue({ status: 'SUCCEEDED', recovery_event_id: gatewayEvent.id });
+  recoveryApi.getEvent.mockResolvedValue(gatewayEvent);
+
+  render(<RecoveryTab activeLog={gatewayLog} selectedClient="client-1" />);
+
+  expect(await screen.findByRole('button', { name: 'Restore audit log' })).toBeEnabled();
+  expect(screen.getByText('tampered-room-620')).toBeInTheDocument();
+  expect(screen.getByText('trusted-room-620')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Restore audit log' }));
+
+  const confirmation = screen.getByRole('dialog', { name: 'Restore Gateway audit log?' });
+  expect(within(confirmation).getByText(/reread the source audit event, verify its original log hash, Merkle proof, and Fabric anchor/)).toBeInTheDocument();
+  fireEvent.click(within(confirmation).getByRole('button', { name: 'Restore audit log' }));
+
+  await waitFor(() => expect(recoveryApi.createRequest).toHaveBeenCalledWith(expect.objectContaining({
+    incidentId: gatewayIncident.id,
+    selectedLogId: gatewayIncident.log_id,
+    reason: expect.any(String),
+  })));
+  expect(recoveryApi.executeRequest).toHaveBeenCalledWith({ requestId: 'request-161' });
+  expect(await screen.findByText('Recovery completed')).toBeInTheDocument();
+  expect(screen.getByText('Gateway audit log recovery is verified.')).toBeInTheDocument();
+});
+
+test('keeps Gateway incidents read only when source proof evidence is incomplete', async () => {
+  recoveryApi.listIncidents.mockResolvedValue([gatewayIncident]);
+  recoveryApi.listCandidates.mockResolvedValue([gatewayCandidate]);
+  recoveryApi.runPreflight.mockResolvedValue({ ...gatewayPreflight, fabric_root: '' });
+
+  render(<RecoveryTab activeLog={gatewayLog} selectedClient="client-1" />);
+
+  expect(await screen.findByRole('button', { name: 'Check recovery data' })).toBeEnabled();
+  expect(screen.queryByRole('button', { name: 'Execute recovery' })).not.toBeInTheDocument();
+  expect(screen.getByText(/A source audit event is available/)).toBeInTheDocument();
 });
