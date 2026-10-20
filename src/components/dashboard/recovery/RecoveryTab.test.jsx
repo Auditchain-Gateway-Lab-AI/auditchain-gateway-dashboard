@@ -73,10 +73,10 @@ const gatewayLog = {
 const gatewayCandidate = {
   log_id: gatewayIncident.log_id,
   eligible: true,
-  snapshot_object_key: 'production/ruangan/620',
-  snapshot_version_id: 'version-620',
-  snapshot_checksum: 'checksum-620',
-  snapshot_plaintext_hash: 'plaintext-620',
+  recovery_source: 'CLIENT_AUDIT_TRAIL',
+  reference_log_hash: 'trusted-hash-620',
+  reference_merkle_root: 'merkle-root-620',
+  reference_anchor_id: 'anchor-620',
 };
 
 const gatewayPreflight = {
@@ -84,11 +84,15 @@ const gatewayPreflight = {
   recoverable: true,
   log_id: gatewayIncident.log_id,
   current_hash: 'tampered-hash-620',
+  recovery_source: 'CLIENT_AUDIT_TRAIL',
   snapshot_hash: 'trusted-hash-620',
-  object_version_id: 'version-620',
   anchor_id: 'anchor-620',
   merkle_root: 'merkle-root-620',
-  snapshot_preview: {
+  reference_log_hash: 'trusted-hash-620',
+  reference_merkle_root: 'merkle-root-620',
+  reference_anchor_id: 'anchor-620',
+  fabric_root: 'merkle-root-620',
+  trusted_reference_preview: {
     actor: 'operator-620',
     action: 'DELETE',
     resource: gatewayIncident.resource,
@@ -244,7 +248,7 @@ test('runs integrity verification and reloads the incident list when a tampered 
     log_id: gatewayIncident.log_id,
     resource: gatewayIncident.resource,
     eligible: false,
-    reason: 'gateway_snapshot_recovery_disabled',
+    reason: 'audit_trail_reference_missing',
   }]);
   recoveryApi.verifyLog.mockResolvedValue({
     status: 'failed',
@@ -255,16 +259,16 @@ test('runs integrity verification and reloads the incident list when a tampered 
   render(<RecoveryTab activeLog={gatewayLog} selectedClient="client-1" />);
 
   const verifyButton = await screen.findByRole('button', { name: 'Verify and refresh' });
-  expect(screen.getAllByText(/Direct recovery handles CLIENT_SOURCE incidents/).length).toBeGreaterThan(0);
+  expect(screen.getAllByText(/Recovery requires a trusted source event/).length).toBeGreaterThan(0);
   fireEvent.click(verifyButton);
 
   expect(recoveryApi.verifyLog).toHaveBeenCalledWith({ logId: gatewayLog.log_id, clientId: 'client-1' });
   expect((await screen.findAllByText('Gateway integrity incident')).length).toBeGreaterThan(0);
-  expect(screen.getAllByText(/Gateway audit-log restore is disabled on this server/).length).toBeGreaterThan(0);
+  expect(screen.getAllByText(/original source audit event is not linked/).length).toBeGreaterThan(0);
   expect(screen.queryByRole('button', { name: 'Execute recovery' })).not.toBeInTheDocument();
 });
 
-test('offers Gateway audit-log restore only after a verified snapshot preflight', async () => {
+test('offers Gateway audit-log restore after the source event matches its anchored proof', async () => {
   recoveryApi.listIncidents.mockResolvedValue([gatewayIncident]);
   recoveryApi.listCandidates.mockResolvedValue([gatewayCandidate]);
   recoveryApi.runPreflight.mockResolvedValue(gatewayPreflight);
@@ -279,7 +283,7 @@ test('offers Gateway audit-log restore only after a verified snapshot preflight'
   fireEvent.click(screen.getByRole('button', { name: 'Restore audit log' }));
 
   const confirmation = screen.getByRole('dialog', { name: 'Restore Gateway audit log?' });
-  expect(within(confirmation).getByText(/revalidate the exact snapshot version, checksum, and Fabric anchor/)).toBeInTheDocument();
+  expect(within(confirmation).getByText(/reread the source audit event, verify its original log hash, Merkle proof, and Fabric anchor/)).toBeInTheDocument();
   fireEvent.click(within(confirmation).getByRole('button', { name: 'Restore audit log' }));
 
   await waitFor(() => expect(recoveryApi.createRequest).toHaveBeenCalledWith(expect.objectContaining({
@@ -292,14 +296,14 @@ test('offers Gateway audit-log restore only after a verified snapshot preflight'
   expect(screen.getByText('Gateway audit log recovery is verified.')).toBeInTheDocument();
 });
 
-test('keeps Gateway incidents read only when snapshot preflight evidence is incomplete', async () => {
+test('keeps Gateway incidents read only when source proof evidence is incomplete', async () => {
   recoveryApi.listIncidents.mockResolvedValue([gatewayIncident]);
   recoveryApi.listCandidates.mockResolvedValue([gatewayCandidate]);
-  recoveryApi.runPreflight.mockResolvedValue({ ...gatewayPreflight, anchor_id: '' });
+  recoveryApi.runPreflight.mockResolvedValue({ ...gatewayPreflight, fabric_root: '' });
 
   render(<RecoveryTab activeLog={gatewayLog} selectedClient="client-1" />);
 
   expect(await screen.findByRole('button', { name: 'Check recovery data' })).toBeEnabled();
   expect(screen.queryByRole('button', { name: 'Execute recovery' })).not.toBeInTheDocument();
-  expect(screen.getByText(/A verified snapshot candidate is available/)).toBeInTheDocument();
+  expect(screen.getByText(/A source audit event is available/)).toBeInTheDocument();
 });

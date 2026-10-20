@@ -130,6 +130,14 @@ const hasVerifiedSnapshotCandidate = candidate => Boolean(
   && String(candidate?.snapshot_plaintext_hash || '').trim()
 );
 
+const hasTrustedAuditTrailCandidate = candidate => Boolean(
+  candidate?.eligible === true
+  && String(candidate?.recovery_source || '').toUpperCase() === 'CLIENT_AUDIT_TRAIL'
+  && String(candidate?.reference_log_hash || '').trim()
+  && String(candidate?.reference_merkle_root || '').trim()
+  && String(candidate?.reference_anchor_id || '').trim()
+);
+
 const hasVerifiedSnapshotPreflight = (incident, candidate, preflight) => Boolean(
   preflight?.recoverable === true
   && String(preflight?.status || '').toUpperCase() === 'VALID'
@@ -140,6 +148,29 @@ const hasVerifiedSnapshotPreflight = (incident, candidate, preflight) => Boolean
   && String(preflight?.snapshot_hash || '').trim()
   && String(preflight?.anchor_id || '').trim()
   && String(preflight?.merkle_root || '').trim()
+);
+
+const hasTrustedAuditTrailPreflight = (incident, candidate, preflight) => Boolean(
+  preflight?.recoverable === true
+  && String(preflight?.status || '').toUpperCase() === 'VALID'
+  && String(preflight?.recovery_source || '').toUpperCase() === 'CLIENT_AUDIT_TRAIL'
+  && String(preflight?.recovery_source || '').toUpperCase() === String(candidate?.recovery_source || '').toUpperCase()
+  && sameId(preflight?.log_id, incident?.log_id)
+  && sameId(candidate?.log_id, incident?.log_id)
+  && String(preflight?.current_hash || '').trim()
+  && sameId(preflight?.reference_log_hash, candidate?.reference_log_hash)
+  && sameId(preflight?.reference_merkle_root, candidate?.reference_merkle_root)
+  && sameId(preflight?.reference_anchor_id, candidate?.reference_anchor_id)
+  && String(preflight?.fabric_root || '').trim()
+);
+
+const hasGatewayRecoveryCandidate = candidate => (
+  hasTrustedAuditTrailCandidate(candidate) || hasVerifiedSnapshotCandidate(candidate)
+);
+
+const hasGatewayRecoveryPreflight = (incident, candidate, preflight) => (
+  hasTrustedAuditTrailPreflight(incident, candidate, preflight)
+  || hasVerifiedSnapshotPreflight(incident, candidate, preflight)
 );
 
 const getTamperedData = (activeLog, incident) => {
@@ -161,7 +192,7 @@ const getTamperedData = (activeLog, incident) => {
   if (CLOSED_INCIDENT_STATUSES.has(incidentStatus)) return preservedTamperedData ?? null;
 
   // For Gateway integrity incidents the audit log row itself is the tampered
-  // object, so it can be compared with a verified legacy snapshot preview.
+  // object, so compare it with the validated source event preview.
   return activeLog?.metadata ?? preservedTamperedData ?? null;
 };
 
@@ -170,8 +201,25 @@ const getEventList = value => Array.isArray(value) ? value : Array.isArray(value
 const friendlyRecoveryReason = value => {
   const reason = String(value || '').trim();
   const messages = {
-    client_source_incident_required: 'This Gateway incident cannot be recovered in direct client mode. That mode only restores client source records; repairing a Gateway audit log requires a verified legacy snapshot.',
-    gateway_snapshot_recovery_disabled: 'Gateway audit-log restore is disabled on this server. Enable the verified snapshot recovery option to make it available.',
+    client_source_incident_required: 'This Gateway incident cannot be recovered in direct client mode.',
+    gateway_snapshot_recovery_disabled: 'Gateway audit-log recovery is not available for this incident.',
+    audit_trail_reference_missing: 'The original source audit event is not linked to this Gateway log.',
+    audit_trail_timestamp_missing: 'This Gateway log has no timestamp to match against the source audit history.',
+    audit_trail_lookup_ambiguous: 'Too many source events match this time window. Recovery is blocked until the source event can be identified uniquely.',
+    audit_trail_reference_ambiguous: 'More than one source audit event matches this log. Recovery is blocked because the source is ambiguous.',
+    audit_trail_reference_hash_mismatch: 'Nearby source audit events do not reproduce the original anchored log hash.',
+    audit_trail_record_not_found: 'The original audit event could not be found in the client database.',
+    agent_audit_trail_lookup_database_unavailable: 'The client Agent cannot access its source database. Check the Agent database connection and logs.',
+    agent_audit_trail_lookup_failed: 'The client Agent could not run the audit-history lookup. Check its logs for the database query error.',
+    agent_audit_trail_table_not_found: 'The configured audit_trail table was not found by the client Agent.',
+    agent_audit_trail_lookup_http_404: 'The client Agent needs the audit-history lookup update before this log can be recovered.',
+    agent_audit_trail_lookup_http_503: 'The client Agent reported that its source audit-history lookup is unavailable. Check the Agent database connection and logs.',
+    agent_audit_trail_lookup_unreachable: 'The client Agent could not search the source audit history.',
+    agent_not_configured: 'The client Agent is not configured for this source system.',
+    agent_audit_trail_unavailable: 'The client Agent could not read the source audit history.',
+    reference_local_hash_mismatch: 'The source audit event does not match the hash recorded before tampering.',
+    reference_merkle_proof_mismatch: 'The source event could not be proven against its Merkle root.',
+    reference_fabric_root_mismatch: 'The source event does not match the Fabric anchor.',
     legacy_recovery_out_of_scope: 'This log is outside the recovery scope configured by the backend.',
     snapshot_belum_verified: 'The trusted snapshot has not been verified yet.',
     snapshot_reference_missing: 'The trusted snapshot reference is not available.',
@@ -403,10 +451,10 @@ function RecoveryTab({ activeLog, selectedClient, onRefreshLogs }) {
     const scope = String(incident?.incident_scope || '').toUpperCase();
     const preflightValid = preflight?.recoverable === true
       && String(preflight?.status || '').toUpperCase() === 'VALID';
-    const canRecoverGatewaySnapshot = scope === 'GATEWAY_INTEGRITY'
-      && hasVerifiedSnapshotCandidate(candidate)
-      && hasVerifiedSnapshotPreflight(incident, candidate, preflight);
-    const recoveryScopeAllowed = scope === 'CLIENT_SOURCE' ? preflightValid : canRecoverGatewaySnapshot;
+    const canRecoverGateway = scope === 'GATEWAY_INTEGRITY'
+      && hasGatewayRecoveryCandidate(candidate)
+      && hasGatewayRecoveryPreflight(incident, candidate, preflight);
+    const recoveryScopeAllowed = scope === 'CLIENT_SOURCE' ? preflightValid : canRecoverGateway;
     if (!incident?.id || !recoveryScopeAllowed || incidentStatus !== 'OPEN' || !candidate?.eligible || !preflightValid || CLOSED_INCIDENT_STATUSES.has(incidentStatus) || executing) return;
 
     setExecuting(true);
@@ -451,10 +499,10 @@ function RecoveryTab({ activeLog, selectedClient, onRefreshLogs }) {
   const isGatewayIntegrity = incidentScope === 'GATEWAY_INTEGRITY';
   const candidateEligible = Boolean(candidate?.eligible);
   const preflightReady = Boolean(preflight?.recoverable && String(preflight?.status || '').toUpperCase() === 'VALID');
-  const gatewaySnapshotReady = Boolean(
+  const gatewayRecoveryReady = Boolean(
     isGatewayIntegrity
-    && hasVerifiedSnapshotCandidate(candidate)
-    && hasVerifiedSnapshotPreflight(incident, candidate, preflight)
+    && hasGatewayRecoveryCandidate(candidate)
+    && hasGatewayRecoveryPreflight(incident, candidate, preflight)
   );
   const requestExecuting = ACTIVE_REQUEST_STATUSES.has(requestStatus);
   const requestTimedOut = requestStatus === 'APPLIED_CDC_TIMEOUT';
@@ -466,7 +514,7 @@ function RecoveryTab({ activeLog, selectedClient, onRefreshLogs }) {
   );
   const canExecute = Boolean(
     incident
-    && (isClientSource || gatewaySnapshotReady)
+    && (isClientSource || gatewayRecoveryReady)
     && incidentStatus === 'OPEN'
     && !CLOSED_INCIDENT_STATUSES.has(incidentStatus)
     && candidateEligible
@@ -478,12 +526,12 @@ function RecoveryTab({ activeLog, selectedClient, onRefreshLogs }) {
   );
   const tamperedData = getTamperedData(activeLog, incident);
   const recoveredData = shownEvent?.recovered_metadata;
-  const trustedData = recoveredData ?? preflight?.snapshot_preview?.metadata;
+  const trustedPreview = preflight?.trusted_reference_preview || preflight?.snapshot_preview || {};
+  const trustedData = recoveredData ?? trustedPreview.metadata;
   const hasTrustedData = trustedData !== undefined && trustedData !== null && trustedData !== '';
   const hasTamperedData = tamperedData !== undefined && tamperedData !== null && tamperedData !== '';
   const comparisonRows = hasTrustedData && hasTamperedData ? getComparisonRows(tamperedData, trustedData) : [];
   const changedFields = comparisonRows.filter(row => row.changed).map(row => row.field);
-  const trustedPreview = preflight?.snapshot_preview || {};
   const tamperedAction = String(firstValue(
     activeLog?.action,
     incident?.target_action,
@@ -517,7 +565,7 @@ function RecoveryTab({ activeLog, selectedClient, onRefreshLogs }) {
     actionTitle = 'Recovery is in progress';
     actionDescription = isClientSource
       ? 'The Agent write is applied or processing. The gateway is waiting for CDC and recovery evidence verification.'
-      : 'The Gateway audit-log record is being restored from its verified snapshot.';
+      : 'The Gateway is restoring the audit-log metadata from its validated source audit event.';
   } else if (requestTimedOut) {
     actionTitle = 'CDC confirmation timed out';
     actionDescription = 'The Agent write may have applied. Review client state and recovery history before another attempt.';
@@ -530,17 +578,17 @@ function RecoveryTab({ activeLog, selectedClient, onRefreshLogs }) {
   } else if (preflight?.status === 'NO_RECOVERY_REQUIRED') {
     actionTitle = 'Recovery is not required';
     actionDescription = 'The current log already matches the trusted data.';
-  } else if (gatewaySnapshotReady) {
+  } else if (gatewayRecoveryReady) {
     actionTitle = 'Ready to restore Gateway audit log';
-    actionDescription = 'The backend verified the exact snapshot version, checksum, and Fabric anchor. Review the original data before restoring this audit-log record.';
-  } else if (isGatewayIntegrity && hasVerifiedSnapshotCandidate(candidate)) {
-    actionTitle = checking ? 'Checking recovery snapshot' : 'Recovery check required';
+    actionDescription = 'The backend matched the source audit event to the original log hash, Merkle proof, and Fabric anchor. Review the original data before restoring this audit-log record.';
+  } else if (isGatewayIntegrity && hasGatewayRecoveryCandidate(candidate)) {
+    actionTitle = checking ? 'Checking trusted source event' : 'Recovery check required';
     actionDescription = checking
-      ? 'The gateway is checking the exact snapshot version, checksum, and Fabric anchor.'
-      : 'A verified snapshot candidate is available. Run the recovery check again before restoring this audit-log record.';
+      ? 'The gateway is validating the source audit event, Merkle proof, and Fabric anchor.'
+      : 'A source audit event is available. Run the recovery check again before restoring this audit-log record.';
   } else if (!isClientSource) {
     actionTitle = 'Gateway integrity incident';
-    actionDescription = 'This Gateway audit-log incident is read only in the current recovery mode. Direct recovery restores client source records; a Gateway audit-log restore needs a verified legacy snapshot.';
+    actionDescription = 'This incident can be restored only when the original source audit event and its Fabric-anchored proof are available.';
   } else if (preflightReady) {
     actionTitle = 'Ready to recover';
     actionDescription = 'Review the client state hashes and event evidence, then execute recovery.';
@@ -554,14 +602,14 @@ function RecoveryTab({ activeLog, selectedClient, onRefreshLogs }) {
       <div className="ac-recovery-tab__intro">
         <div>
           <span className="ac-recovery-eyebrow"><Icon name="shield" size={14} /> Recovery</span>
-          <h2>{isClientSource ? 'Recover client record' : gatewaySnapshotReady ? 'Restore Gateway audit log' : 'Review recovery incident'}</h2>
+          <h2>{isClientSource ? 'Recover client record' : gatewayRecoveryReady ? 'Restore Gateway audit log' : 'Review recovery incident'}</h2>
           <p>{isClientSource
             ? 'Review the incident evidence and restore the client record from a verified AuditChain event.'
-            : gatewaySnapshotReady
-              ? 'Review the tampered audit-log data and restore the record from its exact verified snapshot version.'
+            : gatewayRecoveryReady
+              ? 'Review the tampered audit-log data and restore it from the original source audit event verified against Fabric.'
             : incident
-              ? 'This Gateway audit-log incident is review only in the current recovery mode. Direct recovery restores client source records; a Gateway audit-log restore needs a verified legacy snapshot.'
-              : 'Click Verify and refresh to create or refresh the backend incident. Direct recovery handles CLIENT_SOURCE incidents; Gateway audit-log recovery also requires a verified legacy snapshot.'}</p>
+              ? 'The original source audit event must match the anchored log hash and Fabric proof before this audit log can be restored.'
+              : 'Click Verify and refresh to create or refresh the backend incident. Recovery requires a trusted source event and its Fabric-anchored proof.'}</p>
         </div>
         {incident && <RecoveryStatusBadge status={recoverySucceeded ? 'SUCCEEDED' : requestStatus || incident.status} />}
       </div>
@@ -577,7 +625,7 @@ function RecoveryTab({ activeLog, selectedClient, onRefreshLogs }) {
           <p>{looksTampered
             ? (checkedAsTampered
               ? 'The integrity check failed, but the backend did not return a matching recovery incident. The incident must be persisted and visible to this tenant before this tab can load it.'
-              : 'Click Verify and refresh to run the backend check and create or refresh the incident. Direct recovery handles CLIENT_SOURCE incidents; Gateway audit-log recovery also requires a verified legacy snapshot.')
+              : 'Click Verify and refresh to run the backend check and create or refresh the incident.')
             : 'This log has no confirmed tamper incident.'}</p>
           <button type="button" className="ac-btn-ghost-action" onClick={looksTampered ? verifyAndRefresh : loadContext} disabled={checking}>
             <Icon name={checking ? 'spinner' : looksTampered ? 'search' : 'refresh'} size={14} /> {checking ? 'Checking integrity...' : looksTampered ? 'Verify and refresh' : 'Refresh'}
@@ -680,8 +728,8 @@ function RecoveryTab({ activeLog, selectedClient, onRefreshLogs }) {
               {recoverySucceeded ? (
                 <button type="button" className="ac-btn-ghost-action" onClick={loadContext}><Icon name="refresh" size={14} /> Refresh</button>
               ) : canExecute ? (
-                <button type="button" className="ac-btn-primary" onClick={() => setConfirmationOpen(true)} disabled={executing}><Icon name={executing ? 'spinner' : 'refresh'} size={15} /> {executing ? 'Recovering...' : gatewaySnapshotReady ? 'Restore audit log' : 'Execute recovery'}</button>
-              ) : (isClientSource || (isGatewayIntegrity && hasVerifiedSnapshotCandidate(candidate))) && candidateEligible && !CLOSED_INCIDENT_STATUSES.has(incidentStatus) && !requestTimedOut && !requestExecuting && !requestSucceeded ? (
+                <button type="button" className="ac-btn-primary" onClick={() => setConfirmationOpen(true)} disabled={executing}><Icon name={executing ? 'spinner' : 'refresh'} size={15} /> {executing ? 'Recovering...' : gatewayRecoveryReady ? 'Restore audit log' : 'Execute recovery'}</button>
+              ) : (isClientSource || (isGatewayIntegrity && hasGatewayRecoveryCandidate(candidate))) && candidateEligible && !CLOSED_INCIDENT_STATUSES.has(incidentStatus) && !requestTimedOut && !requestExecuting && !requestSucceeded ? (
                 <button type="button" className="ac-btn-primary" onClick={() => runPreflight()} disabled={checking}><Icon name={checking ? 'spinner' : 'search'} size={15} /> {checking ? 'Checking...' : 'Check recovery data'}</button>
               ) : candidate && !candidateEligible ? (
                 <button type="button" className="ac-btn-ghost-action" onClick={loadContext}><Icon name="refresh" size={14} /> Check again</button>
@@ -697,11 +745,11 @@ function RecoveryTab({ activeLog, selectedClient, onRefreshLogs }) {
 
       <RecoveryConfirmationDialog
         open={confirmationOpen}
-        title={gatewaySnapshotReady ? 'Restore Gateway audit log?' : 'Execute client recovery?'}
-        message={gatewaySnapshotReady
-          ? 'The gateway will revalidate the exact snapshot version, checksum, and Fabric anchor, then restore this audit-log record from that trusted snapshot.'
+        title={gatewayRecoveryReady ? 'Restore Gateway audit log?' : 'Execute client recovery?'}
+        message={gatewayRecoveryReady
+          ? 'The gateway will reread the source audit event, verify its original log hash, Merkle proof, and Fabric anchor, then restore this audit-log metadata.'
           : 'The gateway will verify the client event and Agent state, then ask the Agent to restore the selected client record. Completion waits for CDC and recovery evidence verification.'}
-        confirmLabel={gatewaySnapshotReady ? 'Restore audit log' : 'Execute recovery'}
+        confirmLabel={gatewayRecoveryReady ? 'Restore audit log' : 'Execute recovery'}
         busy={executing}
         onClose={() => !executing && setConfirmationOpen(false)}
         onConfirm={executeRecovery}
