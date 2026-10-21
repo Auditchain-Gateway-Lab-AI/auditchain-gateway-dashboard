@@ -44,6 +44,17 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
     ? 'clients'
     : ADMIN_TABS.includes(tabParam) ? tabParam : 'overview';
   const [clients, setClients] = useState([]);
+  const [selectedClientIds, setSelectedClientIds] = useState([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkDeleteMessage, setBulkDeleteMessage] = useState('');
+  const bulkDeleteInProgressRef = useRef(false);
+  const selectedClients = clients.filter(client => selectedClientIds.includes(client.id));
+  const allClientsSelected = clients.length > 0 && selectedClients.length === clients.length;
+
+  const toggleClientSelection = (clientId) => {
+    setSelectedClientIds(ids => ids.includes(clientId) ? ids.filter(id => id !== clientId) : [...ids, clientId]);
+    setBulkDeleteMessage('');
+  };
   const [allUsers, setAllUsers] = useState([]);
   const [kafkaConfigs, setKafkaConfigs] = useState([]);
   const [summary, setSummary] = useState({
@@ -586,6 +597,35 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
       alert(err.response?.data?.error || "Failed to delete client.");
     }
   }, [fetchData, handleCloseClientDrawer]);
+
+  const handleDeleteSelectedClients = async () => {
+    if (bulkDeleteInProgressRef.current || selectedClients.length === 0) return;
+    const targets = [...selectedClients];
+    if (!window.confirm(`Permanently delete ${targets.length} clients?\n\n${targets.map(client => client.company_name).join('\n')}\n\nAll associated users will also lose access. This cannot be undone.`)) return;
+    bulkDeleteInProgressRef.current = true;
+    setBulkDeleting(true);
+    setBulkDeleteMessage('');
+    const deletedIds = [];
+    const failures = [];
+    try {
+      for (const client of targets) {
+        try {
+          await api.delete(`/admin/clients/${client.id}`);
+          deletedIds.push(client.id);
+        } catch (error) {
+          failures.push(`${client.company_name}: ${error.response?.data?.error || 'Failed to delete client.'}`);
+        }
+      }
+      setClients(current => current.filter(client => !deletedIds.includes(client.id)));
+      setSelectedClientIds(ids => ids.filter(id => !deletedIds.includes(id)));
+      if (deletedIds.includes(selectedRegistryClient?.id)) handleCloseClientDrawer();
+      setBulkDeleteMessage(`${deletedIds.length} client(s) deleted.${failures.length ? ` ${failures.length} failed: ${failures.join('; ')}` : ''}`);
+      await fetchData();
+    } finally {
+      bulkDeleteInProgressRef.current = false;
+      setBulkDeleting(false);
+    }
+  };
 
   const fetchClientUsers = useCallback(async (clientId) => {
     try {
@@ -1275,9 +1315,15 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                   </div>
                   <button className="ac-btn-primary ac-admin-register-btn" onClick={() => setShowClientModal(true)}><Icon name="database" size={15} />Register Client</button>
                 </div>
+                <div className="ac-admin-bulk-actions">
+                  <span>{selectedClients.length} client(s) selected</span>
+                  <button type="button" className="ac-admin-detail-button" disabled={bulkDeleting || selectedClients.length === 0} onClick={() => setSelectedClientIds([])}>Clear selection</button>
+                  <button type="button" className="ac-btn-primary ac-btn-primary--danger" disabled={bulkDeleting || selectedClients.length === 0} onClick={handleDeleteSelectedClients}>{bulkDeleting ? 'Deleting clients…' : `Delete selected (${selectedClients.length})`}</button>
+                </div>
+                {bulkDeleteMessage && <div className="ac-admin-bulk-result" role="status">{bulkDeleteMessage}</div>}
                 <div className="ac-table-wrap">
                   <table className="ac-table ac-admin-client-table ac-admin-client-table--unified">
-                    <thead><tr><th>Client</th><th>Client Status</th><th>Database</th><th>CDC Users</th><th>Kafka</th><th>Registration Date</th><th>Detail</th></tr></thead>
+                    <thead><tr><th><label className="ac-admin-select-all"><input type="checkbox" aria-label="Select all clients" checked={allClientsSelected} ref={element => { if (element) element.indeterminate = selectedClients.length > 0 && !allClientsSelected; }} disabled={bulkDeleting || clients.length === 0} onChange={event => { setSelectedClientIds(event.target.checked ? clients.map(client => client.id) : []); setBulkDeleteMessage(''); }} />Client</label></th><th>Client Status</th><th>Database</th><th>CDC Users</th><th>Kafka</th><th>Registration Date</th><th>Detail</th></tr></thead>
                     <tbody>
                       {clients.length === 0 && <tr><td colSpan={7} className="ac-admin-table-empty">No registered clients found.</td></tr>}
                       {clients.map(client => {
@@ -1287,7 +1333,7 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                         const dbEngine = client.db_engine || matchingKafka?.db_engine || '';
                         return (
                           <tr key={client.id} className="ac-admin-client-row" tabIndex={0} onClick={() => handleOpenClientDrawer(client)} onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); handleOpenClientDrawer(client); } }} aria-label={`Open details for ${client.company_name}`}>
-                            <td><div className="ac-admin-client-cell"><div className="ac-admin-client-cell__avatar">{client.company_name?.charAt(0)?.toUpperCase() || 'C'}</div><div className="ac-admin-client-cell__content"><div className="ac-admin-client-cell__name">{client.company_name}</div><div className="ac-admin-client-cell__id">{client.id}</div></div></div></td>
+                            <td><div className="ac-admin-client-cell"><input type="checkbox" aria-label={`Select ${client.company_name}`} checked={selectedClientIds.includes(client.id)} disabled={bulkDeleting} onClick={event => event.stopPropagation()} onChange={() => toggleClientSelection(client.id)} /><div className="ac-admin-client-cell__avatar">{client.company_name?.charAt(0)?.toUpperCase() || 'C'}</div><div className="ac-admin-client-cell__content"><div className="ac-admin-client-cell__name">{client.company_name}</div><div className="ac-admin-client-cell__id">{client.id}</div></div></div></td>
                             <td><span className={`ac-dot-status${client.status === 'active' ? ' ac-dot-status--active' : client.status === 'pending_setup' ? ' ac-dot-status--pending' : ' ac-dot-status--inactive'}`}>{client.status === 'active' ? 'Active' : client.status === 'pending_setup' ? 'Pending Setup' : 'Inactive'}</span></td>
                             <td><div className="ac-admin-registry-stack"><DBEngineBadge engine={dbEngine} />{client.db_name && <small>{client.db_name}</small>}</div></td>
                             <td><div className="ac-admin-registry-stack"><span className={`ac-cdc-count-badge${detectedUsers.length ? ' ac-cdc-count-badge--active' : ''}`}>{detectedUsers.length}</span><small>{latestSeen ? formatTimestamp(latestSeen) : 'No activity yet'}</small></div></td>
