@@ -57,6 +57,25 @@ function renderClientRegistry() {
 
 afterEach(() => jest.restoreAllMocks());
 
+test('retains the original admin overview and opens monitoring from its own sidebar menu', async () => {
+  api.get.mockImplementation(url => Promise.resolve({ data:
+    url.startsWith('/admin/monitoring/overview')
+      ? { fetched_at: '2026-10-22T02:00:00Z', summary: { total: 0, critical: 0, attention: 0, unknown: 0 }, attention: [], clients: [], total: 0, page: 1, pages: 1 }
+      : url === '/admin/summary' ? { total_clients: 0 } : []
+  }));
+  render(<MemoryRouter initialEntries={['/admin']}><AdminPage onLogout={jest.fn()} /><LocationProbe /></MemoryRouter>);
+  expect(await screen.findByRole('heading', { name: 'Quick Actions' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Stream Health' })).toBeInTheDocument();
+  expect(api.get.mock.calls.some(([url]) => url.startsWith('/admin/monitoring/'))).toBe(false);
+  fireEvent.click(screen.getByRole('button', { name: 'Client Monitoring', exact: true }));
+  expect(await screen.findByRole('heading', { name: 'Monitoring Client' })).toBeInTheDocument();
+  expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=monitoring');
+  expect(screen.getByRole('button', { name: 'Client Monitoring', exact: true })).toHaveClass('ac-sidebar__nav-item--active');
+  fireEvent.click(screen.getByRole('button', { name: 'Admin Dashboard', exact: true }));
+  expect(await screen.findByRole('heading', { name: 'Quick Actions' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Monitoring Client' })).not.toBeInTheDocument();
+});
+
 test('bulk deletion requires confirmation and only deletes selected clients', async () => {
   const confirm = jest.spyOn(window, 'confirm').mockReturnValue(false);
   renderClientRegistry();

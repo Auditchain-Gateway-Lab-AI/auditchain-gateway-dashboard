@@ -264,6 +264,47 @@
   flex-shrink: 0;
 }
 
+/* Shared dropdowns render above modal/table clipping boundaries. */
+.ac-filter-dropdown__portal {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  font-family: var(--font-family);
+  border-radius: 12px;
+  padding: 8px;
+  scrollbar-width: thin;
+}
+.ac-filter-dropdown__portal .ac-filter-dropdown__option {
+  min-height: 42px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.ac-filter-dropdown__portal .ac-filter-dropdown__option > span {
+  overflow-wrap: anywhere;
+  white-space: normal;
+  padding: 7px 0;
+}
+.ac-filter-dropdown__option:focus-visible {
+  outline: 0;
+  background: rgba(0, 94, 164, .1);
+  color: var(--color-primary);
+}
+html[data-ac-theme='dark'] .ac-filter-dropdown__option:focus-visible {
+  background: rgba(96, 200, 255, .1);
+  color: #60c8ff;
+}
+.ac-filter-dropdown__trigger { cursor: pointer; font-family: inherit; border-radius: 11px; }
+.ac-topnav-client-dropdown { min-width: 150px; max-width: min(330px, 35vw); }
+.ac-dashboard-range-dropdown { min-width: 160px; }
+.ac-recovery-filter > .ac-filter-dropdown { flex: 1; min-width: 120px; }
+.ac-recovery-filter > .ac-filter-dropdown > .ac-filter-dropdown__trigger { border: 0; background: transparent; }
+.ac-web-users-toolbar .ac-filter-dropdown { min-width: 150px; }
+.ac-form-field > .ac-filter-dropdown { width: 100%; }
+.ac-form-field > .ac-filter-dropdown > .ac-filter-dropdown__trigger { height: 44px; }
+@media (max-width: 600px) {
+  .ac-topnav-client-dropdown { max-width: 140px; min-width: 90px; }
+}
+
 .ac-filter-select__icon,
 .ac-filter-select__chevron {
   position: absolute;

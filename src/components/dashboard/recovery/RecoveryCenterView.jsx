@@ -4,6 +4,7 @@ import Icon from '../../common/Icon';
 import { formatTimestamp } from '../../../utils/formatters';
 import { recoveryApi } from '../../../services/recoveryApi';
 import RecoveryStatusBadge from './RecoveryStatusBadge';
+import FilterDropdown from '../../common/FilterDropdown';
 import RecoveryConfirmationDialog from './RecoveryConfirmationDialog';
 
 const INCIDENT_FILTERS = ['ALL', 'OPEN', 'RESOLVED'];
@@ -163,9 +164,7 @@ function RecoveryCenterView({ selectedClient }) {
               <p>Integrity incidents detected by the gateway scanner.</p>
             </div>
             <div className="ac-recovery-filter-actions">
-              <label className="ac-recovery-filter"><Icon name="filter" size={14} /><span>Status</span><select value={incidentFilter} onChange={event => setIncidentFilter(event.target.value)} aria-label="Filter incidents">
-                {INCIDENT_FILTERS.map(filter => <option value={filter} key={filter}>{filter === 'ALL' ? 'All statuses' : filter.replaceAll('_', ' ')}</option>)}
-              </select></label>
+              <label className="ac-recovery-filter"><Icon name="filter" size={14} /><span>Status</span><FilterDropdown ariaLabel="Filter incidents" value={incidentFilter} onChange={setIncidentFilter} options={INCIDENT_FILTERS.map(value => ({ value, label: value === 'ALL' ? 'All statuses' : value.replaceAll('_', ' ') }))} /></label>
               {hasActiveFilters && <button type="button" className="ac-recovery-clear-filter" onClick={clearFilters}><Icon name="x" size={13} /> Clear</button>}
             </div>
           </div>
@@ -191,9 +190,7 @@ function RecoveryCenterView({ selectedClient }) {
               <p>Client-operated recovery queue for the active workspace.</p>
             </div>
             <div className="ac-recovery-filter-actions">
-              <label className="ac-recovery-filter"><Icon name="filter" size={14} /><span>Status</span><select value={requestFilter} onChange={event => setRequestFilter(event.target.value)} aria-label="Filter recovery requests">
-                {REQUEST_FILTERS.map(filter => <option value={filter} key={filter}>{filter === 'ALL' ? 'All statuses' : filter.replaceAll('_', ' ')}</option>)}
-              </select></label>
+              <label className="ac-recovery-filter"><Icon name="filter" size={14} /><span>Status</span><FilterDropdown ariaLabel="Filter recovery requests" value={requestFilter} onChange={setRequestFilter} options={REQUEST_FILTERS.map(value => ({ value, label: value === 'ALL' ? 'All statuses' : value.replaceAll('_', ' ') }))} /></label>
               {hasActiveFilters && <button type="button" className="ac-recovery-clear-filter" onClick={clearFilters}><Icon name="x" size={13} /> Clear</button>}
             </div>
           </div>

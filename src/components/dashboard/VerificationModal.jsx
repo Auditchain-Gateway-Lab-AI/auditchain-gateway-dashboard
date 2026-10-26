@@ -49,7 +49,7 @@ function VerificationModal({ result, onClose }) {
       : isPending ? 'ac-verify__header--pending'
         : 'ac-verify__header--failed';
 
-  const statusLabel = isScanning ? 'Menjalankan verifikasi kriptografi...' : isSuccess ? 'Verifikasi Berhasil' : isPending ? 'Menunggu Blockchain' : 'Verifikasi Gagal';
+  const statusLabel = isScanning ? 'Menjalankan verifikasi kriptografi...' : isSuccess ? 'Bukti Log Terverifikasi' : isPending ? 'Menunggu Blockchain' : 'Verifikasi Bukti Log Gagal';
   const statusMsg = isScanning
     ? 'Membaca data, menghitung ulang hash, dan mencocokkan root ledger.'
     : cleanDisplayText(data.message || result.message || '');
@@ -206,7 +206,7 @@ function VerificationModal({ result, onClose }) {
             <div className="ac-verify__mismatch ac-verify__source-check">
               <div className="ac-verify__mismatch-title">Catatan Data Sumber</div>
               <p className="ac-verify__mismatch-note">
-                Hash dan blockchain valid, tetapi Agent tidak menemukan data yang sama di database sumber saat ini.
+                Field data sumber berbeda dari event terbaru yang tercatat. Perbedaan ini belum membuktikan manipulasi; periksa alur update dan pencatatan event. Status bukti log ditampilkan terpisah di atas.
               </p>
               {data.agent_discrepancies.map((d, i) => (
                 <div key={i} className="ac-verify__detail-row" style={{ marginBottom: '4px' }}>

@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import api from '../api';
 import Icon from '../components/common/Icon';
 import AppearanceMenu from '../components/common/AppearanceMenu';
 import DBEngineBadge from '../components/common/DBEngineBadge';
 import ClientDetailDrawer from '../components/admin/ClientDetailDrawer';
+import FilterDropdown from '../components/common/FilterDropdown';
+import { MonitoringOverview, ClientMonitoringDashboard } from '../components/admin/MonitoringDashboard';
 import { parseJwt, formatTimestamp } from '../utils/formatters';
 
-const ADMIN_TABS = ['overview', 'clients', 'users', 'profile'];
+const ADMIN_TABS = ['overview', 'monitoring', 'clients', 'users', 'profile'];
 const LEGACY_CLIENT_TABS = ['client-users', 'kafka'];
 
 const isSameJSON = (a, b) => {
@@ -38,9 +40,10 @@ const getLatestUserActivity = (users = []) => {
 
 function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'light', onThemeChange }) {
   const navigate = useNavigate();
+  const { clientId: monitoringClientId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
-  const activeTab = LEGACY_CLIENT_TABS.includes(tabParam)
+  const activeTab = monitoringClientId ? 'monitoring' : LEGACY_CLIENT_TABS.includes(tabParam)
     ? 'clients'
     : ADMIN_TABS.includes(tabParam) ? tabParam : 'overview';
   const [clients, setClients] = useState([]);
@@ -200,8 +203,9 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
     .toUpperCase();
 
   const handleAdminTabChange = useCallback((tab) => {
-    setSearchParams(tab === 'overview' ? {} : { tab });
-  }, [setSearchParams]);
+    if (monitoringClientId) navigate(tab === 'overview' ? '/admin' : `/admin?tab=${tab}`);
+    else setSearchParams(tab === 'overview' ? {} : { tab });
+  }, [setSearchParams, monitoringClientId, navigate]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -307,6 +311,11 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
       kicker: 'Gateway Command Center',
       title: 'Admin Dashboard',
       subtitle: 'Monitor client onboarding, tenant access, and ingestion readiness across the AuditChain Gateway.'
+    },
+    monitoring: {
+      kicker: 'Client Monitoring',
+      title: monitoringClientId ? 'Client Dashboard' : 'Client Monitoring',
+      subtitle: 'Pantau kondisi integrity, anchoring, dan aktivitas seluruh client Auditchain.'
     },
     clients: {
       kicker: 'Tenant Operations',
@@ -416,15 +425,30 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
       clientDrawerCloseTimerRef.current = null;
     }
     clientDrawerTriggerRef.current = document.activeElement;
+    const nextParams = new URLSearchParams(searchParams);
+    if (activeTab === 'clients' && nextParams.get('clientId') !== client.id) {
+      nextParams.set('clientId', client.id);
+      setSearchParams(nextParams, { replace: true });
+    }
     setSelectedRegistryClient(client);
     setSelectedClientDetail(null);
     setClientDrawerTab('overview');
     setClientDrawerClosing(false);
     fetchClientDetail(client.id).catch(() => {});
-  }, [fetchClientDetail]);
+  }, [fetchClientDetail, searchParams, setSearchParams, activeTab]);
+
+  useEffect(() => {
+    const id = searchParams.get('clientId');
+    if (activeTab !== 'clients' || !id || selectedRegistryClient?.id === id) return;
+    const client = clients.find(item => item.id === id);
+    if (client) handleOpenClientDrawer(client);
+  }, [activeTab, clients, searchParams, selectedRegistryClient, handleOpenClientDrawer]);
 
   const handleCloseClientDrawer = useCallback(() => {
     if (!selectedRegistryClient || clientDrawerClosing) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('clientId');
+    setSearchParams(nextParams, { replace: true });
     setClientDrawerClosing(true);
     clientDetailRequestRef.current += 1;
     clientDrawerCloseTimerRef.current = setTimeout(() => {
@@ -435,7 +459,7 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
       clientDrawerCloseTimerRef.current = null;
       clientDrawerTriggerRef.current?.focus?.();
     }, 260);
-  }, [selectedRegistryClient, clientDrawerClosing]);
+  }, [selectedRegistryClient, clientDrawerClosing, searchParams, setSearchParams]);
 
   const refreshSelectedClient = useCallback(async (clientId) => {
     await Promise.allSettled([
@@ -446,7 +470,7 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
 
   useEffect(() => {
     fetchData();
-    const intervalId = setInterval(fetchData, 5000);
+    const intervalId = setInterval(fetchData, activeTab === 'monitoring' ? 60000 : 5000);
     const handleVisibilityChange = () => {
       if (!document.hidden) fetchData();
     };
@@ -456,7 +480,7 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
       clearInterval(intervalId);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [fetchData]);
+  }, [fetchData, activeTab]);
 
   useEffect(() => {
     if (!selectedRegistryClient) return undefined;
@@ -1042,6 +1066,14 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
           </button>
 
           <button
+            className={`ac-sidebar__nav-item${activeTab === 'monitoring' ? ' ac-sidebar__nav-item--active' : ''}`}
+            onClick={() => { handleAdminTabChange('monitoring'); setSidebarOpen(false); }}
+            title="Client Monitoring"
+          >
+            <Icon name="shield" size={18} />
+            <span className="ac-sidebar__nav-label">Client Monitoring</span>
+          </button>
+          <button
             className={`ac-sidebar__nav-item${activeTab === 'clients' ? ' ac-sidebar__nav-item--active' : ''}`}
             onClick={() => { handleAdminTabChange('clients'); setSidebarOpen(false); }}
             title="Client Registry"
@@ -1116,7 +1148,7 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                 <h1 className="ac-hero__title">{pageMeta.title}</h1>
                 <p className="ac-hero__subtitle">{pageMeta.subtitle}</p>
               </div>
-              <div className="ac-admin-hero-stats">
+              {activeTab !== 'monitoring' && <div className="ac-admin-hero-stats">
                 <div className="ac-admin-hero-stat">
                   <div className="ac-admin-hero-stat__val">{summary.total_clients}</div>
                   <div className="ac-admin-hero-stat__label">Registered Clients</div>
@@ -1125,7 +1157,7 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                   <div className="ac-admin-hero-stat__val">{userStats.admins || adminUsers.length || 0}</div>
                   <div className="ac-admin-hero-stat__label">Admin Accounts</div>
                 </div>
-              </div>
+              </div>}
             </div>
           </section>
 
@@ -1296,6 +1328,10 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
               </section>
             </>
           )}
+
+          {activeTab === 'monitoring' && (monitoringClientId
+            ? <ClientMonitoringDashboard key={monitoringClientId} clientId={monitoringClientId} clients={clients} onLogout={onLogout} />
+            : <MonitoringOverview onLogout={onLogout} />)}
 
           {/* ===== TAB: DAFTAR KLIEN ===== */}
           {activeTab === 'clients' && (
@@ -1619,11 +1655,7 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                     </div>
                     <div className="ac-form-field">
                       <label className="ac-form-label">Status</label>
-                      <select className="ac-form-input ac-form-input--lg" value={clientForm.status}
-                        onChange={e => setClientForm(f => ({ ...f, status: e.target.value }))}>
-                        <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
-                      </select>
+                      <FilterDropdown ariaLabel="Status client" value={clientForm.status} onChange={value => setClientForm(f => ({ ...f, status: value }))} options={[{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }]} />
                     </div>
                   </div>
                 </section>
@@ -2026,6 +2058,7 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
       {/* ===== DRAWER: CLIENT REGISTRY DETAIL ===== */}
       {selectedRegistryClient && (
         <ClientDetailDrawer
+          onOpenDashboard={() => navigate(`/admin/clients/${encodeURIComponent(selectedRegistryClient.id)}/dashboard`)}
           client={selectedRegistryClient}
           detail={selectedClientDetail}
           cdcUsers={cdcUsersByClientId.get(selectedRegistryClient.id)?.users || []}

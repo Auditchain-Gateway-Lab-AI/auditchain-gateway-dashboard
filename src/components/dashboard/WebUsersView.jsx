@@ -2,6 +2,7 @@ import React from 'react';
 import api from '../../api';
 import Icon from '../common/Icon';
 import ActionBadge from '../common/ActionBadge';
+import FilterDropdown from '../common/FilterDropdown';
 
 const TABS = ['All Users', 'Recently Seen', 'Needs Identity'];
 const SORT_OPTIONS = ['Newest First', 'Oldest First', 'Name A-Z'];
@@ -495,8 +496,8 @@ function WebUsersView({ onLogout }) {
     setCopyNotice(`Exported ${filteredUsers.length} user${filteredUsers.length === 1 ? '' : 's'}`);
   };
 
-  const handlePageSizeChange = (event) => {
-    setPageSize(Number(event.target.value));
+  const handlePageSizeChange = (value) => {
+    setPageSize(Number(value));
   };
 
   const openUserDetail = (user) => {
@@ -619,13 +620,7 @@ function WebUsersView({ onLogout }) {
               onChange={event => setQuery(event.target.value)}
             />
           </div>
-          <select
-            className="ac-select"
-            value={sortMode}
-            onChange={event => setSortMode(event.target.value)}
-          >
-            {SORT_OPTIONS.map(option => <option key={option}>{option}</option>)}
-          </select>
+          <FilterDropdown ariaLabel="Sort users" value={sortMode} onChange={setSortMode} options={SORT_OPTIONS.map(option => ({ value: option, label: option }))} />
         </div>
 
         {errorState && (
@@ -767,11 +762,7 @@ function WebUsersView({ onLogout }) {
               <Icon name="chevronRight" size={14} />
             </button>
           </div>
-          <select className="ac-select" value={pageSize} onChange={handlePageSizeChange}>
-            {PAGE_SIZE_OPTIONS.map(option => (
-              <option key={option} value={option}>{option} / page</option>
-            ))}
-          </select>
+          <FilterDropdown ariaLabel="Users per page" value={pageSize} onChange={handlePageSizeChange} options={PAGE_SIZE_OPTIONS.map(option => ({ value: option, label: `${option} / page` }))} />
         </div>
       </section>
 

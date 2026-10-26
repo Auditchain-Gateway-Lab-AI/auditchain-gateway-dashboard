@@ -219,6 +219,23 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/admin/clients/:clientId/dashboard"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated}>
+                {isAdmin ? (
+                  <AdminPage
+                    onLogout={handleLogout}
+                    themePreference={themePreference}
+                    resolvedTheme={resolvedTheme}
+                    onThemeChange={setThemePreference}
+                  />
+                ) : (
+                  <Navigate to="/dashboard" replace />
+                )}
+              </ProtectedRoute>
+            }
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>

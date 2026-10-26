@@ -3,6 +3,16 @@ import { act, render, screen } from '@testing-library/react';
 import VerificationModal from './VerificationModal';
 
 describe('VerificationModal', () => {
+  test('separates verified proof from a source difference without claiming manipulation', () => {
+    render(<VerificationModal result={{ status: 'success', data: {
+      is_valid: true, agent_status: 'mismatch',
+      agent_discrepancies: [{ field: 'user_input', in_log: 'null', in_agent: '"1"' }],
+    } }} onClose={jest.fn()} />);
+    act(() => { jest.runAllTimers(); });
+    expect(screen.getByText('Bukti Log Terverifikasi')).toBeInTheDocument();
+    expect(screen.getByText('Data sumber berbeda')).toBeInTheDocument();
+    expect(screen.getByText(/Perbedaan ini belum membuktikan manipulasi/)).toBeInTheDocument();
+  });
   beforeEach(() => {
     jest.useFakeTimers();
   });

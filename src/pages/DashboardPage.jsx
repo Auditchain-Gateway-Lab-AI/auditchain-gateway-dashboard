@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import Icon from '../components/common/Icon';
 import AppearanceMenu from '../components/common/AppearanceMenu';
+import FilterDropdown from '../components/common/FilterDropdown';
 import AuditDashboardOverview from '../components/dashboard/AuditDashboardOverview';
 import AuditLogsView from '../components/dashboard/AuditLogsView';
 import WebUsersView from '../components/dashboard/WebUsersView';
@@ -795,48 +796,13 @@ function DashboardPage({ onLogout, onProfileUpdated, view = 'dashboard', themePr
         </div>
         <div className="ac-topnav__right">
           {clientInfo && clientInfo.role?.toLowerCase() === 'admin' ? (
-            <select
-              value={selectedClient}
-              onChange={e => {
-                setSelectedClient(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="ac-topnav__client-select"
-              style={{
-                background: 'rgba(3,40,93,0.05)',
-                border: '1px solid rgba(3,40,93,0.1)',
-                color: '#03285D',
-                padding: '6px 12px',
-                borderRadius: 'var(--radius-md)',
-                fontSize: '13px',
-                fontWeight: '700',
-                outline: 'none',
-                cursor: 'pointer'
-              }}
-            >
-              <option value={clientInfo.client_id}>
-                {clientInfo.client_id} (Admin Default)
-              </option>
-              {adminClients.length === 0 ? (
-                <>
-                  <option value="ed067ad4-e549-4baa-9c9d-3d27ff24194d">
-                    SIMRS Dummy 2 (ed067ad4-e549-4baa-9c9d-3d27ff24194d)
-                  </option>
-                  <option value="7f2bc265-d419-48fe-9892-d6ef198751e1">
-                    Satu Peta Debezium (7f2bc265-d419-48fe-9892-d6ef198751e1)
-                  </option>
-                </>
-              ) : (
-                adminClients.map(client => {
-                  if (client.id === clientInfo.client_id) return null;
-                  return (
-                    <option key={client.id} value={client.id}>
-                      {client.company_name || 'Klien'} ({client.id})
-                    </option>
-                  );
-                })
-              )}
-            </select>
+            <FilterDropdown ariaLabel="Active client workspace" className="ac-topnav-client-dropdown" value={selectedClient} onChange={value => { setSelectedClient(value); setCurrentPage(1); }} options={[
+              { value: clientInfo.client_id || '', label: `${clientInfo.client_id || 'Admin'} (Admin Default)` },
+              ...(adminClients.length === 0 ? [
+                { value: 'ed067ad4-e549-4baa-9c9d-3d27ff24194d', label: 'SIMRS Dummy 2 (ed067ad4-e549-4baa-9c9d-3d27ff24194d)' },
+                { value: '7f2bc265-d419-48fe-9892-d6ef198751e1', label: 'Satu Peta Debezium (7f2bc265-d419-48fe-9892-d6ef198751e1)' }
+              ] : adminClients.filter(client => client.id !== clientInfo.client_id).map(client => ({ value: client.id, label: `${client.company_name || 'Klien'} (${client.id})` })))
+            ]} />
           ) : null}
           {clientInfo && (
             <div className="ac-profile-menu">

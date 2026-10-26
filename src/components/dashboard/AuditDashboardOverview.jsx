@@ -2,6 +2,7 @@ import React from 'react';
 import api from '../../api';
 import Icon from '../common/Icon';
 import StatCards from './StatCards';
+import FilterDropdown from '../common/FilterDropdown';
 
 const RANGE_OPTIONS = [
   { value: 7, label: 'Last 7 days' },
@@ -273,18 +274,7 @@ function AuditDashboardOverview({ stats = {}, selectedClient = '', onOpenAuditLo
           </p>
         </div>
         <div className="ac-dashboard-head__actions">
-          <select
-            className="ac-select ac-dashboard-range-select"
-            value={rangeDays}
-            onChange={event => {
-              setRangeDays(Number(event.target.value));
-              setHoveredIndex(null);
-            }}
-          >
-            {RANGE_OPTIONS.map(option => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
+          <FilterDropdown ariaLabel="Activity range" className="ac-dashboard-range-dropdown" value={rangeDays} options={RANGE_OPTIONS} onChange={value => { setRangeDays(Number(value)); setHoveredIndex(null); }} />
           <button type="button" className="ac-btn-ghost-action" onClick={onOpenAuditLogs}>
             <Icon name="history" size={14} />
             View Audit Logs

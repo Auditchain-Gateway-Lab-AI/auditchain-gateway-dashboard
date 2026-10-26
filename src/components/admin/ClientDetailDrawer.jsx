@@ -23,6 +23,7 @@ const EMPTY_KAFKA_FORM = {
 };
 
 function ClientDetailDrawer({
+  onOpenDashboard,
   client,
   detail,
   cdcUsers = [],
@@ -134,6 +135,7 @@ function ClientDetailDrawer({
           </div>
         </header>
 
+        {onOpenDashboard && <button type="button" className="ac-admin-detail-button" onClick={onOpenDashboard}>Buka Dashboard →</button>}
         <div className="ac-drawer-tabs" role="tablist" aria-label="Client detail sections">
           {[
             ['overview', 'Overview'],

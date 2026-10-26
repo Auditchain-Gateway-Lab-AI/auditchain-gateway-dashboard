@@ -1,6 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import Icon from '../common/Icon';
+import FilterDropdown from '../common/FilterDropdown';
 import ActionBadge from '../common/ActionBadge';
 import VerificationModal from './VerificationModal';
 import { formatTimestamp, renderMetadataCell } from '../../utils/formatters';
@@ -128,61 +129,6 @@ const parseCustomRange = (value) => {
     to: toDateInputValue(end)
   };
 };
-
-function FilterDropdown({ value, options, onChange, disabled = false, className = '', ariaLabel }) {
-  const [open, setOpen] = React.useState(false);
-  const dropdownRef = React.useRef(null);
-  const selectedOption = options.find(option => option.value === value) || options[0];
-
-  React.useEffect(() => {
-    const handleOutsideClick = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleOutsideClick);
-    return () => document.removeEventListener('mousedown', handleOutsideClick);
-  }, []);
-
-  return (
-    <div className={`ac-filter-dropdown ${className}`} ref={dropdownRef}>
-      <button
-        type="button"
-        className={`ac-filter-dropdown__trigger${open ? ' ac-filter-dropdown__trigger--open' : ''}`}
-        disabled={disabled}
-        onClick={() => setOpen(value => !value)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-label={ariaLabel}
-      >
-        <span>{selectedOption.label}</span>
-        <Icon name="chevronDown" size={15} />
-      </button>
-
-      {open && (
-        <div className="ac-filter-dropdown__menu" role="listbox">
-          {options.map(option => (
-            <button
-              type="button"
-              key={option.value}
-              className={`ac-filter-dropdown__option${option.value === value ? ' ac-filter-dropdown__option--active' : ''}`}
-              onClick={() => {
-                onChange(option.value);
-                setOpen(false);
-              }}
-              role="option"
-              aria-selected={option.value === value}
-            >
-              <span>{option.label}</span>
-              {option.value === value && <Icon name="check" size={14} />}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 function AuditLogTable({
   paginatedLogs = [],
