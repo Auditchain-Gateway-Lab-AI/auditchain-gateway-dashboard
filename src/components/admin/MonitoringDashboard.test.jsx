@@ -90,10 +90,10 @@ test('refreshes at 60 seconds, pauses hidden tabs, and refreshes on visibility',
   hidden.mockRestore();
 });
 
-test('client selector supports search and detail ranges only fetch read endpoints', async () => {
+test('client selector has no redundant search and detail ranges only fetch read endpoints', async () => {
   renderMonitoring('/admin/clients/a/dashboard');
   await screen.findByRole('heading', { name: 'Integrity Terkini' });
-  fireEvent.change(screen.getByLabelText('Cari client lain'), { target: { value: 'Beta' } });
+  expect(screen.queryByLabelText('Cari client lain')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Client aktif' }));
   expect(screen.getByRole('option', { name: 'Beta' })).toBeInTheDocument();
   expect(screen.getByRole('option', { name: 'Alpha' })).toBeInTheDocument();

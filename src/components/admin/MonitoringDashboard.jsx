@@ -3,10 +3,13 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-do
 import api from '../../api';
 import Icon from '../common/Icon';
 import FilterDropdown from '../common/FilterDropdown';
+import { ActivityTrend, IntegrityVisual, AnchoringVisual, TableHealth } from './MonitoringVisuals';
+import { monitoringNumber as number, monitoringTime } from './monitoringFormatters';
 import './MonitoringDashboard.css';
+import './MonitoringVisuals.css';
 
-export const monitoringTime = value => value ? `${new Intl.DateTimeFormat('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))} WIB` : 'Belum tersedia';
-const number = value => value == null ? '—' : new Intl.NumberFormat('id-ID').format(value);
+export { monitoringTime } from './monitoringFormatters';
+
 const labels = { critical: 'Critical', attention: 'Attention', unknown: 'Unknown', normal: 'Normal' };
 const safeReturn = value => value === '/admin' || value?.startsWith('/admin?') ? value : '/admin?tab=monitoring';
 export const Condition = ({ value }) => <span className={`monitoring-badge monitoring-badge--${value}`}>{labels[value] || 'Unknown'}</span>;
@@ -115,7 +118,6 @@ export function ClientMonitoringDashboard({ clientId, clients, onLogout }) {
   const [params, setParams] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const [search, setSearch] = useState('');
   const range = ['24H', '7D', '30D'].includes(params.get('range')) ? params.get('range') : '7D';
   const state = useMonitoring(`/admin/clients/${encodeURIComponent(clientId)}/monitoring?range=${range}`, onLogout);
   const { data } = state;
@@ -126,24 +128,73 @@ export function ClientMonitoringDashboard({ clientId, clients, onLogout }) {
   const client = data?.client;
   const clientName = client?.company_name || clients.find(item => item.id === clientId)?.company_name || clientId;
   const metrics = client?.metrics;
-  const filtered = clients.filter(item => item.id === clientId || item.company_name?.toLowerCase().includes(search.toLowerCase()));
-  const points = data?.trend?.points || [];
-  const max = Math.max(1, ...points.map(point => point.total_logs));
+  const clientOptions = [
+    ...(!clients.some(item => item.id === clientId) ? [{ value: clientId, label: clientName }] : []),
+    ...clients.map(item => ({ value: item.id, label: item.company_name })),
+  ];
+
   return <div className="monitoring">
-    <nav className="monitoring-breadcrumb" aria-label="Breadcrumb"><Link to={returnTo}>Client Monitoring</Link><Icon name="chevronRight" size={13} /><span>{clientName}</span></nav>
-    <section className="monitoring-panel monitoring-workspace"><div className="monitoring-client-header"><div className="monitoring-client-identity"><span className="ac-admin-client-cell__avatar" aria-hidden="true">{clientName.charAt(0).toUpperCase()}</span><div><span className="monitoring-eyebrow">CLIENT WORKSPACE</span><h2>{clientName}</h2><p>Monitoring internal · hasil pemeriksaan tersimpan</p></div></div><Link className="ac-admin-detail-button" to={`/admin?tab=clients&clientId=${encodeURIComponent(clientId)}`}><Icon name="settings" size={15} />Kelola Client</Link></div>
-    <div className="monitoring-controls monitoring-switcher"><label>Cari client lain<input type="search" placeholder="Nama perusahaan" value={search} onChange={event => setSearch(event.target.value)} /></label><label>Client aktif<FilterDropdown ariaLabel="Client aktif" value={clientId} onChange={value => navigate(`/admin/clients/${encodeURIComponent(value)}/dashboard?returnTo=${encodeURIComponent(returnTo)}`)} options={[...(!clients.some(item => item.id === clientId) ? [{ value: clientId, label: client?.company_name || clientId }] : []), ...filtered.map(item => ({ value: item.id, label: item.company_name }))]} /></label><span className="monitoring-switcher-note"><Icon name="lock" size={14} />Akses monitoring internal</span></div></section>
+    <nav className="monitoring-breadcrumb" aria-label="Breadcrumb">
+      <Link to={returnTo}>Client Monitoring</Link><Icon name="chevronRight" size={13} /><span>{clientName}</span>
+    </nav>
+    <section className="monitoring-panel monitoring-workspace">
+      <div className="monitoring-client-header">
+        <div className="monitoring-client-identity">
+          <span className="ac-admin-client-cell__avatar" aria-hidden="true">{clientName.charAt(0).toUpperCase()}</span>
+          <div><span className="monitoring-eyebrow">CLIENT WORKSPACE</span><h2>{clientName}</h2><p>Monitoring internal · hasil pemeriksaan tersimpan</p></div>
+        </div>
+        <Link className="ac-admin-detail-button" to={`/admin?tab=clients&clientId=${encodeURIComponent(clientId)}`}><Icon name="settings" size={15} />Kelola Client</Link>
+      </div>
+      <div className="monitoring-controls monitoring-switcher">
+        <label>Client aktif<FilterDropdown ariaLabel="Client aktif" value={clientId} onChange={value => navigate(`/admin/clients/${encodeURIComponent(value)}/dashboard?returnTo=${encodeURIComponent(returnTo)}`)} options={clientOptions} /></label>
+        <span className="monitoring-switcher-note"><Icon name="lock" size={14} />Akses monitoring internal</span>
+      </div>
+    </section>
     <UpdateStatus {...state} />
     {state.notFound && <section className="monitoring-panel"><h2>Client tidak ditemukan</h2><Link to={returnTo}>Kembali ke monitoring</Link></section>}
     {data && <>
-      <section className={`monitoring-panel monitoring-condition-panel monitoring-condition-panel--${client.condition}`}><div className="monitoring-condition-top"><span className="monitoring-eyebrow">KONDISI CLIENT</span><Condition value={client.condition} /><span className="monitoring-admin-status">Administrasi: {client.administrative_status}</span></div><Reasons client={client} /><p>Pemeriksaan terakhir: {monitoringTime(metrics?.checked_at)}. Tidak ada aktivitas baru tidak otomatis berarti offline. Kondisi Normal tidak menjamin semua log telah diperiksa.</p></section>
-      <div className="monitoring-kpis">{[['Total Log', metrics?.total, 'database', 'blue', 'Audit log tersimpan'], ['Anchored', metrics?.anchored, 'shield', 'teal', 'Tercatat di blockchain'], ['Pending Anchoring', metrics?.pending, 'clock', 'amber', 'Menunggu anchoring'], ['Temuan Tampered', metrics?.tampered, 'alertTriangle', 'coral', 'Hasil integrity terkini']].map(([label, value, icon, tone, hint]) => <StatCard key={label} label={label} value={value} icon={icon} tone={tone} hint={hint} />)}</div>
-      <section className="monitoring-panel" id="activity"><SectionTitle title="Tren Aktivitas" icon="activity" description="Volume audit log pada rentang yang dipilih."><div className="monitoring-range"><span>Rentang</span><FilterDropdown ariaLabel="Rentang" className="monitoring-range-dropdown" value={range} options={[{ value: '24H', label: '24 jam' }, { value: '7D', label: '7 hari' }, { value: '30D', label: '30 hari' }]} onChange={value => { const next = new URLSearchParams(params); next.set('range', value); setParams(next); }} /></div></SectionTitle><p>{number(metrics?.logs_24h)} log dalam 24 jam berjalan · aktivitas terakhir {monitoringTime(metrics?.last_log_at)}</p>
-      <div className="monitoring-chart" role="img" aria-label={`Tren aktivitas ${range}, ${points.map(point => `${monitoringTime(point.bucket_start)}: ${point.total_logs} log`).join('; ')}`}>{points.map(point => <div className="monitoring-chart-column" key={point.bucket_start}><span>{number(point.total_logs)}</span><div title={`${monitoringTime(point.bucket_start)}: ${number(point.total_logs)} log`} style={{ height: `${Math.max(2, point.total_logs / max * 130)}px` }} /><small>{new Intl.DateTimeFormat('id-ID', { timeZone: 'Asia/Jakarta', ...(range === '24H' ? { hour: '2-digit', minute: '2-digit' } : { day: 'numeric', month: 'short' }) }).format(new Date(point.bucket_start))}</small></div>)}</div><small>Awal bucket ditampilkan dalam WIB · {data.trend.bucket_seconds / 3600} jam per bucket</small></section>
-      <div className="monitoring-detail-grid"><section className="monitoring-panel" id="integrity"><SectionTitle title="Integrity Terkini" description="Status terakhir per log, bukan jumlah pemeriksaan historis." /><dl>{[['Valid', 'valid'], ['Tampered', 'tampered'], ['Pending verification', 'verify_pending'], ['Unavailable / error', 'unavailable'], ['Belum diperiksa', 'not_checked']].map(([label, key]) => <div key={key}><dt>{label}</dt><dd>{number(metrics?.[key])}</dd></div>)}</dl></section>
-      <section className="monitoring-panel" id="anchoring"><SectionTitle title="Anchoring" icon="link" description="Coverage pencatatan audit log di blockchain." /><dl><div><dt>Pending</dt><dd>{number(metrics?.pending)}</dd></div><div><dt>Coverage anchored</dt><dd>{metrics?.anchor_percentage == null ? '—' : `${number(Math.round(metrics.anchor_percentage * 10) / 10)}%`}</dd></div><div><dt>Pending tertua sejak</dt><dd>{monitoringTime(metrics?.oldest_pending_at)}</dd></div></dl><p>Peringatan setelah {data.pending_threshold_minutes} menit sejak log masuk.</p></section></div>
-      <section className="monitoring-panel monitoring-registry"><SectionTitle title="Tabel yang Dipantau" icon="database" description="Ringkasan audit dan hasil pemeriksaan per tabel."><span className="monitoring-count">{data.tables.length} tabel</span></SectionTitle><div className="monitoring-table-wrap"><table className="monitoring-table"><thead><tr><th>Tabel</th><th>Log</th><th>Valid</th><th>Tampered</th><th>Pending verifikasi</th><th>Unavailable</th><th>Belum diperiksa</th><th>Pemeriksaan terakhir</th></tr></thead><tbody>{data.tables.map(table => <tr key={table.table_name}><th scope="row">{table.table_name}</th>{['total', 'valid', 'tampered', 'verify_pending', 'unavailable', 'not_checked'].map(key => <td key={key}>{number(table[key])}</td>)}<td>{monitoringTime(table.checked_at)}</td></tr>)}</tbody></table></div>{data.tables.length === 0 && <p className="monitoring-empty">Belum ada tabel atau audit log yang tersedia.</p>}</section>
-      <section className="monitoring-panel" id="integration"><SectionTitle title="Kesiapan Integrasi" icon="settings" description="Konfigurasi akses dan laporan connector terakhir." /><dl><div><dt>Agent</dt><dd>{client.agent_configured ? client.agent_active ? 'Dikonfigurasi · aktif' : 'Dikonfigurasi · nonaktif' : 'Belum dikonfigurasi'}</dd></div><div><dt>Kafka</dt><dd>{client.kafka_configured ? client.kafka_active ? 'Dikonfigurasi · aktif' : 'Dikonfigurasi · nonaktif' : 'Belum dikonfigurasi'}</dd></div><div><dt>Connector · terakhir dilaporkan</dt><dd>{client.connector_status || 'Belum tersedia'}</dd></div><div><dt>Konfigurasi Agent diperbarui</dt><dd>{monitoringTime(client.integration_reported_at)}</dd></div></dl><p>Konfigurasi dan laporan terakhir belum membuktikan koneksi saat ini. Dashboard tidak menjalankan ping atau verifikasi otomatis.</p></section>
+      <section className={`monitoring-panel monitoring-condition-panel monitoring-condition-panel--${client.condition}`}>
+        <div className="monitoring-condition-top"><span className="monitoring-eyebrow">KONDISI CLIENT</span><Condition value={client.condition} /><span className="monitoring-admin-status">Administrasi: {client.administrative_status}</span></div>
+        <Reasons client={client} /><p>Pemeriksaan terakhir: {monitoringTime(metrics?.checked_at)}. Tidak ada aktivitas baru tidak otomatis berarti offline. Kondisi Normal tidak menjamin semua log telah diperiksa.</p>
+      </section>
+      <div className="monitoring-kpis">
+        {[
+          ['Total Log', metrics?.total, 'database', 'blue', 'Audit log tersimpan'],
+          ['Anchored', metrics?.anchored, 'shield', 'teal', 'Tercatat di blockchain'],
+          ['Pending Anchoring', metrics?.pending, 'clock', 'amber', 'Menunggu anchoring'],
+          ['Temuan Tampered', metrics?.tampered, 'alertTriangle', 'coral', 'Hasil integrity terkini'],
+        ].map(([label, value, icon, tone, hint]) => <StatCard key={label} label={label} value={value} icon={icon} tone={tone} hint={hint} />)}
+      </div>
+      <section className="monitoring-panel" id="activity">
+        <SectionTitle title="Tren Aktivitas" icon="activity" description="Lihat perubahan volume log dari waktu ke waktu.">
+          <div className="monitoring-range"><span>Rentang</span><FilterDropdown ariaLabel="Rentang" className="monitoring-range-dropdown" value={range} options={[{ value: '24H', label: '24 jam' }, { value: '7D', label: '7 hari' }, { value: '30D', label: '30 hari' }]} onChange={value => { const next = new URLSearchParams(params); next.set('range', value); setParams(next); }} /></div>
+        </SectionTitle>
+        <ActivityTrend key={`${clientId}-${range}`} points={data.trend?.points} range={range} bucketSeconds={data.trend?.bucket_seconds} metrics={metrics} />
+      </section>
+      <div className="monitoring-detail-grid">
+        <section className="monitoring-panel monitoring-visual-panel" id="integrity">
+          <SectionTitle title="Integrity Terkini" description="Komposisi status seluruh audit log." />
+          <IntegrityVisual metrics={metrics} />
+        </section>
+        <section className="monitoring-panel monitoring-visual-panel" id="anchoring">
+          <SectionTitle title="Anchoring" icon="link" description="Pantau pencatatan log dari Gateway ke blockchain." />
+          <AnchoringVisual metrics={metrics} threshold={data.pending_threshold_minutes} />
+        </section>
+      </div>
+      <section className="monitoring-panel monitoring-registry">
+        <SectionTitle title="Tabel yang Dipantau" icon="database" description="Bandingkan status log antar tabel dan temukan yang perlu ditinjau."><span className="monitoring-count">{number(data.tables?.length ?? 0)} tabel</span></SectionTitle>
+        <TableHealth tables={data.tables || []} />
+      </section>
+      <section className="monitoring-panel" id="integration">
+        <SectionTitle title="Kesiapan Integrasi" icon="settings" description="Konfigurasi akses dan laporan connector terakhir." />
+        <dl>
+          <div><dt>Agent</dt><dd>{client.agent_configured ? client.agent_active ? 'Dikonfigurasi · aktif' : 'Dikonfigurasi · nonaktif' : 'Belum dikonfigurasi'}</dd></div>
+          <div><dt>Kafka</dt><dd>{client.kafka_configured ? client.kafka_active ? 'Dikonfigurasi · aktif' : 'Dikonfigurasi · nonaktif' : 'Belum dikonfigurasi'}</dd></div>
+          <div><dt>Connector · terakhir dilaporkan</dt><dd>{client.connector_status || 'Belum tersedia'}</dd></div>
+          <div><dt>Konfigurasi Agent diperbarui</dt><dd>{monitoringTime(client.integration_reported_at)}</dd></div>
+        </dl>
+        <p>Konfigurasi dan laporan terakhir belum membuktikan koneksi saat ini. Dashboard tidak menjalankan ping atau verifikasi otomatis.</p>
+      </section>
     </>}
   </div>;
 }

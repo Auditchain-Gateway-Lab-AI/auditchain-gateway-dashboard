@@ -59,6 +59,14 @@ Refresh failures preserve the last successful snapshot with an error indicator.
 Old requests are aborted/ignored. Monitoring performs no ping, verification,
 recovery, or write operations.
 
+The client detail uses a direct client dropdown without a separate search field.
+Activity is a line and area chart; hover, tap, or focus a point for its exact
+count (arrow keys, Home, and End move between points). Integrity uses a donut
+with a shared status legend, while anchoring shows coverage and the Gateway →
+queue → blockchain flow. Table comparisons prioritize findings, show status
+proportions, and expose exact counts through an expandable Detail button.
+Empty data never displays complete coverage or a healthy integrity score.
+
 ## Validation
 
 Frontend: `npm test -- --watchAll=false --runInBand` and `npm run build`.
