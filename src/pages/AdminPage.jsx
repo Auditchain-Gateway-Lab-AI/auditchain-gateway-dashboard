@@ -7,6 +7,7 @@ import DBEngineBadge from '../components/common/DBEngineBadge';
 import ClientDetailDrawer from '../components/admin/ClientDetailDrawer';
 import FilterDropdown from '../components/common/FilterDropdown';
 import { MonitoringOverview, ClientMonitoringDashboard } from '../components/admin/MonitoringDashboard';
+import AdminClientStatistics from '../components/admin/AdminClientStatistics';
 import { parseJwt, formatTimestamp } from '../utils/formatters';
 
 const ADMIN_TABS = ['overview', 'monitoring', 'clients', 'users', 'profile'];
@@ -1205,6 +1206,8 @@ function AdminPage({ onLogout, themePreference = 'system', resolvedTheme = 'ligh
                   </div>
                 </div>
               </section>
+
+              <AdminClientStatistics onLogout={onLogout} />
 
               <section className="ac-admin-dashboard-layout">
                 <div className="ac-admin-command-card">

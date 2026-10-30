@@ -1,6 +1,9 @@
 # Internal client monitoring
 
-The admin landing page (`/admin`) retains the original administrative overview.
+The admin landing page (`/admin`) retains the original administrative overview
+and adds **Statistik Seluruh Client** after its four administrative cards. It
+shows global log totals, client conditions, activity, integrity, anchoring, and
+the five highest-priority clients. Existing setup and registry panels remain.
 The separate **Client Monitoring** sidebar menu (`/admin?tab=monitoring`) shows
 global condition counts, the five highest
 priority clients requiring attention, and a searchable/paginated monitoring table.
@@ -13,6 +16,7 @@ preserves overview filters. Registry management remains at
 Both routes require the existing admin bearer authentication middleware:
 
 - `GET /api/admin/monitoring/overview?q=&condition=&status=&sort=condition&page=1`
+- `GET /api/admin/monitoring/statistics?range=7D`
 - `GET /api/admin/clients/:id/monitoring?range=7D`
 
 Overview returns `fetched_at`, global `summary`, up to five `attention` clients,
@@ -21,6 +25,32 @@ filtered `clients`, `total`, `page`, `page_size` (20), `pages`, and
 `unknown`, and `normal`. Sorting supports `condition`, `name`, and `logs_desc`.
 Sorting ties use case-insensitive company name followed by client ID.
 Page numbers beyond the last page clamp to the last available page.
+
+Statistics returns `fetched_at`, condition `summary` (including total), global
+`metrics`, `trend`, all `clients` with their own metrics, up to five `attention` clients, and
+`pending_threshold_minutes`. It includes all registered, non-deleted clients,
+including inactive and pending setup. Orphaned logs are excluded. Percentages
+use summed log counts rather than averaging client percentages. The optional
+`range` accepts `24H`, `7D` (default), or `30D`; invalid values return HTTP 400.
+Only the activity trend follows this range. Totals and current conditions do
+not. Empty denominators produce null coverage. The same monitoring metric and
+condition rules apply. The statistics endpoint requires admin authentication.
+
+The **Statistik per Client** comparison displays cards for all clients together
+on the admin dashboard, including clients without logs. Each card identifies
+the company and shows total logs, anchored, pending anchoring, tampered,
+anchoring coverage, 24-hour activity, administrative status, condition, and a
+detail link. The default order is total logs descending, with name/ID tie breaks.
+Search by company name and name sorting only affect this comparison; global
+statistics remain unchanged. This list is not limited to the monitoring table's
+20-row page or the five attention clients. All cards share the statistics
+snapshot and refresh without per-client requests.
+
+Condition buttons link to filtered Client Monitoring; attention links open
+the client workspace and return to `/admin`. A range change keeps the previous
+snapshot visible until the replacement arrives, with an explicit notice when
+the displayed trend still belongs to the previous range. This section mounts
+and polls only on the admin overview tab.
 
 Detail returns `fetched_at`, `client`, `trend`, `tables`, and
 `pending_threshold_minutes`. Supported ranges: `24H`, `7D` (default), `30D`.

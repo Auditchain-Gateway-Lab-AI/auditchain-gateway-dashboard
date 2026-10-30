@@ -25,6 +25,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   api.get.mockImplementation(url => {
     if (url === '/admin/summary') return Promise.resolve({ data: { total_clients: 0 } });
+    if (url.startsWith('/admin/monitoring/statistics')) return Promise.reject(new Error('Statistics unavailable'));
     return Promise.resolve({ data: [] });
   });
 });
@@ -59,14 +60,22 @@ afterEach(() => jest.restoreAllMocks());
 
 test('retains the original admin overview and opens monitoring from its own sidebar menu', async () => {
   api.get.mockImplementation(url => Promise.resolve({ data:
-    url.startsWith('/admin/monitoring/overview')
+    url.startsWith('/admin/monitoring/statistics')
+      ? { fetched_at: '2026-10-22T02:00:00Z', summary: { total: 0, critical: 0, attention: 0, unknown: 0, normal: 0 }, metrics: { total: 0 }, attention: [], trend: { points: [] } }
+      : url.startsWith('/admin/monitoring/overview')
       ? { fetched_at: '2026-10-22T02:00:00Z', summary: { total: 0, critical: 0, attention: 0, unknown: 0 }, attention: [], clients: [], total: 0, page: 1, pages: 1 }
       : url === '/admin/summary' ? { total_clients: 0 } : []
   }));
   render(<MemoryRouter initialEntries={['/admin']}><AdminPage onLogout={jest.fn()} /><LocationProbe /></MemoryRouter>);
   expect(await screen.findByRole('heading', { name: 'Quick Actions' })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: 'Stream Health' })).toBeInTheDocument();
-  expect(api.get.mock.calls.some(([url]) => url.startsWith('/admin/monitoring/'))).toBe(false);
+  expect(screen.getByRole('heading', { name: 'Statistik Seluruh Client' })).toBeInTheDocument();
+  const cards = screen.getByText('Total tenant systems onboarded');
+  const statistics = screen.getByRole('region', { name: 'Statistik Seluruh Client' });
+  expect(cards.compareDocumentPosition(statistics) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(statistics.compareDocumentPosition(screen.getByRole('heading', { name: 'Quick Actions' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(api.get.mock.calls.some(([url]) => url.startsWith('/admin/monitoring/statistics'))).toBe(true);
+  expect(api.get.mock.calls.some(([url]) => url.startsWith('/admin/monitoring/overview'))).toBe(false);
   fireEvent.click(screen.getByRole('button', { name: 'Client Monitoring', exact: true }));
   expect(await screen.findByRole('heading', { name: 'Monitoring Client' })).toBeInTheDocument();
   expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=monitoring');

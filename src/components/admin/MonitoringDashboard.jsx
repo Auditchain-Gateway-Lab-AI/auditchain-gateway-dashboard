@@ -14,7 +14,7 @@ const labels = { critical: 'Critical', attention: 'Attention', unknown: 'Unknown
 const safeReturn = value => value === '/admin' || value?.startsWith('/admin?') ? value : '/admin?tab=monitoring';
 export const Condition = ({ value }) => <span className={`monitoring-badge monitoring-badge--${value}`}>{labels[value] || 'Unknown'}</span>;
 
-function StatCard({ label, value, hint, icon, tone = 'blue', onClick, selected }) {
+export function StatCard({ label, value, hint, icon, tone = 'blue', onClick, selected }) {
   const Tag = onClick ? 'button' : 'div';
   return <Tag className={`monitoring-panel monitoring-kpi monitoring-kpi--${tone}`} {...(onClick ? { type: 'button', onClick, 'aria-pressed': selected } : {})}>
     <span className="monitoring-kpi-icon" aria-hidden="true"><Icon name={icon} size={20} /></span>
@@ -23,13 +23,13 @@ function StatCard({ label, value, hint, icon, tone = 'blue', onClick, selected }
   </Tag>;
 }
 
-function SectionTitle({ id, title, description, icon = 'shield', children }) {
+export function SectionTitle({ id, title, description, icon = 'shield', children }) {
   return <div className="monitoring-section-head"><div className="monitoring-section-title"><span className="monitoring-section-icon" aria-hidden="true"><Icon name={icon} size={18} /></span><div><h2 id={id}>{title}</h2>{description && <p>{description}</p>}</div></div>{children}</div>;
 }
 
 // Each URL owns its response. Old requests never replace a newer request, and
 // polling failures keep the last successful snapshot visible.
-export function useMonitoring(url, onLogout) {
+export function useMonitoring(url, onLogout, { keepPreviousData = false } = {}) {
   const [snapshot, setSnapshot] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(true);
@@ -62,10 +62,10 @@ export function useMonitoring(url, onLogout) {
     document.addEventListener('visibilitychange', visible);
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', visible); sequence.current++; controller.current?.abort(); };
   }, [refresh]);
-  return { data: snapshot?.url === url ? snapshot.data : null, error, busy, notFound, refresh };
+  return { data: snapshot?.url === url || keepPreviousData ? snapshot?.data ?? null : null, isPreviousData: Boolean(snapshot && snapshot.url !== url), error, busy, notFound, refresh };
 }
 
-function UpdateStatus({ data, error, busy, refresh }) {
+export function UpdateStatus({ data, error, busy, refresh }) {
   return <div className="monitoring-update">
     <div className="monitoring-update-copy"><span className={`monitoring-update-dot${error ? ' monitoring-update-dot--error' : ''}`} aria-hidden="true" /><span aria-live="polite">{data ? `Diperbarui ${monitoringTime(data.fetched_at)}` : busy ? 'Memuat monitoring…' : 'Data belum tersedia'}</span><span className="monitoring-refresh-note">Refresh otomatis · 60 detik</span></div>
     <button type="button" className="ac-admin-detail-button" disabled={busy} onClick={refresh}><Icon name="refresh" size={14} />{busy ? 'Memuat…' : error ? 'Retry' : 'Refresh'}</button>
