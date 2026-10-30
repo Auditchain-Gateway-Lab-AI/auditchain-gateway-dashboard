@@ -43,9 +43,9 @@ test('shows independent statistics for multiple clients together, with search an
   expect(within(alpha).getByText('80')).toBeInTheDocument();
   expect(within(alpha).getByText('31')).toBeInTheDocument();
   expect(within(alpha).getByText('2')).toBeInTheDocument();
-  expect(within(beta).getByText('222')).toBeInTheDocument();
+  expect(within(within(beta).getByRole('group', { name: 'Distribusi status anchoring' })).getByText('222')).toBeInTheDocument();
   expect(within(beta).getByText('200')).toBeInTheDocument();
-  expect(within(gamma).getByText('—')).toBeInTheDocument();
+  expect(within(gamma).getAllByText('—').length).toBeGreaterThan(0);
   expect(within(gamma).queryByText('100%')).not.toBeInTheDocument();
   expect(within(alpha).getByRole('link', { name: 'Lihat detail statistik Alpha' })).toHaveAttribute('href', '/admin/clients/a%2Fb/dashboard?returnTo=%2Fadmin');
   expect(within(comparison).getAllByRole('article').map(card => card.getAttribute('aria-label'))).toEqual(['Statistik Beta', 'Statistik Alpha', 'Statistik Gamma']);
@@ -55,7 +55,7 @@ test('shows independent statistics for multiple clients together, with search an
   const search = within(comparison).getByRole('searchbox', { name: 'Cari client' });
   fireEvent.change(search, { target: { value: ' bEtA ' } });
   expect(within(comparison).getAllByRole('article')).toHaveLength(1);
-  expect(within(comparison).getByText('222')).toBeInTheDocument();
+  expect(within(comparison).getAllByText('222').length).toBeGreaterThan(0);
   expect(screen.getAllByText('1.000')).toHaveLength(2);
   fireEvent.change(search, { target: { value: 'missing' } });
   expect(within(comparison).getByText('Tidak ada client sesuai pencarian.')).toBeInTheDocument();

@@ -2,7 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import FilterDropdown from '../common/FilterDropdown';
 import { Condition, SectionTitle } from './MonitoringDashboard';
-import { monitoringNumber as number, monitoringPercent as percent } from './monitoringFormatters';
+import ClientStatisticsVisual from './ClientStatisticsVisual';
+import { monitoringNumber as number } from './monitoringFormatters';
 
 export default function ClientStatisticsComparison({ clients, detailURL }) {
   const [query, setQuery] = useState('');
@@ -29,21 +30,12 @@ export default function ClientStatisticsComparison({ clients, detailURL }) {
       <div className="client-statistics-grid">
         {visibleClients.map(client => {
           const metrics = client.metrics || {};
-          const coverage = metrics.total > 0 ? metrics.anchor_percentage : null;
           return <article key={client.id} className="client-statistics-card" aria-label={`Statistik ${client.company_name}`}>
             <div className="client-statistics-card-header">
               <div><h3><Link to={detailURL(client)}>{client.company_name}</Link></h3><small>Status administrasi: {client.administrative_status}</small></div>
               <Condition value={client.condition} />
             </div>
-            <dl className="client-statistics-metrics">
-              {[
-                ['Total Log', 'total'], ['Anchored', 'anchored'], ['Pending Anchoring', 'pending'], ['Tampered', 'tampered'],
-              ].map(([label, key]) => <div key={key} className={`client-statistics-metric client-statistics-metric--${key}`}><dt>{label}</dt><dd>{number(metrics[key])}</dd></div>)}
-            </dl>
-            <div className="client-statistics-coverage">
-              <div><span>Cakupan anchoring</span><strong>{percent(coverage)}</strong></div>
-              <div className="client-statistics-bar" aria-hidden="true"><span style={{ width: `${Number.isFinite(coverage) ? Math.min(100, Math.max(0, coverage)) : 0}%` }} /></div>
-            </div>
+            <ClientStatisticsVisual metrics={metrics} />
             <div className="client-statistics-card-footer"><span><strong>{number(metrics.logs_24h)}</strong> log / 24 jam</span><Link className="ac-admin-detail-button" to={detailURL(client)} aria-label={`Lihat detail statistik ${client.company_name}`}>Lihat Detail</Link></div>
           </article>;
         })}
